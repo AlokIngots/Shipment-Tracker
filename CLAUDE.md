@@ -81,8 +81,10 @@ One step each time the user says "continue".
 - ~~**Step 4 — Documents.**~~ **Done** — see progress log.
 - **Step 5 — Real data.** _Import pipeline built and tested_ (`backend/import_data.py`, CSV format documented in `docs/import-template.csv`). **Blocked on one answer: how SAP/PMS can export.** Once that is known, the remaining work is mapping that export into the CSV and scheduling it.
 - ~~**Step 6 — Shipment tracking.**~~ **Done** — see progress log.
-- **Step 7 — Notifications.** Email/WhatsApp on Shipped/Arrived, then a pilot
-  with one friendly customer.
+- **Step 7 — Notifications.** _Email built and tested_ (`notify.py`,
+  `notifier.py`). **WhatsApp not built** — needs a WhatsApp Business account
+  and an approved template through a provider. **The pilot has not happened
+  yet**, and cannot until the portal is actually deployed.
 
 ---
 
@@ -108,7 +110,8 @@ Update after every step: what was done, and the commit.
 | 2026-09-08 | **Step 3 — Order detail page.** `GET /api/orders/{id}` with Ordered / Dispatched / Balance and part-shipments (status, vessel, IMO, ETD/ETA, documents); clickable rows and a detail screen in the UI | `46073ff` |
 | 2026-09-08 | **Step 4 — Documents.** Files stored outside the repo under `storage/`; `GET /api/documents/{id}/download` with ownership checks; Download buttons in the UI; `add_document.py` for staff to attach files | `796f7da` |
 | 2026-09-08 | **Step 5 (part 1) — Import pipeline.** `import_data.py` loads orders and shipments from CSV with validation (including IMO checksum), `--dry-run`, and repeat-safe upserts. Waiting on the SAP/PMS export question | `a51998f` |
-| 2026-09-08 | **Step 6 — Shipment tracking.** Server-built `tracking_url` per shipment from a `.env` template (MarineTraffic by IMO); "View live on…" link in the UI, hidden when the IMO is missing or fails its checksum | _this commit_ |
+| 2026-09-08 | **Step 6 — Shipment tracking.** Server-built `tracking_url` per shipment from a `.env` template (MarineTraffic by IMO); "View live on…" link in the UI, hidden when the IMO is missing or fails its checksum | `9c7ec09` |
+| 2026-09-08 | **Step 7 (email) — Notifications.** `notifications` table, `notifier.py` and `notify.py`; sends once per shipment status per user, with `SEND_EMAILS` and `NOTIFY_ONLY_EMAILS` safety switches. WhatsApp and the pilot still outstanding | _this commit_ |
 
 ### Design decisions worth remembering
 
@@ -119,6 +122,15 @@ Update after every step: what was done, and the commit.
 - **`valid_imo` lives in `backend/tracking.py`** and is shared with the
   importer, so what the API trusts and what the importer accepts can never
   drift apart.
+
+### Design decisions worth remembering
+
+- **Notifications default to off.** `SEND_EMAILS=false` means messages are
+  recorded and printed but never sent. `NOTIFY_ONLY_EMAILS` limits real mail
+  to named addresses during a pilot. Both are in `.env`, and both must be
+  changed deliberately before any customer is emailed.
+- **Each (shipment, status, user) is notified once**, enforced by a unique
+  constraint in the database, so re-running `notify.py` cannot spam anyone.
 
 ### Known issues / risks
 
@@ -144,6 +156,14 @@ Update after every step: what was done, and the commit.
   included in server backups — `safe-deploy.sh` will need to cover it.
 - `safe-deploy.sh` **does not exist yet** — it must be written before the first
   deployment.
+- **Nobody has received a real email yet.** Sending was proved against a
+  local test mail server only. Real SMTP credentials and one careful test to
+  a colleague are needed before any customer is on the list.
+- **WhatsApp is not built.** It needs a WhatsApp Business account and a
+  pre-approved message template through Twilio or Meta's Cloud API. The
+  channel would slot into `notifier.py` alongside email.
+- **Nothing triggers notifications automatically.** `notify.py` must be run
+  after each import, by hand or on a schedule.
 - **MarineTraffic shows a vessel's current position, not the cargo.** It
   cannot confirm a container or parcel is aboard, and free pages can be rate
   limited or blocked. A paid carrier API is the answer if customers need
