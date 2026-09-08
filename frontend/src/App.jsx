@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import axios from 'axios'
 
-// Demo credentials, pre-filled so the login is easy to try.
-// Remove once real customer accounts exist.
-const DEMO_EMAIL = 'procurement@wilo.com'
-const DEMO_PASSWORD = 'demo1234'
+// Pre-fills the login form during development so the demo is easy to try.
+// Read from frontend/.env, which is never committed, so no credentials live
+// in the repository. Blank when unset, which is what production wants.
+const DEMO_EMAIL = import.meta.env.VITE_DEMO_EMAIL ?? ''
+const DEMO_PASSWORD = import.meta.env.VITE_DEMO_PASSWORD ?? ''
 
 function Header() {
   return (

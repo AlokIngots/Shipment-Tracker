@@ -66,9 +66,7 @@ database — committed on `feature/scaffold`. **Not yet pushed to GitHub.**
 
 To be done when the user says "continue", after they have run `gh auth login`:
 
-1. Move the demo password `demo1234` out of `backend/demo_auth.py` into `.env`
-   (add the key to `.env.example` with a placeholder). Commit on
-   `feature/scaffold`.
+1. ~~Move the demo password out of `backend/demo_auth.py` into `.env`~~ **Done.**
 2. Create the **private** GitHub repo `alok-customer-portal`, add it as
    `origin`, and push `main`, `dev` and `feature/scaffold`.
 3. Give the user click-by-click steps to open a Pull Request from
@@ -109,14 +107,16 @@ Update after every step: what was done, and the commit.
 | 2026-09-08 | Vite + React frontend with `/api` dev proxy and health-check page | `7d2c849` |
 | 2026-09-08 | Demo login: `POST /api/login` (isolated in `demo_auth.py`) + login screen | `a09cdde` |
 | 2026-09-08 | Order list table after sign-in (Sales Order, Grade, Description, Ordered quantity, Status) | `c1d978c` |
-| 2026-09-08 | This briefing saved as `CLAUDE.md` | _this commit_ |
+| 2026-09-08 | This briefing saved as `CLAUDE.md` | `1af22af` |
+| 2026-09-08 | Claude attribution lines stripped from all commit messages; history force-pushed | `1af22af` |
+| 2026-09-08 | Demo email + password moved out of code into `.env` (backend and frontend); credentials removed from the repo | _this commit_ |
 
 ### Known issues / risks
 
 - **The login token is not enforced yet.** `GET /api/orders` answers anyone who
   asks, signed in or not. Fixed in Step 2.
-- **Demo authentication is temporary.** One hard-coded account
-  (`procurement@wilo.com`) in `backend/demo_auth.py`. The password still needs
-  moving to `.env` — first item under "Immediate next actions".
+- **Demo authentication is temporary.** One demo account, with its email and
+  password read from `.env` (never committed). Replaced by real customer
+  accounts in Step 2.
 - `safe-deploy.sh` **does not exist yet** — it must be written before the first
   deployment.

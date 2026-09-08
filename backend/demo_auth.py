@@ -2,18 +2,33 @@
 
 THROWAWAY CODE — replace before this portal goes anywhere near a customer.
 
-There is exactly one hard-coded account and the token is a random opaque
-string held in memory, so every restart invalidates all sessions. It is
-deliberately kept in its own module so that swapping in real customer
-accounts (hashed passwords in the database, proper JWTs, expiry, refresh)
-means replacing this file rather than untangling it from the API.
+There is exactly one demo account. Its email and password are read from
+.env, which is never committed, so no credentials live in the repository.
+The token is a random opaque string held in memory, so every restart
+invalidates all sessions. This is deliberately kept in its own module so
+that swapping in real customer accounts (hashed passwords in the database,
+proper JWTs, expiry, refresh) means replacing this file rather than
+untangling it from the API.
 """
 
 import hmac
+import os
 import secrets
+from pathlib import Path
 
-DEMO_EMAIL = "procurement@wilo.com"
-DEMO_PASSWORD = "demo1234"
+from dotenv import load_dotenv
+
+# .env lives at the project root, one level above backend/
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+
+DEMO_EMAIL = os.getenv("DEMO_LOGIN_EMAIL", "").strip().lower()
+DEMO_PASSWORD = os.getenv("DEMO_LOGIN_PASSWORD", "")
+
+if not DEMO_EMAIL or not DEMO_PASSWORD:
+    raise RuntimeError(
+        "DEMO_LOGIN_EMAIL and DEMO_LOGIN_PASSWORD must be set. "
+        "Copy .env.example to .env and fill them in."
+    )
 
 # token -> email. In-memory only; cleared on restart.
 _ISSUED_TOKENS: dict[str, str] = {}
