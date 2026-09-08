@@ -34,6 +34,9 @@ function LoginScreen({ onSignedIn }) {
 
     try {
       const res = await axios.post('/api/login', { email, password })
+      // Every later request carries the token, which is how the server
+      // knows which customer is asking.
+      axios.defaults.headers.common.Authorization = `Bearer ${res.data.token}`
       onSignedIn(res.data)
     } catch (err) {
       if (err.response?.status === 401) {
@@ -121,9 +124,9 @@ function OrdersScreen({ session, onSignOut }) {
         setOrders(res.data)
         setState('ready')
       })
-      .catch(() => {
+      .catch((err) => {
         if (cancelled) return
-        setState('error')
+        setState(err.response?.status === 401 ? 'unauthorised' : 'error')
       })
 
     return () => {
@@ -136,7 +139,9 @@ function OrdersScreen({ session, onSignOut }) {
       <div className="toolbar">
         <div>
           <h2 className="toolbar-title">Your orders</h2>
-          <p className="toolbar-sub">Signed in as {session.email}</p>
+          <p className="toolbar-sub">
+            {session.customer?.name} · signed in as {session.email}
+          </p>
         </div>
         <button type="button" className="button button--ghost" onClick={onSignOut}>
           Sign out
@@ -149,6 +154,12 @@ function OrdersScreen({ session, onSignOut }) {
         {state === 'error' && (
           <p className="message message--error" role="alert">
             Couldn&apos;t load your orders. Please try again.
+          </p>
+        )}
+
+        {state === 'unauthorised' && (
+          <p className="message message--error" role="alert">
+            Your session has expired. Please sign in again.
           </p>
         )}
 
@@ -195,12 +206,17 @@ function OrdersScreen({ session, onSignOut }) {
 export default function App() {
   const [session, setSession] = useState(null)
 
+  function signOut() {
+    delete axios.defaults.headers.common.Authorization
+    setSession(null)
+  }
+
   return (
     <div className="page">
       <Header />
       <main className="main">
         {session ? (
-          <OrdersScreen session={session} onSignOut={() => setSession(null)} />
+          <OrdersScreen session={session} onSignOut={signOut} />
         ) : (
           <LoginScreen onSignedIn={setSession} />
         )}

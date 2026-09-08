@@ -1,25 +1,28 @@
 """Alok Ingots Customer Portal — FastAPI backend.
 
-Read-only endpoints for now: a health probe and the order list.
+Every order endpoint requires a valid sign-in token and only ever returns
+data belonging to that user's own customer.
 """
 
 from decimal import Decimal
 from typing import Annotated, Iterator
 
-from fastapi import Depends, FastAPI, HTTPException, status
+import security
+from database import SessionLocal
+from fastapi import Depends, FastAPI, Header, HTTPException, status
+from models import Customer, Order, User
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-import demo_auth
-from database import SessionLocal
-from models import Order
-
 app = FastAPI(
     title="Alok Ingots Customer Portal API",
     description="Backend API for the Alok Ingots export customer portal.",
-    version="0.1.0",
+    version="0.2.0",
 )
+
+
+# ------------------------------------------------------------- dependencies
 
 
 def get_db() -> Iterator[Session]:
@@ -32,6 +35,68 @@ def get_db() -> Iterator[Session]:
 
 
 DbSession = Annotated[Session, Depends(get_db)]
+
+CREDENTIALS_ERROR = HTTPException(
+    status_code=status.HTTP_401_UNAUTHORIZED,
+    detail="Not signed in.",
+    headers={"WWW-Authenticate": "Bearer"},
+)
+
+
+def get_current_user(
+    db: DbSession,
+    authorization: Annotated[str | None, Header()] = None,
+) -> User:
+    """Resolve the signed-in user from the Authorization header.
+
+    Raises 401 if the header is missing, malformed, expired, or points at a
+    user who no longer exists or has been deactivated.
+    """
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise CREDENTIALS_ERROR
+
+    user_id = security.read_token(authorization.split(" ", 1)[1].strip())
+    if user_id is None:
+        raise CREDENTIALS_ERROR
+
+    user = db.get(User, user_id)
+    if user is None or not user.is_active:
+        raise CREDENTIALS_ERROR
+
+    return user
+
+
+CurrentUser = Annotated[User, Depends(get_current_user)]
+
+
+# ----------------------------------------------------------------- schemas
+
+
+class LoginRequest(BaseModel):
+    """Credentials submitted by the login form."""
+
+    email: str
+    password: str
+
+
+class CustomerOut(BaseModel):
+    """The customer a signed-in user belongs to."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    code: str
+    name: str
+    country: str | None
+
+
+class LoginResponse(BaseModel):
+    """Returned on a successful sign-in."""
+
+    token: str
+    email: str
+    full_name: str | None
+    customer: CustomerOut
 
 
 class OrderOut(BaseModel):
@@ -49,43 +114,63 @@ class OrderOut(BaseModel):
     status: str | None
 
 
+# ------------------------------------------------------------------ routes
+
+
 @app.get("/api/health")
 def health() -> dict[str, str]:
-    """Liveness probe used to confirm the API is up."""
+    """Liveness probe used to confirm the API is up. Open to everyone."""
     return {"status": "ok"}
 
 
-@app.get("/api/orders", response_model=list[OrderOut])
-def list_orders(db: DbSession) -> list[Order]:
-    """Return every order in the system, in insertion order."""
-    return list(db.scalars(select(Order).order_by(Order.id)))
-
-
-class LoginRequest(BaseModel):
-    """Credentials submitted by the login form."""
-
-    email: str
-    password: str
-
-
-class LoginResponse(BaseModel):
-    """Returned on a successful sign-in."""
-
-    token: str
-    email: str
-
-
 @app.post("/api/login", response_model=LoginResponse)
-def login(credentials: LoginRequest) -> LoginResponse:
-    """Sign in against the temporary demo account.
+def login(credentials: LoginRequest, db: DbSession) -> LoginResponse:
+    """Sign in against the users table and return a signed token."""
+    email = credentials.email.strip().lower()
+    user = db.scalar(select(User).where(User.email == email))
 
-    Demo authentication only — see demo_auth.py.
-    """
-    if not demo_auth.check_credentials(credentials.email, credentials.password):
+    # Always run a hash comparison, even when the email is unknown, so a
+    # wrong email and a wrong password take the same time to answer.
+    stored = user.password_hash if user else security.hash_password("dummy")
+    password_ok = security.verify_password(credentials.password, stored)
+
+    if not user or not password_ok or not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Email or password is incorrect.",
         )
 
-    email = credentials.email.strip().lower()
-    return LoginResponse(token=demo_auth.issue_token(email), email=email)
+    customer = db.get(Customer, user.customer_id)
+    return LoginResponse(
+        token=security.create_token(user.id),
+        email=user.email,
+        full_name=user.full_name,
+        customer=CustomerOut.model_validate(customer),
+    )
+
+
+@app.get("/api/me", response_model=LoginResponse | dict)
+def me(current_user: CurrentUser, db: DbSession) -> dict:
+    """Who am I? Used by the frontend to confirm a stored token is still good."""
+    customer = db.get(Customer, current_user.customer_id)
+    return {
+        "email": current_user.email,
+        "full_name": current_user.full_name,
+        "customer": CustomerOut.model_validate(customer).model_dump(),
+    }
+
+
+@app.get("/api/orders", response_model=list[OrderOut])
+def list_orders(current_user: CurrentUser, db: DbSession) -> list[Order]:
+    """Return the signed-in user's own orders, and nothing else.
+
+    The customer filter comes from the token, never from the request, so a
+    user cannot ask for another customer's orders.
+    """
+    return list(
+        db.scalars(
+            select(Order)
+            .where(Order.customer_id == current_user.customer_id)
+            .order_by(Order.id)
+        )
+    )

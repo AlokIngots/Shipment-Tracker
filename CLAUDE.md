@@ -76,9 +76,7 @@ To be done when the user says "continue", after they have run `gh auth login`:
 
 One step each time the user says "continue".
 
-- **Step 2 — Real security.** Enforce the login token so `/api/orders` only
-  answers signed-in customers, each seeing ONLY their own orders. Add tables:
-  `customers`, `users`, `shipments`, `documents`.
+- ~~**Step 2 — Real security.**~~ **Done** — see progress log.
 - **Step 3 — Order detail page.** Balance quantities (Ordered / Dispatched /
   Balance) and the list of part-shipments, each with its own status, documents
   and vessel.
@@ -109,14 +107,21 @@ Update after every step: what was done, and the commit.
 | 2026-09-08 | Order list table after sign-in (Sales Order, Grade, Description, Ordered quantity, Status) | `c1d978c` |
 | 2026-09-08 | This briefing saved as `CLAUDE.md` | `1af22af` |
 | 2026-09-08 | Claude attribution lines stripped from all commit messages; history force-pushed | `1af22af` |
-| 2026-09-08 | Demo email + password moved out of code into `.env` (backend and frontend); credentials removed from the repo | _this commit_ |
+| 2026-09-08 | Demo email + password moved out of code into `.env` (backend and frontend); credentials removed from the repo | `2ecca97` |
+| 2026-09-08 | Pushed to GitHub (private): `feature/scaffold`, `dev`, `main` | `2ecca97` |
+| 2026-09-08 | **Step 2 — Real security.** `customers`, `users`, `shipments`, `documents` tables; PBKDF2 password hashing; signed tokens; `/api/orders` requires sign-in and returns only the caller's own orders | _this commit_ |
 
 ### Known issues / risks
 
-- **The login token is not enforced yet.** `GET /api/orders` answers anyone who
-  asks, signed in or not. Fixed in Step 2.
-- **Demo authentication is temporary.** One demo account, with its email and
-  password read from `.env` (never committed). Replaced by real customer
-  accounts in Step 2.
+- **No database migrations yet.** Schema changes currently rely on
+  `seed.py --reset`, which destroys data. Alembic (or equivalent) is needed
+  before any real customer data goes in.
+- **Tokens cannot be revoked.** They are signed and stateless, valid until
+  they expire (12 hours). Changing `SECRET_KEY` signs everyone out.
+- **The token is held in browser memory only**, so a page refresh signs the
+  user out. Fine for now; revisit when the portal goes to real customers.
+- **Accounts are still seeded from `.env`**, not created by anyone. Two demo
+  customers exist so that isolation can be tested. Real account management is
+  still to come.
 - `safe-deploy.sh` **does not exist yet** — it must be written before the first
   deployment.
