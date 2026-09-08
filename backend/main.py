@@ -4,15 +4,17 @@ Every order endpoint requires a valid sign-in token and only ever returns
 data belonging to that user's own customer.
 """
 
+from datetime import date
 from decimal import Decimal
 from typing import Annotated, Iterator
 
 import security
 from database import SessionLocal
 from fastapi import Depends, FastAPI, Header, HTTPException, status
-from models import Customer, Order, User
+from models import Customer, Order, Shipment, User
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
 app = FastAPI(
@@ -114,6 +116,43 @@ class OrderOut(BaseModel):
     status: str | None
 
 
+class DocumentOut(BaseModel):
+    """A document attached to a shipment."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    doc_type: str
+    file_name: str
+    # True once the file itself is stored and downloadable (Step 4).
+    available: bool = False
+
+
+class ShipmentOut(BaseModel):
+    """One part-shipment against an order."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    shipment_no: str
+    dispatched_qty: Decimal | None
+    unit: str | None
+    status: str | None
+    vessel_name: str | None
+    imo_number: str | None
+    etd: date | None
+    eta: date | None
+    documents: list[DocumentOut] = []
+
+
+class OrderDetailOut(OrderOut):
+    """An order plus its quantity breakdown and part-shipments."""
+
+    dispatched_qty: Decimal
+    balance_qty: Decimal
+    shipments: list[ShipmentOut] = []
+
+
 # ------------------------------------------------------------------ routes
 
 
@@ -173,4 +212,47 @@ def list_orders(current_user: CurrentUser, db: DbSession) -> list[Order]:
             .where(Order.customer_id == current_user.customer_id)
             .order_by(Order.id)
         )
+    )
+
+
+@app.get("/api/orders/{order_id}", response_model=OrderDetailOut)
+def get_order(order_id: int, current_user: CurrentUser, db: DbSession) -> OrderDetailOut:
+    """Return one order with its part-shipments and their documents.
+
+    Scoped to the caller's own customer. Asking for someone else's order
+    returns 404, exactly as if it did not exist, so the endpoint never
+    reveals which order numbers belong to other customers.
+    """
+    order = db.scalar(
+        select(Order)
+        .where(Order.id == order_id, Order.customer_id == current_user.customer_id)
+        .options(selectinload(Order.shipments).selectinload(Shipment.documents))
+    )
+    if order is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found.")
+
+    ordered = order.ordered_qty or Decimal("0")
+    dispatched = sum(
+        (s.dispatched_qty or Decimal("0") for s in order.shipments), Decimal("0")
+    )
+
+    shipments = []
+    for s in sorted(order.shipments, key=lambda s: s.id):
+        ship = ShipmentOut.model_validate(s)
+        ship.documents = [
+            DocumentOut(
+                id=d.id,
+                doc_type=d.doc_type,
+                file_name=d.file_name,
+                available=bool(d.stored_path),
+            )
+            for d in sorted(s.documents, key=lambda d: d.id)
+        ]
+        shipments.append(ship)
+
+    return OrderDetailOut(
+        **OrderOut.model_validate(order).model_dump(),
+        dispatched_qty=dispatched,
+        balance_qty=ordered - dispatched,
+        shipments=shipments,
     )

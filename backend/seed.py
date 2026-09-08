@@ -19,7 +19,9 @@ from pathlib import Path
 import security
 from database import Base, SessionLocal, engine
 from dotenv import load_dotenv
-from models import Customer, Order, User
+from datetime import date
+
+from models import Customer, Document, Order, Shipment, User
 from sqlalchemy import select
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
@@ -51,6 +53,35 @@ DEMO_DATA = [
                 "ordered_qty": Decimal("583.00"),
                 "unit": "MT",
                 "status": "In transit",
+                "shipments": [
+                    {
+                        "shipment_no": "AIMPL/SHP/163-1",
+                        "dispatched_qty": Decimal("200.000"),
+                        "unit": "MT",
+                        "status": "Delivered",
+                        "vessel_name": "MV NORDIC STAR",
+                        "imo_number": "9312345",
+                        "etd": date(2025, 6, 12),
+                        "eta": date(2025, 7, 8),
+                        "documents": [
+                            "Packing List", "Commercial Invoice",
+                            "Bill of Lading", "Mill Test Certificate",
+                        ],
+                    },
+                    {
+                        "shipment_no": "AIMPL/SHP/163-2",
+                        "dispatched_qty": Decimal("183.000"),
+                        "unit": "MT",
+                        "status": "In transit",
+                        "vessel_name": "MV BALTIC TRADER",
+                        "imo_number": "9487621",
+                        "etd": date(2025, 8, 21),
+                        "eta": date(2025, 9, 17),
+                        "documents": [
+                            "Packing List", "Commercial Invoice", "Bill of Lading",
+                        ],
+                    },
+                ],
             }
         ],
     },
@@ -74,6 +105,19 @@ DEMO_DATA = [
                 "ordered_qty": Decimal("120.500"),
                 "unit": "MT",
                 "status": "In production",
+                "shipments": [
+                    {
+                        "shipment_no": "AIMPL/SHP/164-1",
+                        "dispatched_qty": Decimal("40.000"),
+                        "unit": "MT",
+                        "status": "Shipped",
+                        "vessel_name": "MV ADRIATIC WAVE",
+                        "imo_number": "9601234",
+                        "etd": date(2025, 9, 2),
+                        "eta": date(2025, 9, 29),
+                        "documents": ["Packing List", "Commercial Invoice"],
+                    },
+                ],
             }
         ],
     },
@@ -129,14 +173,46 @@ def main() -> None:
                  "is_active": True},
             )
 
+            shipment_count = 0
             for order in block["orders"]:
-                match = {"sales_order_no": order["sales_order_no"]}
-                values = {k: v for k, v in order.items() if k != "sales_order_no"}
-                upsert(session, Order, match,
-                       {**values, "customer_id": customer.id})
+                shipments = order.get("shipments", [])
+                values = {
+                    k: v for k, v in order.items()
+                    if k not in ("sales_order_no", "shipments")
+                }
+                order_row = upsert(
+                    session, Order,
+                    {"sales_order_no": order["sales_order_no"]},
+                    {**values, "customer_id": customer.id},
+                )
 
-            print(f"  {customer.code} — {customer.name}: "
-                  f"1 user, {len(block['orders'])} order(s)")
+                for shipment in shipments:
+                    doc_types = shipment.get("documents", [])
+                    ship_values = {
+                        k: v for k, v in shipment.items()
+                        if k not in ("shipment_no", "documents")
+                    }
+                    ship_row = upsert(
+                        session, Shipment,
+                        {"shipment_no": shipment["shipment_no"]},
+                        {**ship_values, "order_id": order_row.id},
+                    )
+                    shipment_count += 1
+
+                    for doc_type in doc_types:
+                        # Metadata only for now. The files themselves arrive
+                        # in Step 4, which is when stored_path gets filled in.
+                        upsert(
+                            session, Document,
+                            {"shipment_id": ship_row.id, "doc_type": doc_type},
+                            {"file_name": (
+                                f"{ship_row.shipment_no.replace('/', '-')}"
+                                f"-{doc_type.replace(' ', '-')}.pdf"
+                            )},
+                        )
+
+            print(f"  {customer.code} — {customer.name}: 1 user, "
+                  f"{len(block['orders'])} order(s), {shipment_count} shipment(s)")
 
         session.commit()
 

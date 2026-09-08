@@ -77,9 +77,7 @@ To be done when the user says "continue", after they have run `gh auth login`:
 One step each time the user says "continue".
 
 - ~~**Step 2 — Real security.**~~ **Done** — see progress log.
-- **Step 3 — Order detail page.** Balance quantities (Ordered / Dispatched /
-  Balance) and the list of part-shipments, each with its own status, documents
-  and vessel.
+- ~~**Step 3 — Order detail page.**~~ **Done** — see progress log.
 - **Step 4 — Documents.** Store and let customers download Packing List,
   Commercial Invoice, Bill of Lading, Mill Test Certificates per shipment.
 - **Step 5 — Real data.** Feed real order data from our systems (SAP/PMS);
@@ -109,7 +107,8 @@ Update after every step: what was done, and the commit.
 | 2026-09-08 | Claude attribution lines stripped from all commit messages; history force-pushed | `1af22af` |
 | 2026-09-08 | Demo email + password moved out of code into `.env` (backend and frontend); credentials removed from the repo | `2ecca97` |
 | 2026-09-08 | Pushed to GitHub (private): `feature/scaffold`, `dev`, `main` | `2ecca97` |
-| 2026-09-08 | **Step 2 — Real security.** `customers`, `users`, `shipments`, `documents` tables; PBKDF2 password hashing; signed tokens; `/api/orders` requires sign-in and returns only the caller's own orders | _this commit_ |
+| 2026-09-08 | **Step 2 — Real security.** `customers`, `users`, `shipments`, `documents` tables; PBKDF2 password hashing; signed tokens; `/api/orders` requires sign-in and returns only the caller's own orders | `445da35` |
+| 2026-09-08 | **Step 3 — Order detail page.** `GET /api/orders/{id}` with Ordered / Dispatched / Balance and part-shipments (status, vessel, IMO, ETD/ETA, documents); clickable rows and a detail screen in the UI | _this commit_ |
 
 ### Known issues / risks
 
@@ -123,5 +122,9 @@ Update after every step: what was done, and the commit.
 - **Accounts are still seeded from `.env`**, not created by anyone. Two demo
   customers exist so that isolation can be tested. Real account management is
   still to come.
+- **Shipment and vessel data is invented** for the demo. Real values arrive in
+  Step 5 from SAP/PMS.
+- **Documents are listed but not downloadable** — only their names exist.
+  The files themselves come in Step 4.
 - `safe-deploy.sh` **does not exist yet** — it must be written before the first
   deployment.
