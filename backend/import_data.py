@@ -47,6 +47,7 @@ from pathlib import Path
 from database import SessionLocal
 from models import Customer, Order, Shipment
 from sqlalchemy import select
+from tracking import valid_imo
 
 REQUIRED_COLUMNS = [
     "customer_code",
@@ -65,17 +66,8 @@ ALL_COLUMNS = [
 
 # ----------------------------------------------------------------- checking
 
-
-def valid_imo(value: str) -> bool:
-    """An IMO number is 7 digits where the last is a checksum of the first six.
-
-    Each of the first six digits is multiplied by 7,6,5,4,3,2 and the last
-    digit of that total must equal the seventh digit.
-    """
-    if not (value.isdigit() and len(value) == 7):
-        return False
-    total = sum(int(d) * w for d, w in zip(value[:6], range(7, 1, -1)))
-    return total % 10 == int(value[6])
+# valid_imo lives in tracking.py so the importer and the API agree on what
+# counts as a usable IMO number.
 
 
 def parse_decimal(value: str, field: str, errors: list[str]) -> Decimal | None:

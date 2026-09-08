@@ -389,7 +389,19 @@ function OrderDetailScreen({ orderId, onBack, onSignOut, session }) {
               <dl className="facts">
                 <div>
                   <dt>Vessel</dt>
-                  <dd>{shipment.vessel_name || '\u2014'}</dd>
+                  <dd>
+                    {shipment.vessel_name || '\u2014'}
+                    {shipment.tracking_url && (
+                      <a
+                        className="track"
+                        href={shipment.tracking_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        View live on {shipment.tracking_provider}
+                      </a>
+                    )}
+                  </dd>
                 </div>
                 <div>
                   <dt>IMO</dt>

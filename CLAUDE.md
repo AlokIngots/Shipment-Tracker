@@ -80,8 +80,7 @@ One step each time the user says "continue".
 - ~~**Step 3 — Order detail page.**~~ **Done** — see progress log.
 - ~~**Step 4 — Documents.**~~ **Done** — see progress log.
 - **Step 5 — Real data.** _Import pipeline built and tested_ (`backend/import_data.py`, CSV format documented in `docs/import-template.csv`). **Blocked on one answer: how SAP/PMS can export.** Once that is known, the remaining work is mapping that export into the CSV and scheduling it.
-- **Step 6 — Shipment tracking.** A "View live on MarineTraffic" link using the
-  vessel's IMO; a paid carrier tracking API later.
+- ~~**Step 6 — Shipment tracking.**~~ **Done** — see progress log.
 - **Step 7 — Notifications.** Email/WhatsApp on Shipped/Arrived, then a pilot
   with one friendly customer.
 
@@ -108,7 +107,18 @@ Update after every step: what was done, and the commit.
 | 2026-09-08 | **Step 2 — Real security.** `customers`, `users`, `shipments`, `documents` tables; PBKDF2 password hashing; signed tokens; `/api/orders` requires sign-in and returns only the caller's own orders | `445da35` |
 | 2026-09-08 | **Step 3 — Order detail page.** `GET /api/orders/{id}` with Ordered / Dispatched / Balance and part-shipments (status, vessel, IMO, ETD/ETA, documents); clickable rows and a detail screen in the UI | `46073ff` |
 | 2026-09-08 | **Step 4 — Documents.** Files stored outside the repo under `storage/`; `GET /api/documents/{id}/download` with ownership checks; Download buttons in the UI; `add_document.py` for staff to attach files | `796f7da` |
-| 2026-09-08 | **Step 5 (part 1) — Import pipeline.** `import_data.py` loads orders and shipments from CSV with validation (including IMO checksum), `--dry-run`, and repeat-safe upserts. Waiting on the SAP/PMS export question | _this commit_ |
+| 2026-09-08 | **Step 5 (part 1) — Import pipeline.** `import_data.py` loads orders and shipments from CSV with validation (including IMO checksum), `--dry-run`, and repeat-safe upserts. Waiting on the SAP/PMS export question | `a51998f` |
+| 2026-09-08 | **Step 6 — Shipment tracking.** Server-built `tracking_url` per shipment from a `.env` template (MarineTraffic by IMO); "View live on…" link in the UI, hidden when the IMO is missing or fails its checksum | _this commit_ |
+
+### Design decisions worth remembering
+
+- **The tracking link is built by the server, not the browser.** The API
+  returns a finished `tracking_url` plus `tracking_provider` per shipment,
+  from `TRACKING_URL_TEMPLATE` in `.env`. Moving to a paid carrier tracking
+  service is then a config change, and the UI does not move at all.
+- **`valid_imo` lives in `backend/tracking.py`** and is shared with the
+  importer, so what the API trusts and what the importer accepts can never
+  drift apart.
 
 ### Known issues / risks
 
@@ -134,3 +144,7 @@ Update after every step: what was done, and the commit.
   included in server backups — `safe-deploy.sh` will need to cover it.
 - `safe-deploy.sh` **does not exist yet** — it must be written before the first
   deployment.
+- **MarineTraffic shows a vessel's current position, not the cargo.** It
+  cannot confirm a container or parcel is aboard, and free pages can be rate
+  limited or blocked. A paid carrier API is the answer if customers need
+  guaranteed, shipment-level tracking.

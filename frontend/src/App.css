@@ -565,3 +565,25 @@ code {
   opacity: 0.55;
   cursor: default;
 }
+
+.track {
+  display: inline-block;
+  margin-left: 10px;
+  padding: 3px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--navy);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.track::after {
+  content: " \2197";
+}
+
+.track:hover {
+  border-color: var(--navy);
+  background: #eef0f6;
+}

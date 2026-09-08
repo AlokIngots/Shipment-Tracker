@@ -10,6 +10,7 @@ from typing import Annotated, Iterator
 
 import security
 import storage
+import tracking
 from database import SessionLocal
 from fastapi import Depends, FastAPI, Header, HTTPException, status
 from fastapi.responses import FileResponse
@@ -144,6 +145,10 @@ class ShipmentOut(BaseModel):
     imo_number: str | None
     etd: date | None
     eta: date | None
+    # Built by the server so the provider can change without touching the UI.
+    # None when there is no usable IMO number, so the UI shows no dead link.
+    tracking_url: str | None = None
+    tracking_provider: str | None = None
     documents: list[DocumentOut] = []
 
 
@@ -241,6 +246,10 @@ def get_order(order_id: int, current_user: CurrentUser, db: DbSession) -> OrderD
     shipments = []
     for s in sorted(order.shipments, key=lambda s: s.id):
         ship = ShipmentOut.model_validate(s)
+        ship.tracking_url = tracking.tracking_url(s.imo_number)
+        ship.tracking_provider = (
+            tracking.TRACKING_PROVIDER_NAME if ship.tracking_url else None
+        )
         ship.documents = [
             DocumentOut(
                 id=d.id,
