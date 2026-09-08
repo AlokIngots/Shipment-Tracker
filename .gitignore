@@ -76,3 +76,6 @@ pnpm-debug.log*
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Uploaded customer documents — never committed
+storage/

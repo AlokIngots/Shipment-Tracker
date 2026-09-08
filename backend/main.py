@@ -9,9 +9,11 @@ from decimal import Decimal
 from typing import Annotated, Iterator
 
 import security
+import storage
 from database import SessionLocal
 from fastapi import Depends, FastAPI, Header, HTTPException, status
-from models import Customer, Order, Shipment, User
+from fastapi.responses import FileResponse
+from models import Customer, Document, Order, Shipment, User
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -255,4 +257,44 @@ def get_order(order_id: int, current_user: CurrentUser, db: DbSession) -> OrderD
         dispatched_qty=dispatched,
         balance_qty=ordered - dispatched,
         shipments=shipments,
+    )
+
+
+@app.get("/api/documents/{document_id}/download")
+def download_document(
+    document_id: int, current_user: CurrentUser, db: DbSession
+) -> FileResponse:
+    """Send a document file back to the customer it belongs to.
+
+    Ownership is walked all the way up (document -> shipment -> order ->
+    customer) and compared with the customer on the token. Anything that is
+    not the caller's own document answers 404, so the endpoint never reveals
+    that another customer's document exists.
+    """
+    document = db.scalar(
+        select(Document)
+        .join(Shipment, Document.shipment_id == Shipment.id)
+        .join(Order, Shipment.order_id == Order.id)
+        .where(
+            Document.id == document_id,
+            Order.customer_id == current_user.customer_id,
+        )
+    )
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Document not found."
+        )
+
+    path = storage.resolve(document.stored_path or "")
+    if path is None:
+        # The row exists but the file has not been uploaded yet.
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="This document has not been uploaded yet.",
+        )
+
+    return FileResponse(
+        path,
+        media_type="application/pdf",
+        filename=document.file_name,
     )

@@ -216,6 +216,52 @@ function fmtDate(value) {
   return `${d}/${m}/${y}`
 }
 
+
+function DocumentRow({ doc }) {
+  // 'idle' -> 'busy' | 'failed'
+  const [state, setState] = useState('idle')
+
+  async function download() {
+    setState('busy')
+    try {
+      const res = await axios.get(`/api/documents/${doc.id}/download`, {
+        responseType: 'blob',
+      })
+      // The request needs the sign-in token, so it cannot be a plain link.
+      // Fetch it, then hand the file to the browser to save.
+      const url = URL.createObjectURL(res.data)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = doc.file_name
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+      setState('idle')
+    } catch {
+      setState('failed')
+    }
+  }
+
+  return (
+    <li className="doc">
+      <span className="doc-name">{doc.doc_type}</span>
+      {doc.available ? (
+        <button
+          type="button"
+          className="doc-download"
+          onClick={download}
+          disabled={state === 'busy'}
+        >
+          {state === 'busy' ? 'Preparing\u2026' : state === 'failed' ? 'Try again' : 'Download'}
+        </button>
+      ) : (
+        <span className="doc-state">Not uploaded yet</span>
+      )}
+    </li>
+  )
+}
+
 function OrderDetailScreen({ orderId, onBack, onSignOut, session }) {
   // 'loading' -> 'ready' | 'error' | 'notfound'
   const [state, setState] = useState('loading')
@@ -366,12 +412,7 @@ function OrderDetailScreen({ orderId, onBack, onSignOut, session }) {
                 ) : (
                   <ul className="doc-list">
                     {shipment.documents.map((doc) => (
-                      <li key={doc.id} className="doc">
-                        <span className="doc-name">{doc.doc_type}</span>
-                        <span className="doc-state">
-                          {doc.available ? 'Available' : 'Not uploaded yet'}
-                        </span>
-                      </li>
+                      <DocumentRow key={doc.id} doc={doc} />
                     ))}
                   </ul>
                 )}
