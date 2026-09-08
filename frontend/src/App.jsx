@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import axios from 'axios'
 
 // Demo credentials, pre-filled so the login is easy to try.
@@ -88,19 +88,106 @@ function LoginScreen({ onSignedIn }) {
   )
 }
 
-function SignedIn({ session, onSignOut }) {
+// Maps an order status to a pill colour. Unknown statuses fall back to grey.
+const STATUS_CLASS = {
+  'in transit': 'pill--transit',
+  'in production': 'pill--production',
+  delivered: 'pill--delivered',
+  shipped: 'pill--transit',
+  draft: 'pill--neutral',
+  cancelled: 'pill--cancelled',
+}
+
+function StatusPill({ status }) {
+  if (!status) return <span className="pill pill--neutral">—</span>
+
+  const tone = STATUS_CLASS[status.trim().toLowerCase()] ?? 'pill--neutral'
+  return <span className={`pill ${tone}`}>{status}</span>
+}
+
+function OrdersScreen({ session, onSignOut }) {
+  // 'loading' -> 'ready' | 'error'
+  const [state, setState] = useState('loading')
+  const [orders, setOrders] = useState([])
+
+  useEffect(() => {
+    let cancelled = false
+
+    axios
+      .get('/api/orders')
+      .then((res) => {
+        if (cancelled) return
+        setOrders(res.data)
+        setState('ready')
+      })
+      .catch(() => {
+        if (cancelled) return
+        setState('error')
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   return (
-    <div className="card">
-      <div className="status status--ok">Signed in</div>
-      <h2 className="signed-in-heading">Welcome, {session.email}</h2>
-      <p className="lead">
-        Your orders will appear here. Nothing to show yet — the order list is
-        the next thing we build.
-      </p>
-      <button type="button" className="button button--ghost" onClick={onSignOut}>
-        Sign out
-      </button>
-    </div>
+    <>
+      <div className="toolbar">
+        <div>
+          <h2 className="toolbar-title">Your orders</h2>
+          <p className="toolbar-sub">Signed in as {session.email}</p>
+        </div>
+        <button type="button" className="button button--ghost" onClick={onSignOut}>
+          Sign out
+        </button>
+      </div>
+
+      <div className="card">
+        {state === 'loading' && <p className="message">Loading your orders…</p>}
+
+        {state === 'error' && (
+          <p className="message message--error" role="alert">
+            Couldn&apos;t load your orders. Please try again.
+          </p>
+        )}
+
+        {state === 'ready' && orders.length === 0 && (
+          <p className="message">No orders to show yet.</p>
+        )}
+
+        {state === 'ready' && orders.length > 0 && (
+          <div className="table-wrap">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Sales Order</th>
+                  <th>Grade</th>
+                  <th>Description</th>
+                  <th className="num">Ordered quantity</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {orders.map((order) => (
+                  <tr key={order.id}>
+                    <td className="mono">{order.sales_order_no}</td>
+                    <td>{order.grade}</td>
+                    <td>{order.description}</td>
+                    {/* Quantity is rendered exactly as the API sends it. */}
+                    <td className="num mono">
+                      {order.ordered_qty} {order.unit}
+                    </td>
+                    <td>
+                      <StatusPill status={order.status} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </>
   )
 }
 
@@ -112,7 +199,7 @@ export default function App() {
       <Header />
       <main className="main">
         {session ? (
-          <SignedIn session={session} onSignOut={() => setSession(null)} />
+          <OrdersScreen session={session} onSignOut={() => setSession(null)} />
         ) : (
           <LoginScreen onSignedIn={setSession} />
         )}
