@@ -59,18 +59,76 @@ to the next step. Never run ahead through multiple steps at once.
 
 ## Where we are now
 
-**Step 1 (the skeleton) is done and working** — login → order list from the real
-database — committed on `feature/scaffold`. **Not yet pushed to GitHub.**
+**Last worked on: 8 September 2026.** All seven roadmap steps are built and
+tested. Nothing is deployed anywhere, and no real customer has ever used it or
+been emailed by it.
 
-## Immediate next actions
+GitHub: **https://github.com/AlokIngots/Shipment-Tracker** (private). The repo
+is named `Shipment-Tracker`, not `alok-customer-portal` as originally planned.
 
-To be done when the user says "continue", after they have run `gh auth login`:
+Branches, each stacked on the one before, so the last one contains everything:
 
-1. ~~Move the demo password out of `backend/demo_auth.py` into `.env`~~ **Done.**
-2. Create the **private** GitHub repo `alok-customer-portal`, add it as
-   `origin`, and push `main`, `dev` and `feature/scaffold`.
-3. Give the user click-by-click steps to open a Pull Request from
-   `feature/scaffold` into `dev`. **Do not merge it.**
+| Branch | Step |
+| ------ | ---- |
+| `main` | empty anchor commit |
+| `dev` | empty anchor commit — nothing merged yet |
+| `feature/scaffold` | 1 — login + order list |
+| `feature/step2-auth` | 2 — security, customer isolation |
+| `feature/step3-order-detail` | 3 — order detail, balances, shipments |
+| `feature/step4-documents` | 4 — document downloads |
+| `feature/step5-data-import` | 5 — CSV import pipeline |
+| `feature/step6-tracking` | 6 — vessel tracking links |
+| `feature/step7-notifications` | 7 — email notifications (tip) |
+
+**No Pull Request has been merged.** `dev` and `main` are still empty. The
+single PR that would bring everything in:
+https://github.com/AlokIngots/Shipment-Tracker/compare/dev...feature/step7-notifications
+
+### How to run it locally
+
+```bash
+docker compose up -d                                     # database
+cd backend && .venv/Scripts/python.exe seed.py           # demo data
+.venv/Scripts/python.exe -m uvicorn main:app --port 8000 # API
+cd ../frontend && npm run dev                            # http://localhost:5173
+```
+
+Demo logins are in `.env` (never committed). Both `.env` and `frontend/.env`
+are needed; copy each `.env.example` if they are missing.
+
+### Staff tools (all in `backend/`)
+
+| Command | What it does |
+| ------- | ------------ |
+| `python seed.py` | load demo data (`--reset` drops everything first) |
+| `python import_data.py FILE.csv --dry-run` | check a data file, change nothing |
+| `python import_data.py FILE.csv` | import orders and shipments |
+| `python add_document.py --list` | show which documents are uploaded or missing |
+| `python add_document.py --shipment X --type Y --file Z` | attach a document |
+| `python notify.py --dry-run` | show who would be emailed |
+| `python notify.py --preview` | print the full text of one email |
+| `python notify.py` | send (only if `SEND_EMAILS=true`) |
+
+## What is left before a real customer can use this
+
+In the order that matters:
+
+1. **`safe-deploy.sh` and a server.** Nothing is deployed. The rules require
+   deployment to go through `safe-deploy.sh`, which backs up the database — and
+   that script **does not exist yet**. It must also back up `storage/`, where
+   customer documents live. Then portal.alokindia.co.in needs to point at it.
+   *Nobody can see any of this until that is done — start here.*
+2. **The SAP/PMS question, still unanswered.** How can order data leave
+   SAP/PMS — a spreadsheet export, a readable database, an API, or not at all?
+   And does SAP/PMS even hold the vessel name and IMO number, or does that sit
+   with the CHA/freight forwarder? The importer is finished and waiting; only
+   the mapping into its CSV depends on this answer.
+3. **Creating customer accounts.** Users only come from `.env` via `seed.py`.
+   There is no way to add a real customer, and no password reset.
+4. **Database migrations.** Changing the schema still means wiping data
+   (`seed.py --reset`). Alembic is needed before real data goes in.
+5. **Real SMTP credentials**, then one careful test email to a colleague,
+   before any customer address goes on the list.
 
 ## Roadmap
 
@@ -111,7 +169,8 @@ Update after every step: what was done, and the commit.
 | 2026-09-08 | **Step 4 — Documents.** Files stored outside the repo under `storage/`; `GET /api/documents/{id}/download` with ownership checks; Download buttons in the UI; `add_document.py` for staff to attach files | `796f7da` |
 | 2026-09-08 | **Step 5 (part 1) — Import pipeline.** `import_data.py` loads orders and shipments from CSV with validation (including IMO checksum), `--dry-run`, and repeat-safe upserts. Waiting on the SAP/PMS export question | `a51998f` |
 | 2026-09-08 | **Step 6 — Shipment tracking.** Server-built `tracking_url` per shipment from a `.env` template (MarineTraffic by IMO); "View live on…" link in the UI, hidden when the IMO is missing or fails its checksum | `9c7ec09` |
-| 2026-09-08 | **Step 7 (email) — Notifications.** `notifications` table, `notifier.py` and `notify.py`; sends once per shipment status per user, with `SEND_EMAILS` and `NOTIFY_ONLY_EMAILS` safety switches. WhatsApp and the pilot still outstanding | _this commit_ |
+| 2026-09-08 | **Step 7 (email) — Notifications.** `notifications` table, `notifier.py` and `notify.py`; sends once per shipment status per user, with `SEND_EMAILS` and `NOTIFY_ONLY_EMAILS` safety switches. WhatsApp and the pilot still outstanding | `aa7c5ac` |
+| 2026-09-08 | **Session paused here.** Briefing brought up to date; all branches pushed to GitHub | _this commit_ |
 
 ### Design decisions worth remembering
 
