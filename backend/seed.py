@@ -60,7 +60,7 @@ DEMO_DATA = [
                         "unit": "MT",
                         "status": "Delivered",
                         "vessel_name": "MV NORDIC STAR",
-                        "imo_number": "9312345",
+                        "imo_number": "9312341",
                         "etd": date(2025, 6, 12),
                         "eta": date(2025, 7, 8),
                         "documents": [
@@ -74,7 +74,7 @@ DEMO_DATA = [
                         "unit": "MT",
                         "status": "In transit",
                         "vessel_name": "MV BALTIC TRADER",
-                        "imo_number": "9487621",
+                        "imo_number": "9487627",
                         "etd": date(2025, 8, 21),
                         "eta": date(2025, 9, 17),
                         "documents": [
@@ -112,7 +112,7 @@ DEMO_DATA = [
                         "unit": "MT",
                         "status": "Shipped",
                         "vessel_name": "MV ADRIATIC WAVE",
-                        "imo_number": "9601234",
+                        "imo_number": "9601235",
                         "etd": date(2025, 9, 2),
                         "eta": date(2025, 9, 29),
                         "documents": ["Packing List", "Commercial Invoice"],

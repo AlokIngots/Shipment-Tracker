@@ -79,8 +79,7 @@ One step each time the user says "continue".
 - ~~**Step 2 — Real security.**~~ **Done** — see progress log.
 - ~~**Step 3 — Order detail page.**~~ **Done** — see progress log.
 - ~~**Step 4 — Documents.**~~ **Done** — see progress log.
-- **Step 5 — Real data.** Feed real order data from our systems (SAP/PMS);
-  capture each shipment's vessel and IMO number.
+- **Step 5 — Real data.** _Import pipeline built and tested_ (`backend/import_data.py`, CSV format documented in `docs/import-template.csv`). **Blocked on one answer: how SAP/PMS can export.** Once that is known, the remaining work is mapping that export into the CSV and scheduling it.
 - **Step 6 — Shipment tracking.** A "View live on MarineTraffic" link using the
   vessel's IMO; a paid carrier tracking API later.
 - **Step 7 — Notifications.** Email/WhatsApp on Shipped/Arrived, then a pilot
@@ -108,7 +107,8 @@ Update after every step: what was done, and the commit.
 | 2026-09-08 | Pushed to GitHub (private): `feature/scaffold`, `dev`, `main` | `2ecca97` |
 | 2026-09-08 | **Step 2 — Real security.** `customers`, `users`, `shipments`, `documents` tables; PBKDF2 password hashing; signed tokens; `/api/orders` requires sign-in and returns only the caller's own orders | `445da35` |
 | 2026-09-08 | **Step 3 — Order detail page.** `GET /api/orders/{id}` with Ordered / Dispatched / Balance and part-shipments (status, vessel, IMO, ETD/ETA, documents); clickable rows and a detail screen in the UI | `46073ff` |
-| 2026-09-08 | **Step 4 — Documents.** Files stored outside the repo under `storage/`; `GET /api/documents/{id}/download` with ownership checks; Download buttons in the UI; `add_document.py` for staff to attach files | _this commit_ |
+| 2026-09-08 | **Step 4 — Documents.** Files stored outside the repo under `storage/`; `GET /api/documents/{id}/download` with ownership checks; Download buttons in the UI; `add_document.py` for staff to attach files | `796f7da` |
+| 2026-09-08 | **Step 5 (part 1) — Import pipeline.** `import_data.py` loads orders and shipments from CSV with validation (including IMO checksum), `--dry-run`, and repeat-safe upserts. Waiting on the SAP/PMS export question | _this commit_ |
 
 ### Known issues / risks
 
@@ -122,8 +122,10 @@ Update after every step: what was done, and the commit.
 - **Accounts are still seeded from `.env`**, not created by anyone. Two demo
   customers exist so that isolation can be tested. Real account management is
   still to come.
-- **Shipment and vessel data is invented** for the demo. Real values arrive in
-  Step 5 from SAP/PMS.
+- **Shipment and vessel data is still invented** for the demo. The importer is
+  ready; real values arrive once the SAP/PMS export is settled.
+- **The demo database now also holds `CUST-100` / `CUST-101`** from importing
+  the template. They have no users, so nobody can sign in as them.
 - **Documents are uploaded by staff from the server** using
   `backend/add_document.py`. There is deliberately no upload endpoint on the
   API, so nothing customer-facing can write files. A staff web UI is a
