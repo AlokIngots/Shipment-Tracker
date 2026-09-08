@@ -6,11 +6,12 @@ Read-only endpoints for now: a health probe and the order list.
 from decimal import Decimal
 from typing import Annotated, Iterator
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, HTTPException, status
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+import demo_auth
 from database import SessionLocal
 from models import Order
 
@@ -58,3 +59,33 @@ def health() -> dict[str, str]:
 def list_orders(db: DbSession) -> list[Order]:
     """Return every order in the system, in insertion order."""
     return list(db.scalars(select(Order).order_by(Order.id)))
+
+
+class LoginRequest(BaseModel):
+    """Credentials submitted by the login form."""
+
+    email: str
+    password: str
+
+
+class LoginResponse(BaseModel):
+    """Returned on a successful sign-in."""
+
+    token: str
+    email: str
+
+
+@app.post("/api/login", response_model=LoginResponse)
+def login(credentials: LoginRequest) -> LoginResponse:
+    """Sign in against the temporary demo account.
+
+    Demo authentication only — see demo_auth.py.
+    """
+    if not demo_auth.check_credentials(credentials.email, credentials.password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Email or password is incorrect.",
+        )
+
+    email = credentials.email.strip().lower()
+    return LoginResponse(token=demo_auth.issue_token(email), email=email)
