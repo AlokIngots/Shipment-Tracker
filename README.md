@@ -15,6 +15,22 @@ and tracking information in one place.
 | Database | PostgreSQL |
 | Runtime  | Docker / Docker Compose |
 
+## Local development
+
+Start the PostgreSQL database:
+
+```bash
+cp .env.example .env      # then edit the values
+docker compose up -d
+```
+
+Create the schema and insert the example order:
+
+```bash
+cd backend
+.venv/Scripts/python.exe seed.py    # Windows
+```
+
 ## Status
 
 Early development — project scaffold only.
