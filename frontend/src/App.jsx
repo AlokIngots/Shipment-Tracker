@@ -149,6 +149,8 @@ function ChangePasswordScreen({ session, forced, onDone, onCancel, onSignOut }) 
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(false)
 
+  const longEnough = next.length >= 12
+
   async function handleSubmit(event) {
     event.preventDefault()
     setError(null)
@@ -226,7 +228,15 @@ function ChangePasswordScreen({ session, forced, onDone, onCancel, onSignOut }) 
           />
         </label>
 
-        <p className="hint">At least 12 characters. Longer is better than complicated.</p>
+        {/* Say what is needed while it is being typed, rather than refusing
+            it afterwards. The server still decides; this only stops the
+            rule being a surprise. */}
+        <p className={longEnough ? 'hint hint--met' : 'hint'}>
+          {longEnough
+            ? 'Long enough.'
+            : `At least 12 characters — ${next.length} so far.`}
+          {' '}Longer is better than complicated.
+        </p>
 
         {error && (
           <p className="error" role="alert">

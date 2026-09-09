@@ -629,3 +629,7 @@ code {
   gap: 10px;
   flex: none;
 }
+
+.hint--met {
+  color: var(--ok);
+}
