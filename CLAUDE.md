@@ -101,17 +101,36 @@ now. Start the next step with a fresh branch off `dev`.
 commit, deliberately** — it gets its first real content only when the portal
 has actually been deployed to a real server and proved to work there.
 
-### How to run it locally
+### How to open the portal
+
+There are two copies, and confusing them wastes time.
+
+**The real one — <http://localhost>.** The deployed stack: website, API and
+database in Docker, exactly as a server would run it. It restarts itself
+after a reboot, so usually there is nothing to start. If the page does not
+load, start Docker Desktop and try again; if it still does not, run
+`./safe-deploy.sh` from the project folder. The login form does **not**
+pre-fill here — that is the point, it is built without any `.env`.
+
+**The development one — <http://localhost:5173>.** For editing code and
+watching it change. It uses a *separate* database, so nothing here can hurt
+the deployed copy. Four commands, the last two each needing their own
+terminal window and left running:
 
 ```bash
-docker compose up -d                                     # database
-cd backend && .venv/Scripts/python.exe seed.py           # demo data
-.venv/Scripts/python.exe -m uvicorn main:app --port 8000 # API
-cd ../frontend && npm run dev                            # http://localhost:5173
+docker compose up -d                                      # dev database
+cd backend && .venv/Scripts/python.exe migrate.py         # build/update tables
+.venv/Scripts/python.exe -m uvicorn main:app --port 8000  # API      (leave running)
+cd ../frontend && npm run dev                             # website  (leave running)
 ```
 
+`.venv/Scripts/python.exe seed.py` adds the demo orders. Stop with `Ctrl+C`
+in each window.
+
 Demo logins are in `.env` (never committed). Both `.env` and `frontend/.env`
-are needed; copy each `.env.example` if they are missing.
+are needed; copy each `.env.example` if they are missing. The development
+copy pre-fills the login form from `frontend/.env`; that file must never
+reach an image, which is what the `**/.env` rules in `.dockerignore` are for.
 
 ### Staff tools (all in `backend/`)
 
