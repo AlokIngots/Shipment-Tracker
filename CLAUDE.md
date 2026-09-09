@@ -33,8 +33,13 @@ up later).
 
 ## Rules — always follow, every step, no exceptions
 
-1. **Never work directly on `main` or `dev`.** Always a feature branch. Commit
-   often. Merge to `dev` only via a Pull Request the user opens on GitHub.
+1. **Never work directly on `main` or `dev`.** Always a feature branch, and
+   commit often. A finished, tested step is merged into `dev` straight away —
+   this is a solo project, so a Pull Request nobody else reviews adds ceremony,
+   not safety. **`main` is different: it means "this is what is deployed and
+   working."** Nothing reaches `main` until a deployment has actually
+   succeeded. (Changed 9 Sep 2026, with the user, after seven steps stacked up
+   unmerged and `dev` sat empty.)
 2. **Before changing existing code, commit the current state first** as a
    restore point, and tell the user the rollback command.
 3. **Never commit secrets or junk:** no `.env`, no passwords, no customer
@@ -72,7 +77,7 @@ Branches, each stacked on the one before, so the last one contains everything:
 | Branch | Step |
 | ------ | ---- |
 | `main` | empty anchor commit |
-| `dev` | empty anchor commit — nothing merged yet |
+| `dev` | **everything, merged 9 Sep 2026** — this is the working trunk |
 | `feature/scaffold` | 1 — login + order list |
 | `feature/step2-auth` | 2 — security, customer isolation |
 | `feature/step3-order-detail` | 3 — order detail, balances, shipments |
@@ -80,11 +85,15 @@ Branches, each stacked on the one before, so the last one contains everything:
 | `feature/step5-data-import` | 5 — CSV import pipeline |
 | `feature/step6-tracking` | 6 — vessel tracking links |
 | `feature/step7-notifications` | 7 — email notifications |
-| `feature/step8-notification-fix` | 8 — full test pass; two bug fixes (tip) |
+| `feature/step8-notification-fix` | 8 — full test pass; two bug fixes |
 
-**No Pull Request has been merged.** `dev` and `main` are still empty. The
-single PR that would bring everything in:
-https://github.com/AlokIngots/Shipment-Tracker/compare/dev...feature/step8-notification-fix
+Steps 1–8 are all merged into `dev`, so the per-step branches above are history
+now. Start the next step with a fresh branch off `dev`.
+
+**`dev` now holds all eight steps** (19 commits, 30 files) and is the branch to
+work from. **`main` is still the empty anchor commit, deliberately** — it gets
+its first real content only when the portal has actually been deployed and
+proved to work.
 
 ### How to run it locally
 
@@ -175,6 +184,7 @@ Update after every step: what was done, and the commit.
 | 2026-09-08 | **Session paused here.** Briefing brought up to date; all branches pushed to GitHub | `33af51c` |
 | 2026-09-09 | **Full test pass — every feature.** 70 checks across login, tokens, customer isolation, order detail, balances, documents, IMO/tracking, CSV import, notifications, frontend build and secret hygiene. 68 passed; 2 bugs found and fixed (below) | _this commit_ |
 | 2026-09-09 | **Bug fix — notifications could be silently lost.** `notify.py` treated a suppressed or failed attempt as "done", so turning `SEND_EMAILS` on would skip every shipment recorded while it was off, and a bounced email was never retried. Only an actual `sent` now counts; earlier attempts are updated in place, so the one-message-per-(shipment, status, user) guarantee is unchanged | _this commit_ |
+| 2026-09-09 | **Steps 1–8 merged into `dev`** by fast-forward (no merge commit, no conflicts); `dev` pushed to GitHub. Rule 1 amended with the user: merge finished steps to `dev` directly, keep `main` for what is actually deployed | `fd0b895` |
 | 2026-09-09 | **Bug fix — UI text.** The order detail page showed the literal text `Loading order…` while loading, because a JSX text node is not a JavaScript string. Now renders `Loading order…` | _this commit_ |
 
 ### Design decisions worth remembering
