@@ -1,12 +1,15 @@
-"""Create the schema and load development data.
+"""Load development data.
 
-    python seed.py                # create missing tables, add/update demo data
-    python seed.py --schema-only  # create missing tables only, no demo data
-    python seed.py --reset        # DROP every table first, then recreate
+    python seed.py                # bring the schema up to date, add demo data
+    python seed.py --schema-only  # bring the schema up to date only, no data
+    python seed.py --reset        # DROP every table first, then rebuild
 
---reset destroys all data. It exists because this is a development database
-with no real customer data in it yet. Once real data lands, schema changes
-must go through proper migrations instead.
+The schema is no longer built here. ``migrate.py`` owns it, and this script
+calls it — so there is one way the tables get made, and it is the same way on
+a server holding real data as on this laptop.
+
+--reset destroys all data, and is only for a development database. On a
+server, ``python migrate.py`` changes the schema without losing anything.
 
 All names, emails and passwords come from .env so that no credentials or
 customer identities live in the repository.
@@ -17,13 +20,14 @@ import sys
 from decimal import Decimal
 from pathlib import Path
 
+import migrate
 import security
 from database import Base, SessionLocal, engine
 from dotenv import load_dotenv
 from datetime import date
 
 from models import Customer, Document, Order, Shipment, User
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
@@ -148,12 +152,18 @@ def main() -> None:
     if reset:
         print("Dropping all tables...")
         Base.metadata.drop_all(engine)
+        # drop_all only knows about the portal's own tables, so Alembic's
+        # record of which migrations have run would survive and claim the
+        # schema was still there. Clear it too, or the rebuild does nothing.
+        with engine.begin() as connection:
+            connection.execute(text("DROP TABLE IF EXISTS alembic_version"))
 
-    Base.metadata.create_all(engine)
-    print("Schema ready (customers, users, orders, shipments, documents)")
+    # One way to build the schema, the same one a real server uses.
+    if migrate.main() != 0:
+        print("! The schema is not in the state the code expects (see above).")
+        return
 
     if schema_only:
-        # What a real server runs: create any missing tables and stop.
         # Demo customers must never be created on a production database.
         print("Schema only — no demo data was created.")
         return

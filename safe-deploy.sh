@@ -84,7 +84,7 @@ if $DRY_RUN; then
     2. Back up documents to     $BACKUP_DIR/storage.tar.gz
     3. Remember the current version so it can be put back
     4. Build the new images
-    5. Start the stack and create any missing database tables
+    5. Start the stack and bring the database schema up to date
     6. Check the portal answers; if it does not, roll back automatically
 
     Nothing has been changed.
@@ -141,8 +141,49 @@ fi
 
 # ------------------------------------------------------------ roll back
 
+# Which migration the database was on before this deploy, and after it.
+# Both stay empty until the schema step runs, so a deploy that fails before
+# then cannot trigger a schema rollback.
+SCHEMA_BEFORE=""
+SCHEMA_AFTER=""
+
+# Put the schema back where it was, so the old code does not wake up facing
+# tables it does not recognise.
+restore_schema() {
+  # Only act if this deploy actually moved the schema, and only if we know
+  # for certain where it was before. Guessing here would drop tables.
+  [ -n "$SCHEMA_AFTER" ] || return 0
+  [ "$SCHEMA_BEFORE" != "$SCHEMA_AFTER" ] || return 0
+
+  if [ -z "$SCHEMA_BEFORE" ]; then
+    warn "This deploy built the schema from an empty database. The new tables"
+    warn "are being left alone: they are empty, and dropping them is the more"
+    warn "dangerous move."
+    return 0
+  fi
+
+  warn "This deploy changed the database schema. Putting it back to $SCHEMA_BEFORE"
+  # This has to happen while the NEW image is still running: the old image
+  # does not contain the new migration files, so it could not undo them.
+  if "${COMPOSE[@]}" exec -T api python -m alembic downgrade "$SCHEMA_BEFORE" >/dev/null 2>&1; then
+    ok "Schema is back at $SCHEMA_BEFORE, which is what the old code expects"
+  else
+    warn "THE SCHEMA COULD NOT BE PUT BACK."
+    cat <<EOM
+
+    The database is at $SCHEMA_AFTER but the old code expects $SCHEMA_BEFORE,
+    so the portal may not work until this is sorted out. Restore the database
+    from the backup taken minutes ago:
+
+      gunzip -c $BACKUP_DIR/database.sql.gz | docker compose -f $COMPOSE_FILE exec -T db psql -U $DB_USER -d $DB_NAME
+
+EOM
+  fi
+}
+
 rollback() {
   printf '\n%s==> Rolling back to the previous version%s\n' "$YELLOW" "$OFF"
+  restore_schema
   if [ -n "$PREVIOUS_API" ] && [ -n "$PREVIOUS_WEB" ]; then
     docker tag alok-portal-api:rollback alok-portal-api:latest
     docker tag alok-portal-web:rollback alok-portal-web:latest
@@ -154,8 +195,9 @@ rollback() {
   fi
   cat <<EOM
 
-    The database was NOT restored, because nothing in this deploy changed it.
-    If you ever need to put it back, the backup is here:
+    The data itself was not touched: a schema step changes the shape of the
+    tables, never the rows. If you ever need the database exactly as it was
+    before this deploy, the backup is here:
 
       gunzip -c $BACKUP_DIR/database.sql.gz | \\
         docker compose -f $COMPOSE_FILE exec -T db psql -U $DB_USER -d $DB_NAME
@@ -181,19 +223,30 @@ if ! "${COMPOSE[@]}" up -d; then
 fi
 ok "Containers started"
 
-step "Preparing the database and checking the new code loaded"
+step "Bringing the database schema up to date"
 # A container that crashes on start-up is restarted by Docker, so it can
 # still report itself as "running". The honest test is whether we can
 # actually execute something inside it.
-if ! "${COMPOSE[@]}" exec -T api python seed.py --schema-only; then
+#
+# Note where the schema is BEFORE migrating, so a deploy that fails later
+# can put it back exactly there.
+SCHEMA_BEFORE="$("${COMPOSE[@]}" exec -T api python migrate.py --revision 2>/dev/null | tr -d '\r\n' || true)"
+
+if ! "${COMPOSE[@]}" exec -T api python migrate.py; then
   printf '
 %s--- last lines from the API, this is why ---%s
 ' "$YELLOW" "$OFF"
   "${COMPOSE[@]}" logs --tail 25 api 2>&1 | sed 's/^/    /' || true
   rollback
-  die "The new version did not start. The error above is why."
+  die "The database could not be brought up to date. The error above is why."
 fi
-ok "Database tables are ready and the new code loads"
+
+SCHEMA_AFTER="$("${COMPOSE[@]}" exec -T api python migrate.py --revision 2>/dev/null | tr -d '\r\n' || true)"
+if [ "$SCHEMA_BEFORE" = "$SCHEMA_AFTER" ]; then
+  ok "Schema was already up to date at ${SCHEMA_AFTER:-none} - nothing changed"
+else
+  ok "Schema moved from ${SCHEMA_BEFORE:-empty} to ${SCHEMA_AFTER:-none}"
+fi
 
 # --------------------------------------------------------------- verify
 
