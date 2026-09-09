@@ -65,10 +65,11 @@ to the next step. Never run ahead through multiple steps at once.
 
 ## Where we are now
 
-**Last worked on: 9 September 2026.** All seven roadmap steps are built, and
-every feature has been tested end to end (70 checks). Two bugs were found and
-fixed. Nothing is deployed anywhere, and no real customer has ever used it or
-been emailed by it.
+**Last worked on: 9 September 2026.** All seven roadmap steps are built, plus
+deployment and database migrations. Every feature has been tested end to end, and
+the earlier full pass of 70 checks found and fixed two bugs. Nothing is
+deployed on a real server, and no real customer has ever used it or been
+emailed by it.
 
 GitHub: **https://github.com/AlokIngots/Shipment-Tracker** (private). The repo
 is named `Shipment-Tracker`, not `alok-customer-portal` as originally planned.
@@ -87,7 +88,8 @@ Branches, each stacked on the one before, so the last one contains everything:
 | `feature/step6-tracking` | 6 — vessel tracking links |
 | `feature/step7-notifications` | 7 — email notifications |
 | `feature/step8-notification-fix` | 8 — full test pass; two bug fixes |
-| `feature/step9-deployment` | 9 — containers, Caddy, `safe-deploy.sh` (tip) |
+| `feature/step9-deployment` | 9 — containers, Caddy, `safe-deploy.sh` |
+| `feature/step10-migrations` | 10 — Alembic migrations (tip) |
 
 Steps 1–8 are all merged into `dev`, so the per-step branches above are history
 now. Start the next step with a fresh branch off `dev`.
@@ -113,6 +115,9 @@ are needed; copy each `.env.example` if they are missing.
 
 | Command | What it does |
 | ------- | ------------ |
+| `python migrate.py` | bring the database schema up to date, losing nothing |
+| `python migrate.py --status` | where the schema is, and whether the code agrees |
+| `python migrate.py --sql` | the SQL a migration would run, executing nothing |
 | `python seed.py` | load demo data (`--reset` drops everything first) |
 | `python import_data.py FILE.csv --dry-run` | check a data file, change nothing |
 | `python import_data.py FILE.csv` | import orders and shipments |
@@ -121,7 +126,7 @@ are needed; copy each `.env.example` if they are missing.
 | `python notify.py --dry-run` | show who would be emailed |
 | `python notify.py --preview` | print the full text of one email |
 | `python notify.py` | send (only if `SEND_EMAILS=true`) |
-| `python seed.py --schema-only` | create tables only, never demo data — what a real server runs |
+| `python seed.py --schema-only` | migrate the schema only, never demo data |
 
 ### Deploying (from the project root)
 
@@ -149,9 +154,7 @@ In the order that matters:
    the mapping into its CSV depends on this answer.
 3. **Creating customer accounts.** Users only come from `.env` via `seed.py`.
    There is no way to add a real customer, and no password reset.
-4. **Database migrations.** Changing the schema still means wiping data
-   (`seed.py --reset`). Alembic is needed before real data goes in.
-5. **Real SMTP credentials**, then one careful test email to a colleague,
+4. **Real SMTP credentials**, then one careful test email to a colleague,
    before any customer address goes on the list.
 
 ## Roadmap
@@ -200,6 +203,7 @@ Update after every step: what was done, and the commit.
 | 2026-09-09 | **Steps 1–8 merged into `dev`** by fast-forward (no merge commit, no conflicts); `dev` pushed to GitHub. Rule 1 amended with the user: merge finished steps to `dev` directly, keep `main` for what is actually deployed | `fd0b895` |
 | 2026-09-09 | **Step 9 — Deployment.** API containerised; React app built and served by Caddy, which obtains and renews HTTPS itself; production stack with the database on no published port. `safe-deploy.sh` backs up the database and `storage/`, tags the running images `:rollback`, and restores them automatically if the new version does not answer. Proved by a real deploy plus three rollback drills | _this commit_ |
 | 2026-09-09 | **Security fix found by that first deploy.** `frontend/.env` was reaching the web image, so Vite baked the demo email and password into the JavaScript served to browsers. A bare `.env` in the root `.dockerignore` only matches the root file; patterns are now `**/.env`. Re-verified: no credential appears in the shipped bundle | _this commit_ |
+| 2026-09-09 | **Step 10 — Database migrations.** Alembic added; migration 0001 is the existing six tables, generated against an empty database and checked back against the models. `migrate.py` wraps it (`--status`, `--sql`, `--revision`), adopts a database that predates migrations rather than rebuilding it, and reports models that have drifted from the schema. `seed.py` no longer builds tables — it calls `migrate.py`. `safe-deploy.sh` migrates instead of `create_all`, and undoes the migration if the deploy then fails | `50ad5f2` |
 | 2026-09-09 | **Bug fix — UI text.** The order detail page showed the literal text `Loading order…` while loading, because a JSX text node is not a JavaScript string. Now renders `Loading order…` | _this commit_ |
 
 ### Design decisions worth remembering
@@ -225,11 +229,20 @@ Update after every step: what was done, and the commit.
   updated in place. This is what makes it safe to run `notify.py` from day one
   with `SEND_EMAILS=false` and switch sending on later without losing anyone.
 
+### Design decisions worth remembering
+
+- **A database that predates migrations is adopted, not rebuilt.** Anything
+  with the portal's tables and no migration history is *marked* as being at
+  0001 instead of having 0001 run against it, so nothing is created or
+  dropped. Rebuilding would have been simpler and is exactly the habit
+  migrations exist to break.
+- **`migrate.py --status` compares the code against the real database** and
+  names, in plain words, anything a model has that the database does not.
+  Forgetting to write a migration is the mistake this will meet most often,
+  and it otherwise stays silent until something breaks.
+
 ### Known issues / risks
 
-- **No database migrations yet.** Schema changes currently rely on
-  `seed.py --reset`, which destroys data. Alembic (or equivalent) is needed
-  before any real customer data goes in.
 - **Tokens cannot be revoked.** They are signed and stateless, valid until
   they expire (12 hours). Changing `SECRET_KEY` signs everyone out.
 - **The token is held in browser memory only**, so a page refresh signs the
@@ -248,16 +261,22 @@ Update after every step: what was done, and the commit.
 - **Document files live in `storage/`**, which is git-ignored and must be
   included in server backups — `safe-deploy.sh` will need to cover it.
 - **`seed.py --reset` clears the database but leaves document files behind**
-  in `storage/documents/`, so old files accumulate as orphans. Harmless today;
-  worth a tidy-up when the deploy script is written.
+  in `storage/documents/`, so old files accumulate as orphans. Harmless while
+  the data is invented; worth a tidy-up before real documents arrive.
 - **`safe-deploy.sh` has only ever run against a local Docker stack.** It has
   never met a real server, a real domain, or a real HTTPS certificate. Caddy's
   certificate step in particular cannot be tested until DNS points at a real
   machine.
-- **Deployment does not restore the database on a failed deploy**, deliberately:
-  nothing in a deploy changes the schema today. Once Alembic is added, that
-  decision has to be revisited, or a failed migration will leave the old code
-  running against a new schema.
+- **A failed deploy puts the schema back, but not the rows.** If a deploy
+  migrates the schema and then fails, `safe-deploy.sh` runs the migration
+  backwards to where it started before restoring the old image. Rows are
+  never touched, because a schema step changes the shape of the tables and
+  not what is in them. If it cannot undo the migration — a migration with no
+  working `downgrade()` — it says so loudly and prints the restore command
+  for the backup it took minutes earlier.
+- **Downgrades are only as good as the migration that was written.** Alembic
+  writes a `downgrade()` automatically, but a migration that throws data away
+  cannot put it back. Read the downgrade of anything that drops a column.
 - **Nobody has received a real email yet.** Sending was proved against a
   local test mail server only. Real SMTP credentials and one careful test to
   a colleague are needed before any customer is on the list.
