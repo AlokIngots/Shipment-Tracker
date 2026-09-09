@@ -156,9 +156,9 @@ restore_schema() {
   [ "$SCHEMA_BEFORE" != "$SCHEMA_AFTER" ] || return 0
 
   if [ -z "$SCHEMA_BEFORE" ]; then
-    warn "This deploy built the schema from an empty database. The new tables"
-    warn "are being left alone: they are empty, and dropping them is the more"
-    warn "dangerous move."
+    warn "This deploy started the migration history from nothing, so there is"
+    warn "no earlier point to go back to. The tables are being left exactly as"
+    warn "they are, which is the safe thing to do."
     return 0
   fi
 
@@ -232,7 +232,15 @@ step "Bringing the database schema up to date"
 # can put it back exactly there.
 SCHEMA_BEFORE="$("${COMPOSE[@]}" exec -T api python migrate.py --revision 2>/dev/null | tr -d '\r\n' || true)"
 
-if ! "${COMPOSE[@]}" exec -T api python migrate.py; then
+MIGRATED_CLEANLY=true
+"${COMPOSE[@]}" exec -T api python migrate.py || MIGRATED_CLEANLY=false
+
+# Read where the schema ended up BEFORE deciding what to do about the
+# result. A migration can be applied and still report a problem afterwards,
+# and rolling back without knowing that would leave the schema moved.
+SCHEMA_AFTER="$("${COMPOSE[@]}" exec -T api python migrate.py --revision 2>/dev/null | tr -d '\r\n' || true)"
+
+if ! $MIGRATED_CLEANLY; then
   printf '
 %s--- last lines from the API, this is why ---%s
 ' "$YELLOW" "$OFF"
@@ -240,8 +248,6 @@ if ! "${COMPOSE[@]}" exec -T api python migrate.py; then
   rollback
   die "The database could not be brought up to date. The error above is why."
 fi
-
-SCHEMA_AFTER="$("${COMPOSE[@]}" exec -T api python migrate.py --revision 2>/dev/null | tr -d '\r\n' || true)"
 if [ "$SCHEMA_BEFORE" = "$SCHEMA_AFTER" ]; then
   ok "Schema was already up to date at ${SCHEMA_AFTER:-none} - nothing changed"
 else
