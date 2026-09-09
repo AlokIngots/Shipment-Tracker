@@ -1,0 +1,24 @@
+# The customer-facing web server: the built React app, plus HTTPS and the
+# reverse proxy to the API. Built from the repository root so it can see
+# both frontend/ and deploy/.
+
+# ---------------------------------------------------------------- build
+FROM node:22-alpine AS build
+
+WORKDIR /app
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+
+COPY frontend/ ./
+# No frontend/.env is copied in, so VITE_DEMO_EMAIL and VITE_DEMO_PASSWORD
+# are empty and the production login form starts blank. Demo credentials
+# can never be baked into a customer-facing build.
+RUN npm run build
+
+# ----------------------------------------------------------------- serve
+FROM caddy:2-alpine
+
+COPY --from=build /app/dist /srv
+COPY deploy/Caddyfile /etc/caddy/Caddyfile
+
+EXPOSE 80 443

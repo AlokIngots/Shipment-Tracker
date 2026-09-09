@@ -1,7 +1,8 @@
 """Create the schema and load development data.
 
-    python seed.py            # create missing tables, add/update the demo data
-    python seed.py --reset    # DROP every table first, then recreate
+    python seed.py                # create missing tables, add/update demo data
+    python seed.py --schema-only  # create missing tables only, no demo data
+    python seed.py --reset        # DROP every table first, then recreate
 
 --reset destroys all data. It exists because this is a development database
 with no real customer data in it yet. Once real data lands, schema changes
@@ -142,6 +143,7 @@ def upsert(session, model, match: dict, values: dict):
 
 def main() -> None:
     reset = "--reset" in sys.argv
+    schema_only = "--schema-only" in sys.argv
 
     if reset:
         print("Dropping all tables...")
@@ -149,6 +151,12 @@ def main() -> None:
 
     Base.metadata.create_all(engine)
     print("Schema ready (customers, users, orders, shipments, documents)")
+
+    if schema_only:
+        # What a real server runs: create any missing tables and stop.
+        # Demo customers must never be created on a production database.
+        print("Schema only — no demo data was created.")
+        return
 
     with SessionLocal() as session:
         for block in DEMO_DATA:

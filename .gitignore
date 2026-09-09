@@ -79,3 +79,6 @@ desktop.ini
 
 # Uploaded customer documents — never committed
 storage/
+
+# Deployment backups: databases and customer documents, never committed
+backups/
