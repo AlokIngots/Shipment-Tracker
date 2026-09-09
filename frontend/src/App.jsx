@@ -128,9 +128,11 @@ function LoginScreen({ onSignedIn }) {
         </button>
       </form>
 
-      <p className="demo-note">
-        Demo account — pre-filled above.
-      </p>
+      {DEMO_EMAIL && (
+        <p className="demo-note">
+          Demo account — pre-filled above.
+        </p>
+      )}
     </div>
   )
 }
