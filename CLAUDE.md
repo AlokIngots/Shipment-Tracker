@@ -44,8 +44,9 @@ up later).
    restore point, and tell the user the rollback command.
 3. **Never commit secrets or junk:** no `.env`, no passwords, no customer
    files/PDFs, no `node_modules`, no build folders.
-4. **Going live later uses `./safe-deploy.sh`** (it backs up the database).
-   Never run `docker compose build` directly.
+4. **Deploying uses `./safe-deploy.sh`** — it backs up the database *and*
+   `storage/` first, and rolls back automatically if the new version does not
+   answer. Never run `docker compose build` directly; it skips all of that.
 5. **Test every step before saying it's done, and show the proof.** If the
    browser can't be checked, verify headlessly.
 6. **Flag anything risky or broken in plain words** — don't hide it.
@@ -86,6 +87,7 @@ Branches, each stacked on the one before, so the last one contains everything:
 | `feature/step6-tracking` | 6 — vessel tracking links |
 | `feature/step7-notifications` | 7 — email notifications |
 | `feature/step8-notification-fix` | 8 — full test pass; two bug fixes |
+| `feature/step9-deployment` | 9 — containers, Caddy, `safe-deploy.sh` (tip) |
 
 Steps 1–8 are all merged into `dev`, so the per-step branches above are history
 now. Start the next step with a fresh branch off `dev`.
@@ -119,16 +121,27 @@ are needed; copy each `.env.example` if they are missing.
 | `python notify.py --dry-run` | show who would be emailed |
 | `python notify.py --preview` | print the full text of one email |
 | `python notify.py` | send (only if `SEND_EMAILS=true`) |
+| `python seed.py --schema-only` | create tables only, never demo data — what a real server runs |
+
+### Deploying (from the project root)
+
+| Command | What it does |
+| ------- | ------------ |
+| `./safe-deploy.sh --dry-run` | show what would happen, change nothing |
+| `./safe-deploy.sh --backup` | back up the database and `storage/`, stop |
+| `./safe-deploy.sh` | back up, build, start, verify — roll back if it fails |
+
+Set `PORTAL_DOMAIN` in `.env`: a real domain makes Caddy obtain HTTPS
+automatically; `:80` serves plain HTTP for testing on your own machine.
 
 ## What is left before a real customer can use this
 
 In the order that matters:
 
-1. **`safe-deploy.sh` and a server.** Nothing is deployed. The rules require
-   deployment to go through `safe-deploy.sh`, which backs up the database — and
-   that script **does not exist yet**. It must also back up `storage/`, where
-   customer documents live. Then portal.alokindia.co.in needs to point at it.
-   *Nobody can see any of this until that is done — start here.*
+1. **A server.** `safe-deploy.sh` now exists and has been proved end to end on
+   a local Docker stack — including three rollback drills. What is missing is a
+   machine to run it on, and a DNS record pointing portal.alokindia.co.in at
+   that machine. Both need the user, or whoever runs alokindia.co.in.
 2. **The SAP/PMS question, still unanswered.** How can order data leave
    SAP/PMS — a spreadsheet export, a readable database, an API, or not at all?
    And does SAP/PMS even hold the vessel name and IMO number, or does that sit
@@ -185,6 +198,8 @@ Update after every step: what was done, and the commit.
 | 2026-09-09 | **Full test pass — every feature.** 70 checks across login, tokens, customer isolation, order detail, balances, documents, IMO/tracking, CSV import, notifications, frontend build and secret hygiene. 68 passed; 2 bugs found and fixed (below) | _this commit_ |
 | 2026-09-09 | **Bug fix — notifications could be silently lost.** `notify.py` treated a suppressed or failed attempt as "done", so turning `SEND_EMAILS` on would skip every shipment recorded while it was off, and a bounced email was never retried. Only an actual `sent` now counts; earlier attempts are updated in place, so the one-message-per-(shipment, status, user) guarantee is unchanged | _this commit_ |
 | 2026-09-09 | **Steps 1–8 merged into `dev`** by fast-forward (no merge commit, no conflicts); `dev` pushed to GitHub. Rule 1 amended with the user: merge finished steps to `dev` directly, keep `main` for what is actually deployed | `fd0b895` |
+| 2026-09-09 | **Step 9 — Deployment.** API containerised; React app built and served by Caddy, which obtains and renews HTTPS itself; production stack with the database on no published port. `safe-deploy.sh` backs up the database and `storage/`, tags the running images `:rollback`, and restores them automatically if the new version does not answer. Proved by a real deploy plus three rollback drills | _this commit_ |
+| 2026-09-09 | **Security fix found by that first deploy.** `frontend/.env` was reaching the web image, so Vite baked the demo email and password into the JavaScript served to browsers. A bare `.env` in the root `.dockerignore` only matches the root file; patterns are now `**/.env`. Re-verified: no credential appears in the shipped bundle | _this commit_ |
 | 2026-09-09 | **Bug fix — UI text.** The order detail page showed the literal text `Loading order…` while loading, because a JSX text node is not a JavaScript string. Now renders `Loading order…` | _this commit_ |
 
 ### Design decisions worth remembering
@@ -235,8 +250,14 @@ Update after every step: what was done, and the commit.
 - **`seed.py --reset` clears the database but leaves document files behind**
   in `storage/documents/`, so old files accumulate as orphans. Harmless today;
   worth a tidy-up when the deploy script is written.
-- `safe-deploy.sh` **does not exist yet** — it must be written before the first
-  deployment.
+- **`safe-deploy.sh` has only ever run against a local Docker stack.** It has
+  never met a real server, a real domain, or a real HTTPS certificate. Caddy's
+  certificate step in particular cannot be tested until DNS points at a real
+  machine.
+- **Deployment does not restore the database on a failed deploy**, deliberately:
+  nothing in a deploy changes the schema today. Once Alembic is added, that
+  decision has to be revisited, or a failed migration will leave the old code
+  running against a new schema.
 - **Nobody has received a real email yet.** Sending was proved against a
   local test mail server only. Real SMTP credentials and one careful test to
   a colleague are needed before any customer is on the list.
