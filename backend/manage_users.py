@@ -28,6 +28,7 @@ create an account, so nothing customer-facing can be tricked into creating one.
 """
 
 import argparse
+from datetime import datetime, timezone
 
 import security
 from database import SessionLocal
@@ -92,7 +93,7 @@ def do_list(session) -> int:
             if user.must_change_password:
                 flags.append("temporary password, not yet changed")
             elif user.password_changed_at:
-                flags.append(f"password set {user.password_changed_at:%d %b %Y}")
+                flags.append(f"chose their password {user.password_changed_at:%d %b %Y}")
             suffix = f"   [{'; '.join(flags)}]" if flags else ""
             name = f" ({user.full_name})" if user.full_name else ""
             print(f"    {user.email}{name}{suffix}")
@@ -177,7 +178,10 @@ def do_reset_password(session, args) -> int:
     password = security.temporary_password()
     user.password_hash = security.hash_password(password)
     user.must_change_password = True
-    user.password_changed_at = None
+    # Stamping this now signs out anything already holding a token for this
+    # account. A password is usually reset because somebody should not be
+    # signed in any more, and leaving them signed in would defeat it.
+    user.password_changed_at = datetime.now(timezone.utc).replace(microsecond=0)
     session.commit()
 
     print(f"Reset the password for {email}.")

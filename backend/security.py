@@ -6,7 +6,8 @@ break on a Python upgrade.
 Passwords  : PBKDF2-HMAC-SHA256, 240,000 iterations, 16-byte random salt per
              user. Stored as "pbkdf2_sha256$<iterations>$<salt>$<hash>".
 Tokens     : "<payload>.<signature>" where payload is base64 JSON holding the
-             user id and an expiry, signed with HMAC-SHA256 using SECRET_KEY.
+             user id, when it was issued and when it expires, signed with
+             HMAC-SHA256 using SECRET_KEY.
              Nothing secret is inside the token and it cannot be altered
              without invalidating the signature. Stateless, so the server
              keeps no session table.
@@ -118,14 +119,24 @@ def _sign(payload: str) -> str:
 
 
 def create_token(user_id: int) -> str:
-    """Issue a signed token for a user."""
-    body = {"uid": user_id, "exp": int(time.time()) + TOKEN_TTL_SECONDS}
+    """Issue a signed token for a user.
+
+    "iat" is when it was issued. Because a token cannot be taken back once
+    handed out, that timestamp is how changing a password retires the tokens
+    that existed before it: see get_current_user in main.py.
+    """
+    issued = int(time.time())
+    body = {"uid": user_id, "iat": issued, "exp": issued + TOKEN_TTL_SECONDS}
     payload = _b64encode(json.dumps(body, separators=(",", ":")).encode())
     return f"{payload}.{_sign(payload)}"
 
 
-def read_token(token: str) -> int | None:
-    """Return the user id inside a valid, unexpired token, else None."""
+def read_token(token: str) -> dict | None:
+    """Return the contents of a valid, unexpired token, else None.
+
+    The caller gets {"uid": ..., "iat": ...}. Nothing in here is trusted
+    until the signature has been checked, which is the first thing done.
+    """
     try:
         payload, signature = token.split(".", 1)
     except (ValueError, AttributeError):
@@ -144,4 +155,7 @@ def read_token(token: str) -> int | None:
     if body.get("exp", 0) < time.time():
         return None
 
-    return body["uid"]
+    # Tokens issued before "iat" existed have no business being accepted
+    # now: treat a missing one as the beginning of time, which every
+    # password change is later than.
+    return {"uid": body["uid"], "iat": int(body.get("iat", 0))}

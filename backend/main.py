@@ -60,13 +60,24 @@ def get_current_user(
     if not authorization or not authorization.lower().startswith("bearer "):
         raise CREDENTIALS_ERROR
 
-    user_id = security.read_token(authorization.split(" ", 1)[1].strip())
-    if user_id is None:
+    token = security.read_token(authorization.split(" ", 1)[1].strip())
+    if token is None:
         raise CREDENTIALS_ERROR
 
-    user = db.get(User, user_id)
+    user = db.get(User, token["uid"])
     if user is None or not user.is_active:
         raise CREDENTIALS_ERROR
+
+    # A token handed out before the password was last changed is finished.
+    # This is what makes changing a password mean something: whoever else
+    # was signed in with the old one is signed out by it, including on a
+    # computer nobody has access to any more.
+    if user.password_changed_at and token["iat"] < user.password_changed_at.timestamp():
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Your password was changed. Please sign in again.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
     return user
 
@@ -271,13 +282,19 @@ def change_password(
 
     current_user.password_hash = security.hash_password(body.new_password)
     current_user.must_change_password = False
-    current_user.password_changed_at = datetime.now(timezone.utc)
+    # Whole seconds, because a token's "iat" is whole seconds too. Keeping
+    # the microseconds would make the replacement token below look older
+    # than the change that produced it, and sign the user straight out.
+    current_user.password_changed_at = datetime.now(timezone.utc).replace(microsecond=0)
     db.commit()
 
-    # The old token still works, and should: the person holding it is the
-    # one who just proved they know the password. Tokens cannot be revoked
-    # today, which is written down as a known limit.
-    return {"detail": "Your password has been changed."}
+    # Every token issued before now has just stopped working, including the
+    # one used to make this request. Hand back a new one so the person who
+    # changed the password stays signed in and everybody else does not.
+    return {
+        "detail": "Your password has been changed.",
+        "token": security.create_token(current_user.id),
+    }
 
 
 @app.get("/api/orders", response_model=list[OrderOut])

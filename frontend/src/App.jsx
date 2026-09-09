@@ -7,6 +7,48 @@ import axios from 'axios'
 const DEMO_EMAIL = import.meta.env.VITE_DEMO_EMAIL ?? ''
 const DEMO_PASSWORD = import.meta.env.VITE_DEMO_PASSWORD ?? ''
 
+// Where the sign-in token is kept between page loads.
+//
+// sessionStorage, not localStorage, on purpose. sessionStorage survives a
+// refresh and a link opened in the same tab, and is thrown away when the tab
+// is closed. localStorage would survive the browser being closed and
+// reopened, which is convenient on your own laptop and wrong on the shared
+// machine in a shipping office.
+//
+// Wrapped in try/catch because a browser set to block site data throws
+// rather than returning nothing, and being unable to remember a token is not
+// a reason to fail to load the portal.
+const TOKEN_KEY = 'alok.portal.token'
+
+function rememberToken(token) {
+  try {
+    sessionStorage.setItem(TOKEN_KEY, token)
+  } catch {
+    // Nothing to do: the portal still works, it just forgets on refresh.
+  }
+}
+
+function recallToken() {
+  try {
+    return sessionStorage.getItem(TOKEN_KEY)
+  } catch {
+    return null
+  }
+}
+
+function forgetToken() {
+  try {
+    sessionStorage.removeItem(TOKEN_KEY)
+  } catch {
+    // Nothing to do.
+  }
+}
+
+function useToken(token) {
+  axios.defaults.headers.common.Authorization = `Bearer ${token}`
+  rememberToken(token)
+}
+
 function Header() {
   return (
     <header className="header">
@@ -35,8 +77,9 @@ function LoginScreen({ onSignedIn }) {
     try {
       const res = await axios.post('/api/login', { email, password })
       // Every later request carries the token, which is how the server
-      // knows which customer is asking.
-      axios.defaults.headers.common.Authorization = `Bearer ${res.data.token}`
+      // knows which customer is asking. Kept for the tab, so a refresh does
+      // not throw the customer back to this screen.
+      useToken(res.data.token)
       onSignedIn(res.data)
     } catch (err) {
       if (err.response?.status === 401) {
@@ -115,10 +158,14 @@ function ChangePasswordScreen({ session, forced, onDone, onCancel, onSignOut }) 
 
     setBusy(true)
     try {
-      await axios.post('/api/change-password', {
+      const res = await axios.post('/api/change-password', {
         current_password: current,
         new_password: next,
       })
+      // Changing the password signs out every token issued before it,
+      // including the one that made this request. The server hands back a
+      // replacement so this tab stays signed in and other places do not.
+      if (res.data?.token) useToken(res.data.token)
       onDone()
     } catch (err) {
       // The server is the authority on what makes a password acceptable, so
@@ -568,12 +615,50 @@ function OrderDetailScreen({ orderId, onBack, onSignOut, session }) {
 }
 
 export default function App() {
+  // 'restoring' while a remembered token is being checked, so the login
+  // screen does not flash up for somebody who is already signed in.
+  const [restoring, setRestoring] = useState(true)
   const [session, setSession] = useState(null)
   const [openOrderId, setOpenOrderId] = useState(null)
   const [changingPassword, setChangingPassword] = useState(false)
   const [passwordChanged, setPasswordChanged] = useState(false)
 
+  // On load, see whether this tab already holds a token and whether the
+  // server still accepts it. A token can be refused for good reasons -
+  // expired, password changed elsewhere, account deactivated - and all of
+  // them mean the same thing here: show the login screen.
+  useEffect(() => {
+    const token = recallToken()
+    if (!token) {
+      setRestoring(false)
+      return
+    }
+
+    let cancelled = false
+    axios.defaults.headers.common.Authorization = `Bearer ${token}`
+
+    axios
+      .get('/api/me')
+      .then((res) => {
+        if (cancelled) return
+        setSession({ ...res.data, token })
+      })
+      .catch(() => {
+        if (cancelled) return
+        forgetToken()
+        delete axios.defaults.headers.common.Authorization
+      })
+      .finally(() => {
+        if (!cancelled) setRestoring(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   function signOut() {
+    forgetToken()
     delete axios.defaults.headers.common.Authorization
     setOpenOrderId(null)
     setChangingPassword(false)
@@ -595,7 +680,9 @@ export default function App() {
     <div className="page">
       <Header />
       <main className="main">
-        {!session && <LoginScreen onSignedIn={setSession} />}
+        {restoring && <p className="message">Signing you in…</p>}
+
+        {!restoring && !session && <LoginScreen onSignedIn={setSession} />}
 
         {session && (mustChangePassword || changingPassword) && (
           <ChangePasswordScreen
