@@ -37,6 +37,14 @@ TOKEN_TTL_SECONDS = int(os.getenv("TOKEN_TTL_SECONDS", "43200"))  # 12 hours
 _ALGORITHM = "pbkdf2_sha256"
 _ITERATIONS = 240_000
 
+# Short enough to read out over the phone, long enough to be worth nothing to
+# a guesser. Staff hand this over once; the portal then forces a change.
+PASSWORD_MIN_LENGTH = 12
+
+# No 0/O, no 1/l/I. A customer being read their password down a bad line
+# should not have to ask which character it was.
+_UNAMBIGUOUS = "abcdefghjkmnpqrstuvwxyz23456789"
+
 
 # ---------------------------------------------------------------- passwords
 
@@ -46,6 +54,35 @@ def hash_password(password: str) -> str:
     salt = secrets.token_bytes(16)
     digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, _ITERATIONS)
     return f"{_ALGORITHM}${_ITERATIONS}${salt.hex()}${digest.hex()}"
+
+
+def temporary_password() -> str:
+    """A one-off password for a new account, e.g. "kfrn-8mqx-2wtd".
+
+    Grouped in fours because that is how a person reads a code aloud without
+    losing their place.
+    """
+    raw = "".join(secrets.choice(_UNAMBIGUOUS) for _ in range(12))
+    return "-".join(raw[i:i + 4] for i in range(0, 12, 4))
+
+
+def password_problem(password: str) -> str | None:
+    """Say what is wrong with a chosen password, in words a customer reads.
+
+    Returns None if it is acceptable. Deliberately short: length is what
+    actually protects a password, and rules about punctuation mostly teach
+    people to write Password1! and reuse it everywhere.
+    """
+    if password != password.strip():
+        return "Your password cannot start or end with a space."
+    if len(password) < PASSWORD_MIN_LENGTH:
+        return (
+            f"Your password must be at least {PASSWORD_MIN_LENGTH} characters "
+            "long."
+        )
+    if len(set(password)) < 5:
+        return "Your password repeats too few different characters."
+    return None
 
 
 def verify_password(password: str, stored: str) -> bool:

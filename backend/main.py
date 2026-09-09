@@ -4,7 +4,7 @@ Every order endpoint requires a valid sign-in token and only ever returns
 data belonging to that user's own customer.
 """
 
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Annotated, Iterator
 
@@ -74,6 +74,27 @@ def get_current_user(
 CurrentUser = Annotated[User, Depends(get_current_user)]
 
 
+MUST_CHANGE_PASSWORD_ERROR = HTTPException(
+    status_code=status.HTTP_403_FORBIDDEN,
+    detail="Please set your own password before continuing.",
+)
+
+
+def get_settled_user(current_user: CurrentUser) -> User:
+    """A signed-in user who is no longer on a temporary password.
+
+    Everything that shows a customer their data depends on this rather than
+    on get_current_user, so the change cannot be skipped by talking to the
+    API directly instead of using the website.
+    """
+    if current_user.must_change_password:
+        raise MUST_CHANGE_PASSWORD_ERROR
+    return current_user
+
+
+SettledUser = Annotated[User, Depends(get_settled_user)]
+
+
 # ----------------------------------------------------------------- schemas
 
 
@@ -102,6 +123,16 @@ class LoginResponse(BaseModel):
     email: str
     full_name: str | None
     customer: CustomerOut
+    # True when the user is still on the password staff gave them. The portal
+    # shows nothing else until they have chosen their own.
+    must_change_password: bool = False
+
+
+class ChangePasswordRequest(BaseModel):
+    """A user setting their own password."""
+
+    current_password: str
+    new_password: str
 
 
 class OrderOut(BaseModel):
@@ -192,6 +223,7 @@ def login(credentials: LoginRequest, db: DbSession) -> LoginResponse:
         email=user.email,
         full_name=user.full_name,
         customer=CustomerOut.model_validate(customer),
+        must_change_password=user.must_change_password,
     )
 
 
@@ -203,11 +235,53 @@ def me(current_user: CurrentUser, db: DbSession) -> dict:
         "email": current_user.email,
         "full_name": current_user.full_name,
         "customer": CustomerOut.model_validate(customer).model_dump(),
+        "must_change_password": current_user.must_change_password,
     }
 
 
+@app.post("/api/change-password")
+def change_password(
+    body: ChangePasswordRequest,
+    current_user: CurrentUser,
+    db: DbSession,
+) -> dict[str, str]:
+    """Let a signed-in user replace their own password.
+
+    Deliberately depends on CurrentUser and not SettledUser: someone on a
+    temporary password has to be able to reach this one endpoint, and only
+    this one.
+    """
+    if not security.verify_password(body.current_password, current_user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Your current password is not correct.",
+        )
+
+    if body.new_password == body.current_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Your new password must be different from the current one.",
+        )
+
+    problem = security.password_problem(body.new_password)
+    if problem:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=problem
+        )
+
+    current_user.password_hash = security.hash_password(body.new_password)
+    current_user.must_change_password = False
+    current_user.password_changed_at = datetime.now(timezone.utc)
+    db.commit()
+
+    # The old token still works, and should: the person holding it is the
+    # one who just proved they know the password. Tokens cannot be revoked
+    # today, which is written down as a known limit.
+    return {"detail": "Your password has been changed."}
+
+
 @app.get("/api/orders", response_model=list[OrderOut])
-def list_orders(current_user: CurrentUser, db: DbSession) -> list[Order]:
+def list_orders(current_user: SettledUser, db: DbSession) -> list[Order]:
     """Return the signed-in user's own orders, and nothing else.
 
     The customer filter comes from the token, never from the request, so a
@@ -223,7 +297,7 @@ def list_orders(current_user: CurrentUser, db: DbSession) -> list[Order]:
 
 
 @app.get("/api/orders/{order_id}", response_model=OrderDetailOut)
-def get_order(order_id: int, current_user: CurrentUser, db: DbSession) -> OrderDetailOut:
+def get_order(order_id: int, current_user: SettledUser, db: DbSession) -> OrderDetailOut:
     """Return one order with its part-shipments and their documents.
 
     Scoped to the caller's own customer. Asking for someone else's order
@@ -271,7 +345,7 @@ def get_order(order_id: int, current_user: CurrentUser, db: DbSession) -> OrderD
 
 @app.get("/api/documents/{document_id}/download")
 def download_document(
-    document_id: int, current_user: CurrentUser, db: DbSession
+    document_id: int, current_user: SettledUser, db: DbSession
 ) -> FileResponse:
     """Send a document file back to the customer it belongs to.
 

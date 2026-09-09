@@ -188,7 +188,12 @@ def main() -> None:
                 {"customer_id": customer.id,
                  "password_hash": security.hash_password(spec["password"]),
                  "full_name": spec["full_name"],
-                 "is_active": True},
+                 "is_active": True,
+                 # Demo logins are printed in .env, so there is nothing to
+                 # change. Set it explicitly: without this, a demo account
+                 # that had been through manage_users.py --reset-password
+                 # would keep the lock and refuse the password seed just set.
+                 "must_change_password": False},
             )
 
             shipment_count = 0

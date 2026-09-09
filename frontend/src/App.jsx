@@ -92,6 +92,127 @@ function LoginScreen({ onSignedIn }) {
   )
 }
 
+// Shown two ways: forced, when staff have just handed over a temporary
+// password and nothing else may be seen until it is replaced; and by choice,
+// from the orders screen. The server enforces the forced case regardless of
+// what this screen does - it will not return an order to somebody who is
+// still on a temporary password.
+function ChangePasswordScreen({ session, forced, onDone, onCancel, onSignOut }) {
+  const [current, setCurrent] = useState('')
+  const [next, setNext] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [error, setError] = useState(null)
+  const [busy, setBusy] = useState(false)
+
+  async function handleSubmit(event) {
+    event.preventDefault()
+    setError(null)
+
+    if (next !== confirm) {
+      setError('The two new passwords do not match.')
+      return
+    }
+
+    setBusy(true)
+    try {
+      await axios.post('/api/change-password', {
+        current_password: current,
+        new_password: next,
+      })
+      onDone()
+    } catch (err) {
+      // The server is the authority on what makes a password acceptable, so
+      // show what it said rather than guessing here.
+      setError(
+        err.response?.data?.detail ??
+          'Could not reach the server. Please try again.',
+      )
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="card card--login">
+      <h2>{forced ? 'Choose your password' : 'Change your password'}</h2>
+
+      {forced ? (
+        <p className="lead">
+          You are signed in with a temporary password given to you by Alok
+          Ingots. Please choose your own before continuing.
+        </p>
+      ) : (
+        <p className="lead">
+          Signed in as {session.email}.
+        </p>
+      )}
+
+      <form onSubmit={handleSubmit} noValidate>
+        <label className="field">
+          <span>{forced ? 'Temporary password' : 'Current password'}</span>
+          <input
+            type="password"
+            value={current}
+            autoComplete="current-password"
+            onChange={(e) => setCurrent(e.target.value)}
+          />
+        </label>
+
+        <label className="field">
+          <span>New password</span>
+          <input
+            type="password"
+            value={next}
+            autoComplete="new-password"
+            onChange={(e) => setNext(e.target.value)}
+          />
+        </label>
+
+        <label className="field">
+          <span>New password again</span>
+          <input
+            type="password"
+            value={confirm}
+            autoComplete="new-password"
+            onChange={(e) => setConfirm(e.target.value)}
+          />
+        </label>
+
+        <p className="hint">At least 12 characters. Longer is better than complicated.</p>
+
+        {error && (
+          <p className="error" role="alert">
+            {error}
+          </p>
+        )}
+
+        <button type="submit" className="button" disabled={busy}>
+          {busy ? 'Saving…' : 'Save new password'}
+        </button>
+
+        {!forced && (
+          <button
+            type="button"
+            className="button button--ghost button--block"
+            onClick={onCancel}
+            disabled={busy}
+          >
+            Cancel
+          </button>
+        )}
+      </form>
+
+      {forced && (
+        <p className="demo-note">
+          <button type="button" className="linkish" onClick={onSignOut}>
+            Sign out instead
+          </button>
+        </p>
+      )}
+    </div>
+  )
+}
+
+
 // Maps an order status to a pill colour. Unknown statuses fall back to grey.
 const STATUS_CLASS = {
   'in transit': 'pill--transit',
@@ -109,7 +230,7 @@ function StatusPill({ status }) {
   return <span className={`pill ${tone}`}>{status}</span>
 }
 
-function OrdersScreen({ session, onSignOut, onOpenOrder }) {
+function OrdersScreen({ session, onSignOut, onOpenOrder, onChangePassword }) {
   // 'loading' -> 'ready' | 'error'
   const [state, setState] = useState('loading')
   const [orders, setOrders] = useState([])
@@ -143,9 +264,18 @@ function OrdersScreen({ session, onSignOut, onOpenOrder }) {
             {session.customer?.name} · signed in as {session.email}
           </p>
         </div>
-        <button type="button" className="button button--ghost" onClick={onSignOut}>
-          Sign out
-        </button>
+        <div className="toolbar-actions">
+          <button
+            type="button"
+            className="button button--ghost"
+            onClick={onChangePassword}
+          >
+            Change password
+          </button>
+          <button type="button" className="button button--ghost" onClick={onSignOut}>
+            Sign out
+          </button>
+        </div>
       </div>
 
       <div className="card">
@@ -440,11 +570,25 @@ function OrderDetailScreen({ orderId, onBack, onSignOut, session }) {
 export default function App() {
   const [session, setSession] = useState(null)
   const [openOrderId, setOpenOrderId] = useState(null)
+  const [changingPassword, setChangingPassword] = useState(false)
+  const [passwordChanged, setPasswordChanged] = useState(false)
 
   function signOut() {
     delete axios.defaults.headers.common.Authorization
     setOpenOrderId(null)
+    setChangingPassword(false)
+    setPasswordChanged(false)
     setSession(null)
+  }
+
+  // Nothing but the password screen is reachable until a temporary password
+  // has been replaced.
+  const mustChangePassword = Boolean(session?.must_change_password)
+
+  function passwordWasChanged() {
+    setSession({ ...session, must_change_password: false })
+    setChangingPassword(false)
+    setPasswordChanged(true)
   }
 
   return (
@@ -453,15 +597,32 @@ export default function App() {
       <main className="main">
         {!session && <LoginScreen onSignedIn={setSession} />}
 
-        {session && openOrderId === null && (
+        {session && (mustChangePassword || changingPassword) && (
+          <ChangePasswordScreen
+            session={session}
+            forced={mustChangePassword}
+            onDone={passwordWasChanged}
+            onCancel={() => setChangingPassword(false)}
+            onSignOut={signOut}
+          />
+        )}
+
+        {session && !mustChangePassword && !changingPassword && passwordChanged && (
+          <p className="banner" role="status">
+            Your password has been changed.
+          </p>
+        )}
+
+        {session && !mustChangePassword && !changingPassword && openOrderId === null && (
           <OrdersScreen
             session={session}
             onSignOut={signOut}
             onOpenOrder={setOpenOrderId}
+            onChangePassword={() => setChangingPassword(true)}
           />
         )}
 
-        {session && openOrderId !== null && (
+        {session && !mustChangePassword && !changingPassword && openOrderId !== null && (
           <OrderDetailScreen
             orderId={openOrderId}
             session={session}
