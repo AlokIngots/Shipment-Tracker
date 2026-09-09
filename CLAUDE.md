@@ -91,13 +91,12 @@ Branches, each stacked on the one before, so the last one contains everything:
 | `feature/step9-deployment` | 9 — containers, Caddy, `safe-deploy.sh` |
 | `feature/step10-migrations` | 10 — Alembic migrations (tip) |
 
-Steps 1–8 are all merged into `dev`, so the per-step branches above are history
+Every step is merged into `dev`, so the per-step branches above are history
 now. Start the next step with a fresh branch off `dev`.
 
-**`dev` now holds all eight steps** (19 commits, 30 files) and is the branch to
-work from. **`main` is still the empty anchor commit, deliberately** — it gets
-its first real content only when the portal has actually been deployed and
-proved to work.
+**`dev` is the branch to work from.** **`main` is still the empty anchor
+commit, deliberately** — it gets its first real content only when the portal
+has actually been deployed to a real server and proved to work there.
 
 ### How to run it locally
 
@@ -144,9 +143,10 @@ automatically; `:80` serves plain HTTP for testing on your own machine.
 In the order that matters:
 
 1. **A server.** `safe-deploy.sh` now exists and has been proved end to end on
-   a local Docker stack — including three rollback drills. What is missing is a
-   machine to run it on, and a DNS record pointing portal.alokindia.co.in at
-   that machine. Both need the user, or whoever runs alokindia.co.in.
+   a local Docker stack — including five rollback drills, two of them for
+   failed migrations. What is missing is a machine to run it on, and a DNS
+   record pointing portal.alokindia.co.in at that machine. Both need the
+   user, or whoever runs alokindia.co.in.
 2. **The SAP/PMS question, still unanswered.** How can order data leave
    SAP/PMS — a spreadsheet export, a readable database, an API, or not at all?
    And does SAP/PMS even hold the vessel name and IMO number, or does that sit
@@ -204,6 +204,7 @@ Update after every step: what was done, and the commit.
 | 2026-09-09 | **Step 9 — Deployment.** API containerised; React app built and served by Caddy, which obtains and renews HTTPS itself; production stack with the database on no published port. `safe-deploy.sh` backs up the database and `storage/`, tags the running images `:rollback`, and restores them automatically if the new version does not answer. Proved by a real deploy plus three rollback drills | _this commit_ |
 | 2026-09-09 | **Security fix found by that first deploy.** `frontend/.env` was reaching the web image, so Vite baked the demo email and password into the JavaScript served to browsers. A bare `.env` in the root `.dockerignore` only matches the root file; patterns are now `**/.env`. Re-verified: no credential appears in the shipped bundle | _this commit_ |
 | 2026-09-09 | **Step 10 — Database migrations.** Alembic added; migration 0001 is the existing six tables, generated against an empty database and checked back against the models. `migrate.py` wraps it (`--status`, `--sql`, `--revision`), adopts a database that predates migrations rather than rebuilding it, and reports models that have drifted from the schema. `seed.py` no longer builds tables — it calls `migrate.py`. `safe-deploy.sh` migrates instead of `create_all`, and undoes the migration if the deploy then fails | `50ad5f2` |
+| 2026-09-09 | **Step 10 proved by deployment.** Real deploy of the migration code: the production database, whose tables predated migrations, was adopted at 0001 with nothing created or dropped. Two failure drills — a migration followed by a failing health check, and a migration that applied then reported drifted models — both put the schema back to 0001 and restored the previous image, with all rows untouched. The second drill found a real bug in the new deploy code, now fixed | `ef76e52` |
 | 2026-09-09 | **Bug fix — UI text.** The order detail page showed the literal text `Loading order…` while loading, because a JSX text node is not a JavaScript string. Now renders `Loading order…` | _this commit_ |
 
 ### Design decisions worth remembering
@@ -267,6 +268,11 @@ Update after every step: what was done, and the commit.
   never met a real server, a real domain, or a real HTTPS certificate. Caddy's
   certificate step in particular cannot be tested until DNS points at a real
   machine.
+- **Docker Hub could not be reached from this machine on 9 Sep 2026.** Pulling
+  base images failed with a TLS error through Docker Desktop's proxy, while
+  the same request from Windows itself worked. The images were fetched from
+  `mirror.gcr.io` and retagged instead. Worth knowing before the first deploy
+  on a real server: it may be this network rather than anything in the repo.
 - **A failed deploy puts the schema back, but not the rows.** If a deploy
   migrates the schema and then fails, `safe-deploy.sh` runs the migration
   backwards to where it started before restoring the old image. Rows are
