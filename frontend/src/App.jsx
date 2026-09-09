@@ -306,7 +306,7 @@ function OrderDetailScreen({ orderId, onBack, onSignOut, session }) {
 
       {state === 'loading' && (
         <div className="card">
-          <p className="message">Loading order\u2026</p>
+          <p className="message">Loading order&hellip;</p>
         </div>
       )}
 
