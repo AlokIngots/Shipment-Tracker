@@ -66,8 +66,9 @@ to the next step. Never run ahead through multiple steps at once.
 ## Where we are now
 
 **Last worked on: 9 September 2026.** All seven roadmap steps are built, plus
-deployment, database migrations, customer accounts and sessions that survive
-a refresh. Every feature has been tested end to end, and
+deployment, database migrations, customer accounts, sessions that survive a
+refresh, and the first staff page. Every feature has been tested end to end,
+and
 the earlier full pass of 70 checks found and fixed two bugs. Nothing is
 deployed on a real server, and no real customer has ever used it or been
 emailed by it.
@@ -92,7 +93,8 @@ Branches, each stacked on the one before, so the last one contains everything:
 | `feature/step9-deployment` | 9 — containers, Caddy, `safe-deploy.sh` |
 | `feature/step10-migrations` | 10 — Alembic migrations |
 | `feature/step11-accounts` | 11 — real customer accounts |
-| `feature/step12-sessions` | 12 — sessions survive a refresh (tip) |
+| `feature/step12-sessions` | 12 — sessions survive a refresh |
+| `feature/step13-staff-documents` | 13 — staff page: shipment documents (tip) |
 
 Every step is merged into `dev`, so the per-step branches above are history
 now. Start the next step with a fresh branch off `dev`.
@@ -139,6 +141,7 @@ reach an image, which is what the `**/.env` rules in `.dockerignore` are for.
 | `python manage_users.py --list` | every customer, and who can sign in for them |
 | `python manage_users.py --add-customer CODE --name N` | add a customer |
 | `python manage_users.py --add-user EMAIL --customer CODE` | give somebody a login; prints a temporary password once |
+| `python manage_users.py --add-staff EMAIL` | give an Alok Ingots colleague a staff login |
 | `python manage_users.py --reset-password EMAIL` | issue a new temporary password |
 | `python manage_users.py --deactivate EMAIL` | stop somebody signing in, at once |
 | `python manage_users.py --activate EMAIL` | let them back in |
@@ -176,6 +179,22 @@ On the server the same commands run inside the API container:
 ```bash
 docker compose -f docker-compose.prod.yml exec api python manage_users.py --list
 ```
+
+### The two sides of the portal
+
+**Customers** sign in and read their own orders, shipments and documents.
+They can write nothing except their own password.
+
+**Alok Ingots staff** sign in at the same address and get the staff page
+instead: every shipment, which of the four documents are attached, and
+Upload / Replace / Remove on each. A staff account belongs to no customer
+and cannot open a customer's portal; a customer cannot reach anything under
+`/api/staff`. Staff is a flag only `manage_users.py --add-staff` can set on
+the server — there is no way to become staff through the portal.
+
+Uploading is the only way a browser can write a file here: PDF, JPG or PNG,
+checked on both the extension and the type the browser claims, 20 MB limit
+enforced while writing, stored under a random name.
 
 ### Deploying (from the project root)
 
@@ -255,6 +274,7 @@ Update after every step: what was done, and the commit.
 | 2026-09-09 | **Step 9 — Deployment.** API containerised; React app built and served by Caddy, which obtains and renews HTTPS itself; production stack with the database on no published port. `safe-deploy.sh` backs up the database and `storage/`, tags the running images `:rollback`, and restores them automatically if the new version does not answer. Proved by a real deploy plus three rollback drills | _this commit_ |
 | 2026-09-09 | **Security fix found by that first deploy.** `frontend/.env` was reaching the web image, so Vite baked the demo email and password into the JavaScript served to browsers. A bare `.env` in the root `.dockerignore` only matches the root file; patterns are now `**/.env`. Re-verified: no credential appears in the shipped bundle | _this commit_ |
 | 2026-09-09 | **Step 10 — Database migrations.** Alembic added; migration 0001 is the existing six tables, generated against an empty database and checked back against the models. `migrate.py` wraps it (`--status`, `--sql`, `--revision`), adopts a database that predates migrations rather than rebuilding it, and reports models that have drifted from the schema. `seed.py` no longer builds tables — it calls `migrate.py`. `safe-deploy.sh` migrates instead of `create_all`, and undoes the migration if the deploy then fails | `50ad5f2` |
+| 2026-09-09 | **Step 13 — The staff side.** Migration 0003 adds `is_staff` and makes `users.customer_id` optional, because staff belong to no customer. `manage_users.py --add-staff`, a staff-only `/api/staff` section (list shipments with document status, upload, remove), and a staff page in the portal replacing the customer view. Uploads restricted to PDF/JPG/PNG, 20 MB, random stored name. Proved end to end: staff uploads a Bill of Lading, the owning customer downloads it, the other customer gets a 404 | `b716357` |
 | 2026-09-09 | **Step 12 — Sessions.** The sign-in token is kept in `sessionStorage`, so a refresh no longer throws the customer back to the login screen; on load the portal checks the remembered token against `/api/me` before deciding what to show. Tokens now carry the time they were issued, and one older than the account's last password change is refused — so changing a password, or a staff `--reset-password`, signs out every other session. The person changing it gets a replacement token so they stay signed in | `06204ed` |
 | 2026-09-09 | **Step 11 — Real customer accounts.** `manage_users.py` for staff: add a customer, give somebody a login with a one-time temporary password, reset it, deactivate or reactivate, all with `--dry-run`. Migration 0002 adds `must_change_password`; every customer-facing endpoint now refuses anybody still holding a temporary password, while `/api/me` and the new `POST /api/change-password` stay reachable so the portal can explain why. A password screen in the portal, forced on first sign-in and available by choice afterwards. Proved end to end on the deployed stack, including that migration 0002 reached a database with rows in it and kept them | `6c82e65` |
 | 2026-09-09 | **Step 10 proved by deployment.** Real deploy of the migration code: the production database, whose tables predated migrations, was adopted at 0001 with nothing created or dropped. Two failure drills — a migration followed by a failing health check, and a migration that applied then reported drifted models — both put the schema back to 0001 and restored the previous image, with all rows untouched. The second drill found a real bug in the new deploy code, now fixed | `ef76e52` |
@@ -339,6 +359,10 @@ Update after every step: what was done, and the commit.
 - **An account can be deactivated but not deleted.** Deactivating is nearly
   always what is actually wanted — a deleted login takes its history with it —
   but there is no tidy way to remove one created by mistake except SQL.
+- **Nothing limits how often a password can be guessed.** There is no rate
+  limit on `/api/login`, so nothing slows down somebody trying passwords in
+  bulk. Long passwords and PBKDF2 make it slow going, but a limit is the
+  proper answer and is not there.
 - **Nothing checks that an email address is real.** `--add-user` accepts
   whatever it is given, so a typo creates an account nobody can sign in to.
   Check the address before pressing enter; `--list` will show it.
@@ -350,10 +374,16 @@ Update after every step: what was done, and the commit.
   ready; real values arrive once the SAP/PMS export is settled.
 - **The demo database now also holds `CUST-100` / `CUST-101`** from importing
   the template. They have no users, so nobody can sign in as them.
-- **Documents are uploaded by staff from the server** using
-  `backend/add_document.py`. There is deliberately no upload endpoint on the
-  API, so nothing customer-facing can write files. A staff web UI is a
-  later job.
+- **Orders and shipments still cannot be created from a screen.** Staff can
+  now attach documents to a shipment, but the shipment itself only exists
+  once `import_data.py` has been run on the server. That is the obvious next
+  piece of the staff side.
+- **Nothing records who uploaded or removed a document.** The staff page
+  makes both easy, and neither leaves a trace beyond the file itself. Worth
+  an audit trail before more than one or two people have staff logins.
+- **`add_document.py` still works** and does the same thing as the staff
+  page. Keep them in step: both store a random name and replace a document
+  of the same type.
 - **Document files live in `storage/`**, which is git-ignored and must be
   included in server backups — `safe-deploy.sh` will need to cover it.
 - **`seed.py --reset` clears the database but leaves document files behind**
