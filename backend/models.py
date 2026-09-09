@@ -43,10 +43,17 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    customer_id: Mapped[int] = mapped_column(
+    # Null for Alok Ingots staff, who belong to no customer. Every other
+    # user must have one: that link is what keeps one customer's orders
+    # away from another's.
+    customer_id: Mapped[int | None] = mapped_column(
         ForeignKey("customers.id", ondelete="CASCADE"), index=True
     )
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    # Alok Ingots staff. Sees the staff pages, never a customer's portal.
+    is_staff: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
     # PBKDF2-HMAC-SHA256, salted per user. Never a plain password.
     password_hash: Mapped[str] = mapped_column(String(255))
     full_name: Mapped[str | None] = mapped_column(String(200))

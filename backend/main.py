@@ -12,7 +12,16 @@ import security
 import storage
 import tracking
 from database import SessionLocal
-from fastapi import Depends, FastAPI, Header, HTTPException, status
+from fastapi import (
+    Depends,
+    FastAPI,
+    File,
+    Form,
+    Header,
+    HTTPException,
+    UploadFile,
+    status,
+)
 from fastapi.responses import FileResponse
 from models import Customer, Document, Order, Shipment, User
 from pydantic import BaseModel, ConfigDict
@@ -91,6 +100,26 @@ MUST_CHANGE_PASSWORD_ERROR = HTTPException(
 )
 
 
+def get_staff_user(current_user: CurrentUser) -> User:
+    """An Alok Ingots staff member. Everything under /api/staff needs this.
+
+    Staff are told apart from customers by a flag on their account, which
+    only manage_users.py on the server can set. There is no way to become
+    staff through the portal.
+    """
+    if not current_user.is_staff:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This is only for Alok Ingots staff.",
+        )
+    if current_user.must_change_password:
+        raise MUST_CHANGE_PASSWORD_ERROR
+    return current_user
+
+
+StaffUser = Annotated[User, Depends(get_staff_user)]
+
+
 def get_settled_user(current_user: CurrentUser) -> User:
     """A signed-in user who is no longer on a temporary password.
 
@@ -100,6 +129,14 @@ def get_settled_user(current_user: CurrentUser) -> User:
     """
     if current_user.must_change_password:
         raise MUST_CHANGE_PASSWORD_ERROR
+    if current_user.is_staff or current_user.customer_id is None:
+        # Staff belong to no customer, so there are no orders that are
+        # "theirs". Saying so plainly beats returning an empty list and
+        # letting them wonder where the orders went.
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Staff accounts do not have their own orders.",
+        )
     return current_user
 
 
@@ -127,16 +164,41 @@ class CustomerOut(BaseModel):
     country: str | None
 
 
+class StaffDocumentOut(BaseModel):
+    """One document slot on a shipment, as staff see it."""
+
+    doc_type: str
+    document_id: int | None
+    file_name: str | None
+    uploaded: bool
+
+
+class StaffShipmentOut(BaseModel):
+    """A shipment on the staff page, with what is and is not attached."""
+
+    id: int
+    shipment_no: str
+    status: str | None
+    vessel_name: str | None
+    customer_name: str
+    customer_code: str
+    sales_order_no: str
+    documents: list[StaffDocumentOut]
+    missing_count: int
+
+
 class LoginResponse(BaseModel):
     """Returned on a successful sign-in."""
 
     token: str
     email: str
     full_name: str | None
-    customer: CustomerOut
+    # Null for staff, who belong to no customer.
+    customer: CustomerOut | None
     # True when the user is still on the password staff gave them. The portal
     # shows nothing else until they have chosen their own.
     must_change_password: bool = False
+    is_staff: bool = False
 
 
 class ChangePasswordRequest(BaseModel):
@@ -228,25 +290,33 @@ def login(credentials: LoginRequest, db: DbSession) -> LoginResponse:
             detail="Email or password is incorrect.",
         )
 
-    customer = db.get(Customer, user.customer_id)
+    customer = db.get(Customer, user.customer_id) if user.customer_id else None
     return LoginResponse(
         token=security.create_token(user.id),
         email=user.email,
         full_name=user.full_name,
-        customer=CustomerOut.model_validate(customer),
+        customer=CustomerOut.model_validate(customer) if customer else None,
         must_change_password=user.must_change_password,
+        is_staff=user.is_staff,
     )
 
 
 @app.get("/api/me", response_model=LoginResponse | dict)
 def me(current_user: CurrentUser, db: DbSession) -> dict:
     """Who am I? Used by the frontend to confirm a stored token is still good."""
-    customer = db.get(Customer, current_user.customer_id)
+    customer = (
+        db.get(Customer, current_user.customer_id)
+        if current_user.customer_id
+        else None
+    )
     return {
         "email": current_user.email,
         "full_name": current_user.full_name,
-        "customer": CustomerOut.model_validate(customer).model_dump(),
+        "customer": (
+            CustomerOut.model_validate(customer).model_dump() if customer else None
+        ),
         "must_change_password": current_user.must_change_password,
+        "is_staff": current_user.is_staff,
     }
 
 
@@ -295,6 +365,149 @@ def change_password(
         "detail": "Your password has been changed.",
         "token": security.create_token(current_user.id),
     }
+
+
+# --------------------------------------------------------------------- staff
+#
+# Everything below is the Alok Ingots side of the portal, and the only place
+# in the API where a browser can write anything other than its own password.
+# Every route depends on StaffUser.
+
+# The documents a shipment is expected to have. A shipment is "complete"
+# when all four are attached.
+EXPECTED_DOCUMENTS = [
+    "Packing List",
+    "Commercial Invoice",
+    "Bill of Lading",
+    "Mill Test Certificate",
+]
+
+
+@app.get("/api/staff/shipments", response_model=list[StaffShipmentOut])
+def staff_shipments(staff: StaffUser, db: DbSession) -> list[StaffShipmentOut]:
+    """Every shipment, with which documents are attached and which are not.
+
+    Ordered so the shipments needing attention come first.
+    """
+    rows = db.execute(
+        select(Shipment, Order, Customer)
+        .join(Order, Shipment.order_id == Order.id)
+        .join(Customer, Order.customer_id == Customer.id)
+        .options(selectinload(Shipment.documents))
+        .order_by(Shipment.id.desc())
+    ).all()
+
+    out: list[StaffShipmentOut] = []
+    for shipment, order, customer in rows:
+        by_type = {d.doc_type: d for d in shipment.documents}
+
+        documents: list[StaffDocumentOut] = []
+        # The four expected ones first, then anything unusual somebody has
+        # attached, so nothing is hidden just because it was not expected.
+        for doc_type in EXPECTED_DOCUMENTS + [
+            t for t in by_type if t not in EXPECTED_DOCUMENTS
+        ]:
+            document = by_type.get(doc_type)
+            uploaded = bool(document and storage.resolve(document.stored_path or ""))
+            documents.append(StaffDocumentOut(
+                doc_type=doc_type,
+                document_id=document.id if document else None,
+                file_name=document.file_name if document else None,
+                uploaded=uploaded,
+            ))
+
+        out.append(StaffShipmentOut(
+            id=shipment.id,
+            shipment_no=shipment.shipment_no,
+            status=shipment.status,
+            vessel_name=shipment.vessel_name,
+            customer_name=customer.name,
+            customer_code=customer.code,
+            sales_order_no=order.sales_order_no,
+            documents=documents,
+            missing_count=sum(1 for d in documents if not d.uploaded),
+        ))
+
+    return out
+
+
+@app.post("/api/staff/shipments/{shipment_id}/documents")
+def staff_upload_document(
+    shipment_id: int,
+    staff: StaffUser,
+    db: DbSession,
+    doc_type: Annotated[str, Form()],
+    file: Annotated[UploadFile, File()],
+) -> dict[str, str]:
+    """Attach a file to a shipment, replacing one of the same type.
+
+    Does exactly what add_document.py has always done on the server, so the
+    two cannot drift apart in what they produce.
+    """
+    shipment = db.get(Shipment, shipment_id)
+    if shipment is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Shipment not found."
+        )
+
+    doc_type = (doc_type or "").strip()
+    if not doc_type:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Choose which kind of document this is.",
+        )
+
+    try:
+        suffix = storage.check_upload(file.filename or "", file.content_type)
+        stored_name = storage.store_upload(file.file, suffix)
+    except storage.UploadRejected as rejected:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(rejected)
+        ) from rejected
+
+    document = db.scalar(
+        select(Document).where(
+            Document.shipment_id == shipment.id, Document.doc_type == doc_type
+        )
+    )
+    if document is None:
+        document = Document(shipment_id=shipment.id, doc_type=doc_type)
+        db.add(document)
+        action = "added"
+    else:
+        # Only remove the old file once the new one is safely written.
+        storage.delete(document.stored_path or "")
+        action = "replaced"
+
+    document.file_name = (file.filename or "document")[:255]
+    document.stored_path = stored_name
+    db.commit()
+
+    return {"detail": f"{doc_type} {action} on {shipment.shipment_no}."}
+
+
+@app.delete("/api/staff/documents/{document_id}")
+def staff_delete_document(
+    document_id: int, staff: StaffUser, db: DbSession
+) -> dict[str, str]:
+    """Remove a document, file and all.
+
+    Worth having: attaching the wrong customer's invoice is the kind of
+    mistake that must be undoable in seconds, not by asking someone with
+    access to the server.
+    """
+    document = db.get(Document, document_id)
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Document not found."
+        )
+
+    doc_type = document.doc_type
+    storage.delete(document.stored_path or "")
+    db.delete(document)
+    db.commit()
+
+    return {"detail": f"{doc_type} removed."}
 
 
 @app.get("/api/orders", response_model=list[OrderOut])

@@ -289,6 +289,224 @@ function StatusPill({ status }) {
   return <span className={`pill ${tone}`}>{status}</span>
 }
 
+// The server can refuse an upload for several reasons, and FastAPI reports
+// one of them (a missing form field) as a list rather than a sentence.
+function describeError(err, fallback) {
+  const detail = err.response?.data?.detail
+  if (typeof detail === 'string') return detail
+  if (Array.isArray(detail) && detail[0]?.msg) return detail[0].msg
+  return fallback
+}
+
+function StaffDocumentRow({ shipment, doc, onChanged }) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(null)
+
+  async function upload(event) {
+    const file = event.target.files?.[0]
+    // Clear it, or choosing the same file twice in a row does nothing.
+    event.target.value = ''
+    if (!file) return
+
+    setBusy(true)
+    setError(null)
+    const form = new FormData()
+    form.append('doc_type', doc.doc_type)
+    form.append('file', file)
+
+    try {
+      await axios.post(`/api/staff/shipments/${shipment.id}/documents`, form)
+      await onChanged()
+    } catch (err) {
+      setError(describeError(err, 'Could not upload that file. Please try again.'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function remove() {
+    setBusy(true)
+    setError(null)
+    try {
+      await axios.delete(`/api/staff/documents/${doc.document_id}`)
+      await onChanged()
+    } catch (err) {
+      setError(describeError(err, 'Could not remove that document.'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="docrow">
+      <span className={doc.uploaded ? 'dot dot--on' : 'dot'} aria-hidden="true" />
+      <div className="docrow-main">
+        <span className="docrow-type">{doc.doc_type}</span>
+        <span className="docrow-file">
+          {busy
+            ? 'Working…'
+            : doc.uploaded
+              ? doc.file_name
+              : 'Not uploaded yet'}
+        </span>
+        {error && (
+          <span className="docrow-error" role="alert">
+            {error}
+          </span>
+        )}
+      </div>
+
+      <div className="docrow-actions">
+        <label className={busy ? 'minibutton minibutton--off' : 'minibutton'}>
+          {doc.uploaded ? 'Replace' : 'Upload'}
+          <input
+            type="file"
+            accept=".pdf,.jpg,.jpeg,.png"
+            hidden
+            disabled={busy}
+            onChange={upload}
+          />
+        </label>
+        {doc.uploaded && (
+          <button
+            type="button"
+            className="minibutton minibutton--quiet"
+            onClick={remove}
+            disabled={busy}
+          >
+            Remove
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// The Alok Ingots side. A staff account has no orders of its own, so this is
+// what it sees instead of the customer portal.
+function StaffScreen({ session, onSignOut, onChangePassword }) {
+  const [state, setState] = useState('loading')
+  const [shipments, setShipments] = useState([])
+  const [onlyIncomplete, setOnlyIncomplete] = useState(false)
+
+  async function load() {
+    try {
+      const res = await axios.get('/api/staff/shipments')
+      setShipments(res.data)
+      setState('ready')
+    } catch (err) {
+      setState(err.response?.status === 401 ? 'unauthorised' : 'error')
+    }
+  }
+
+  useEffect(() => {
+    load()
+  }, [])
+
+  const shown = onlyIncomplete
+    ? shipments.filter((s) => s.missing_count > 0)
+    : shipments
+  const incomplete = shipments.filter((s) => s.missing_count > 0).length
+
+  return (
+    <>
+      <div className="toolbar">
+        <div>
+          <h2 className="toolbar-title">Shipment documents</h2>
+          <p className="toolbar-sub">
+            Alok Ingots staff · signed in as {session.email}
+          </p>
+        </div>
+        <div className="toolbar-actions">
+          <button
+            type="button"
+            className="button button--ghost"
+            onClick={onChangePassword}
+          >
+            Change password
+          </button>
+          <button type="button" className="button button--ghost" onClick={onSignOut}>
+            Sign out
+          </button>
+        </div>
+      </div>
+
+      {state === 'loading' && <div className="card"><p className="message">Loading shipments…</p></div>}
+
+      {state === 'error' && (
+        <div className="card">
+          <p className="message message--error" role="alert">
+            Couldn&apos;t load the shipments. Please try again.
+          </p>
+        </div>
+      )}
+
+      {state === 'unauthorised' && (
+        <div className="card">
+          <p className="message message--error" role="alert">
+            Your session has expired. Please sign in again.
+          </p>
+        </div>
+      )}
+
+      {state === 'ready' && shipments.length === 0 && (
+        <div className="card"><p className="message">There are no shipments yet.</p></div>
+      )}
+
+      {state === 'ready' && shipments.length > 0 && (
+        <>
+          <div className="card card--summary">
+            <p className="summary">
+              {incomplete === 0
+                ? `All ${shipments.length} shipments have every document.`
+                : `${incomplete} of ${shipments.length} shipments are missing documents.`}
+            </p>
+            <label className="checkline">
+              <input
+                type="checkbox"
+                checked={onlyIncomplete}
+                onChange={(e) => setOnlyIncomplete(e.target.checked)}
+              />
+              <span>Show only shipments with something missing</span>
+            </label>
+          </div>
+
+          {shown.map((shipment) => (
+            <div className="card" key={shipment.id}>
+              <div className="shipment-head">
+                <div>
+                  <h3 className="shipment-no">{shipment.shipment_no}</h3>
+                  <p className="shipment-sub">
+                    {shipment.customer_name} ({shipment.customer_code}) ·{' '}
+                    {shipment.sales_order_no}
+                    {shipment.vessel_name ? ` · ${shipment.vessel_name}` : ''}
+                  </p>
+                </div>
+                <StatusPill status={shipment.status} />
+              </div>
+
+              {shipment.documents.map((doc) => (
+                <StaffDocumentRow
+                  key={doc.doc_type}
+                  shipment={shipment}
+                  doc={doc}
+                  onChanged={load}
+                />
+              ))}
+            </div>
+          ))}
+
+          {shown.length === 0 && (
+            <div className="card">
+              <p className="message">Nothing missing. Every document is attached.</p>
+            </div>
+          )}
+        </>
+      )}
+    </>
+  )
+}
+
 function OrdersScreen({ session, onSignOut, onOpenOrder, onChangePassword }) {
   // 'loading' -> 'ready' | 'error'
   const [state, setState] = useState('loading')
@@ -712,7 +930,16 @@ export default function App() {
           </p>
         )}
 
-        {session && !mustChangePassword && !changingPassword && openOrderId === null && (
+        {session && !mustChangePassword && !changingPassword && session.is_staff && (
+          <StaffScreen
+            session={session}
+            onSignOut={signOut}
+            onChangePassword={() => setChangingPassword(true)}
+          />
+        )}
+
+        {session && !mustChangePassword && !changingPassword && !session.is_staff
+          && openOrderId === null && (
           <OrdersScreen
             session={session}
             onSignOut={signOut}
@@ -721,7 +948,8 @@ export default function App() {
           />
         )}
 
-        {session && !mustChangePassword && !changingPassword && openOrderId !== null && (
+        {session && !mustChangePassword && !changingPassword && !session.is_staff
+          && openOrderId !== null && (
           <OrderDetailScreen
             orderId={openOrderId}
             session={session}

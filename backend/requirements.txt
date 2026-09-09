@@ -8,3 +8,5 @@ SQLAlchemy==2.0.52
 psycopg2-binary==2.9.12
 python-dotenv==1.2.3
 alembic==1.19.2
+# Lets FastAPI accept an uploaded file from the staff document page.
+python-multipart==0.0.32

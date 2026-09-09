@@ -633,3 +633,138 @@ code {
 .hint--met {
   color: var(--ok);
 }
+
+/* ---- staff document page ---- */
+
+.card--summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.summary {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--navy);
+}
+
+.checkline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.shipment-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding-bottom: 12px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+}
+
+.shipment-no {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--navy);
+}
+
+.shipment-sub {
+  margin: 3px 0 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.docrow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.docrow:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+/* Green when the document is there, hollow when it is not: the whole page
+   can be read at a glance down this column. */
+.dot {
+  width: 9px;
+  height: 9px;
+  flex: none;
+  border-radius: 50%;
+  border: 1.5px solid var(--line);
+  background: #fff;
+}
+
+.dot--on {
+  border-color: var(--ok);
+  background: var(--ok);
+}
+
+.docrow-main {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+
+.docrow-type {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--navy);
+}
+
+.docrow-file {
+  font-size: 12px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.docrow-error {
+  font-size: 12px;
+  color: var(--bad);
+  font-weight: 500;
+}
+
+.docrow-actions {
+  display: flex;
+  gap: 8px;
+  flex: none;
+}
+
+.minibutton {
+  display: inline-block;
+  padding: 5px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--navy);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.minibutton:hover {
+  background: #eef0f6;
+}
+
+.minibutton--quiet {
+  color: var(--muted);
+}
+
+.minibutton--off {
+  opacity: 0.5;
+  cursor: default;
+}

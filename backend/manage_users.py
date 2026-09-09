@@ -3,6 +3,7 @@
     python manage_users.py --list
     python manage_users.py --add-customer CODE --name "Company Ltd" [--country Germany]
     python manage_users.py --add-user EMAIL --customer CODE [--full-name "Jane Roe"]
+    python manage_users.py --add-staff EMAIL [--full-name "Your Name"]
     python manage_users.py --reset-password EMAIL
     python manage_users.py --deactivate EMAIL
     python manage_users.py --activate EMAIL
@@ -22,6 +23,15 @@ The second command prints a temporary password, once. Send it to the customer
 the way you would send anything else confidential, and not in the same message
 as the portal address. The first time they sign in, the portal makes them
 choose their own password before it will show them anything.
+
+Alok Ingots staff
+-----------------
+    python manage_users.py --add-staff exports@alokindia.com --full-name "Export Desk"
+
+A staff login belongs to no customer and sees no customer's orders. It sees
+the staff pages instead, where documents are attached to shipments. Being
+staff can only be granted here, on the server - there is no way to become
+staff through the portal.
 
 There is deliberately no web page for any of this. Nothing customer-facing can
 create an account, so nothing customer-facing can be tricked into creating one.
@@ -65,6 +75,21 @@ def announce(email: str, password: str) -> None:
 
 def do_list(session) -> int:
     """Show every customer, and who can sign in for them."""
+    staff = session.scalars(
+        select(User).where(User.is_staff.is_(True)).order_by(User.email)
+    ).all()
+    if staff:
+        print("Alok Ingots staff")
+        for user in staff:
+            flags = []
+            if not user.is_active:
+                flags.append("DEACTIVATED")
+            if user.must_change_password:
+                flags.append("temporary password, not yet changed")
+            suffix = f"   [{'; '.join(flags)}]" if flags else ""
+            name = f" ({user.full_name})" if user.full_name else ""
+            print(f"    {user.email}{name}{suffix}")
+
     customers = session.scalars(select(Customer).order_by(Customer.code)).all()
     if not customers:
         print("No customers yet. Add one with --add-customer.")
@@ -125,6 +150,37 @@ def do_add_customer(session, args) -> int:
     print(f"Added customer {code} - {args.name}")
     print("Now give somebody a login for it:")
     print(f"  python manage_users.py --add-user EMAIL --customer {code}")
+    return 0
+
+
+def do_add_staff(session, args) -> int:
+    email = args.add_staff.strip().lower()
+    if find_user(session, email):
+        print(f"! {email} can already sign in.")
+        print("  A customer login cannot be turned into a staff one: they see")
+        print("  different things, and mixing them up is how a customer ends")
+        print("  up looking at somebody else's shipments.")
+        return 1
+
+    if args.dry_run:
+        print(f"Would add {email} as Alok Ingots staff,")
+        print("and print a temporary password once.")
+        return 0
+
+    password = security.temporary_password()
+    session.add(User(
+        customer_id=None,
+        email=email,
+        password_hash=security.hash_password(password),
+        full_name=(args.full_name or "").strip() or None,
+        is_active=True,
+        is_staff=True,
+        must_change_password=True,
+    ))
+    session.commit()
+
+    print(f"Added {email} as Alok Ingots staff.")
+    announce(email, password)
     return 0
 
 
@@ -228,6 +284,8 @@ def main() -> int:
     parser.add_argument("--country", help="the customer's country, with --add-customer")
     parser.add_argument("--add-user", metavar="EMAIL",
                         help="give somebody a login (needs --customer)")
+    parser.add_argument("--add-staff", metavar="EMAIL",
+                        help="give an Alok Ingots colleague a staff login")
     parser.add_argument("--customer", metavar="CODE",
                         help="which customer the new login belongs to")
     parser.add_argument("--full-name", help="the person's name, with --add-user")
@@ -242,7 +300,8 @@ def main() -> int:
     args = parser.parse_args()
 
     chosen = [a for a in (args.list, args.add_customer, args.add_user,
-                          args.reset_password, args.deactivate, args.activate) if a]
+                          args.add_staff, args.reset_password, args.deactivate,
+                          args.activate) if a]
     if len(chosen) != 1:
         parser.print_help()
         print("\n! Choose exactly one thing to do.")
@@ -258,6 +317,8 @@ def main() -> int:
             return do_add_customer(session, args)
         if args.add_user:
             return do_add_user(session, args)
+        if args.add_staff:
+            return do_add_staff(session, args)
         if args.reset_password:
             return do_reset_password(session, args)
         if args.deactivate:
