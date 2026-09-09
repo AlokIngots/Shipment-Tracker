@@ -8,9 +8,10 @@ customer.
     python notify.py              # send (subject to the safety switches)
     python notify.py --preview    # print the full text of one email
 
-Run it after every import. Running it twice does nothing the second time:
-each (shipment, status, user) is recorded once, so nobody is told the same
-thing twice.
+Run it after every import. Nobody is ever told the same thing twice: once a
+message has actually been sent for a (shipment, status, user) it is never
+sent again. An attempt that was suppressed or that failed is retried on the
+next run, so nothing is silently lost.
 
 Safety, set in .env:
     SEND_EMAILS=false        default; records and prints, sends nothing
@@ -41,9 +42,16 @@ def pending(session):
         .order_by(Shipment.id, User.id)
     ).all()
 
+    # Only a message that genuinely went out counts as done. An attempt that
+    # was suppressed (SEND_EMAILS off, or not on the pilot list) or that
+    # failed must be tried again on the next run — otherwise switching
+    # SEND_EMAILS on would silently skip every shipment recorded while it
+    # was off, and a bounced email would never be retried.
     already = {
         (n.shipment_id, n.event, n.user_id)
-        for n in session.scalars(select(Notification))
+        for n in session.scalars(
+            select(Notification).where(Notification.outcome == "sent")
+        )
     }
 
     return [
@@ -99,19 +107,33 @@ def main() -> int:
             outcome, detail = notifier.send(message)
             counts[outcome] += 1
 
-            session.add(Notification(
-                shipment_id=shipment.id,
-                user_id=user.id,
-                event=shipment.status,
-                channel="email",
-                outcome=outcome,
-                detail=detail,
-            ))
+            # An earlier attempt may already have left a row here, recorded
+            # as suppressed or failed. Update that row instead of inserting
+            # a second one, so the unique constraint still guarantees one
+            # record per (shipment, status, user) and nobody is told twice.
+            record = session.scalar(
+                select(Notification).where(
+                    Notification.shipment_id == shipment.id,
+                    Notification.event == shipment.status,
+                    Notification.user_id == user.id,
+                )
+            )
+            if record is None:
+                record = Notification(
+                    shipment_id=shipment.id,
+                    user_id=user.id,
+                    event=shipment.status,
+                    channel="email",
+                )
+                session.add(record)
+            record.outcome = outcome
+            record.detail = detail
+
             try:
                 session.commit()
             except IntegrityError:
-                # Another run got there first; that is exactly what the
-                # unique constraint is for.
+                # Another run inserted the same row a moment ago; that is
+                # exactly what the unique constraint is for.
                 session.rollback()
                 continue
 

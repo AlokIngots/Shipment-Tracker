@@ -59,8 +59,9 @@ to the next step. Never run ahead through multiple steps at once.
 
 ## Where we are now
 
-**Last worked on: 8 September 2026.** All seven roadmap steps are built and
-tested. Nothing is deployed anywhere, and no real customer has ever used it or
+**Last worked on: 9 September 2026.** All seven roadmap steps are built, and
+every feature has been tested end to end (70 checks). Two bugs were found and
+fixed. Nothing is deployed anywhere, and no real customer has ever used it or
 been emailed by it.
 
 GitHub: **https://github.com/AlokIngots/Shipment-Tracker** (private). The repo
@@ -78,11 +79,12 @@ Branches, each stacked on the one before, so the last one contains everything:
 | `feature/step4-documents` | 4 — document downloads |
 | `feature/step5-data-import` | 5 — CSV import pipeline |
 | `feature/step6-tracking` | 6 — vessel tracking links |
-| `feature/step7-notifications` | 7 — email notifications (tip) |
+| `feature/step7-notifications` | 7 — email notifications |
+| `feature/step8-notification-fix` | 8 — full test pass; two bug fixes (tip) |
 
 **No Pull Request has been merged.** `dev` and `main` are still empty. The
 single PR that would bring everything in:
-https://github.com/AlokIngots/Shipment-Tracker/compare/dev...feature/step7-notifications
+https://github.com/AlokIngots/Shipment-Tracker/compare/dev...feature/step8-notification-fix
 
 ### How to run it locally
 
@@ -170,7 +172,10 @@ Update after every step: what was done, and the commit.
 | 2026-09-08 | **Step 5 (part 1) — Import pipeline.** `import_data.py` loads orders and shipments from CSV with validation (including IMO checksum), `--dry-run`, and repeat-safe upserts. Waiting on the SAP/PMS export question | `a51998f` |
 | 2026-09-08 | **Step 6 — Shipment tracking.** Server-built `tracking_url` per shipment from a `.env` template (MarineTraffic by IMO); "View live on…" link in the UI, hidden when the IMO is missing or fails its checksum | `9c7ec09` |
 | 2026-09-08 | **Step 7 (email) — Notifications.** `notifications` table, `notifier.py` and `notify.py`; sends once per shipment status per user, with `SEND_EMAILS` and `NOTIFY_ONLY_EMAILS` safety switches. WhatsApp and the pilot still outstanding | `aa7c5ac` |
-| 2026-09-08 | **Session paused here.** Briefing brought up to date; all branches pushed to GitHub | _this commit_ |
+| 2026-09-08 | **Session paused here.** Briefing brought up to date; all branches pushed to GitHub | `33af51c` |
+| 2026-09-09 | **Full test pass — every feature.** 70 checks across login, tokens, customer isolation, order detail, balances, documents, IMO/tracking, CSV import, notifications, frontend build and secret hygiene. 68 passed; 2 bugs found and fixed (below) | _this commit_ |
+| 2026-09-09 | **Bug fix — notifications could be silently lost.** `notify.py` treated a suppressed or failed attempt as "done", so turning `SEND_EMAILS` on would skip every shipment recorded while it was off, and a bounced email was never retried. Only an actual `sent` now counts; earlier attempts are updated in place, so the one-message-per-(shipment, status, user) guarantee is unchanged | _this commit_ |
+| 2026-09-09 | **Bug fix — UI text.** The order detail page showed the literal text `Loading order…` while loading, because a JSX text node is not a JavaScript string. Now renders `Loading order…` | _this commit_ |
 
 ### Design decisions worth remembering
 
@@ -190,6 +195,10 @@ Update after every step: what was done, and the commit.
   changed deliberately before any customer is emailed.
 - **Each (shipment, status, user) is notified once**, enforced by a unique
   constraint in the database, so re-running `notify.py` cannot spam anyone.
+- **Only a message that actually went out counts as done.** A suppressed or
+  failed attempt is recorded, but is retried on the next run and its row is
+  updated in place. This is what makes it safe to run `notify.py` from day one
+  with `SEND_EMAILS=false` and switch sending on later without losing anyone.
 
 ### Known issues / risks
 
@@ -213,6 +222,9 @@ Update after every step: what was done, and the commit.
   later job.
 - **Document files live in `storage/`**, which is git-ignored and must be
   included in server backups — `safe-deploy.sh` will need to cover it.
+- **`seed.py --reset` clears the database but leaves document files behind**
+  in `storage/documents/`, so old files accumulate as orphans. Harmless today;
+  worth a tidy-up when the deploy script is written.
 - `safe-deploy.sh` **does not exist yet** — it must be written before the first
   deployment.
 - **Nobody has received a real email yet.** Sending was proved against a
