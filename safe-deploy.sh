@@ -181,11 +181,19 @@ if ! "${COMPOSE[@]}" up -d; then
 fi
 ok "Containers started"
 
-step "Making sure the database has the tables it needs"
+step "Preparing the database and checking the new code loaded"
+# A container that crashes on start-up is restarted by Docker, so it can
+# still report itself as "running". The honest test is whether we can
+# actually execute something inside it.
 if ! "${COMPOSE[@]}" exec -T api python seed.py --schema-only; then
+  printf '
+%s--- last lines from the API, this is why ---%s
+' "$YELLOW" "$OFF"
+  "${COMPOSE[@]}" logs --tail 25 api 2>&1 | sed 's/^/    /' || true
   rollback
-  die "Could not prepare the database."
+  die "The new version did not start. The error above is why."
 fi
+ok "Database tables are ready and the new code loads"
 
 # --------------------------------------------------------------- verify
 
