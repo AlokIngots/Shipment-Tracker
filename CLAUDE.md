@@ -66,8 +66,8 @@ to the next step. Never run ahead through multiple steps at once.
 ## Where we are now
 
 **Last worked on: 9 September 2026.** All seven roadmap steps are built, plus
-deployment, database migrations and customer accounts. Every feature has been
-tested end to end, and
+deployment, database migrations, customer accounts and sessions that survive
+a refresh. Every feature has been tested end to end, and
 the earlier full pass of 70 checks found and fixed two bugs. Nothing is
 deployed on a real server, and no real customer has ever used it or been
 emailed by it.
@@ -91,7 +91,8 @@ Branches, each stacked on the one before, so the last one contains everything:
 | `feature/step8-notification-fix` | 8 — full test pass; two bug fixes |
 | `feature/step9-deployment` | 9 — containers, Caddy, `safe-deploy.sh` |
 | `feature/step10-migrations` | 10 — Alembic migrations |
-| `feature/step11-accounts` | 11 — real customer accounts (tip) |
+| `feature/step11-accounts` | 11 — real customer accounts |
+| `feature/step12-sessions` | 12 — sessions survive a refresh (tip) |
 
 Every step is merged into `dev`, so the per-step branches above are history
 now. Start the next step with a fresh branch off `dev`.
@@ -235,6 +236,7 @@ Update after every step: what was done, and the commit.
 | 2026-09-09 | **Step 9 — Deployment.** API containerised; React app built and served by Caddy, which obtains and renews HTTPS itself; production stack with the database on no published port. `safe-deploy.sh` backs up the database and `storage/`, tags the running images `:rollback`, and restores them automatically if the new version does not answer. Proved by a real deploy plus three rollback drills | _this commit_ |
 | 2026-09-09 | **Security fix found by that first deploy.** `frontend/.env` was reaching the web image, so Vite baked the demo email and password into the JavaScript served to browsers. A bare `.env` in the root `.dockerignore` only matches the root file; patterns are now `**/.env`. Re-verified: no credential appears in the shipped bundle | _this commit_ |
 | 2026-09-09 | **Step 10 — Database migrations.** Alembic added; migration 0001 is the existing six tables, generated against an empty database and checked back against the models. `migrate.py` wraps it (`--status`, `--sql`, `--revision`), adopts a database that predates migrations rather than rebuilding it, and reports models that have drifted from the schema. `seed.py` no longer builds tables — it calls `migrate.py`. `safe-deploy.sh` migrates instead of `create_all`, and undoes the migration if the deploy then fails | `50ad5f2` |
+| 2026-09-09 | **Step 12 — Sessions.** The sign-in token is kept in `sessionStorage`, so a refresh no longer throws the customer back to the login screen; on load the portal checks the remembered token against `/api/me` before deciding what to show. Tokens now carry the time they were issued, and one older than the account's last password change is refused — so changing a password, or a staff `--reset-password`, signs out every other session. The person changing it gets a replacement token so they stay signed in | `06204ed` |
 | 2026-09-09 | **Step 11 — Real customer accounts.** `manage_users.py` for staff: add a customer, give somebody a login with a one-time temporary password, reset it, deactivate or reactivate, all with `--dry-run`. Migration 0002 adds `must_change_password`; every customer-facing endpoint now refuses anybody still holding a temporary password, while `/api/me` and the new `POST /api/change-password` stay reachable so the portal can explain why. A password screen in the portal, forced on first sign-in and available by choice afterwards. Proved end to end on the deployed stack, including that migration 0002 reached a database with rows in it and kept them | `6c82e65` |
 | 2026-09-09 | **Step 10 proved by deployment.** Real deploy of the migration code: the production database, whose tables predated migrations, was adopted at 0001 with nothing created or dropped. Two failure drills — a migration followed by a failing health check, and a migration that applied then reported drifted models — both put the schema back to 0001 and restored the previous image, with all rows untouched. The second drill found a real bug in the new deploy code, now fixed | `ef76e52` |
 | 2026-09-09 | **Bug fix — UI text.** The order detail page showed the literal text `Loading order…` while loading, because a JSX text node is not a JavaScript string. Now renders `Loading order…` | _this commit_ |
@@ -264,6 +266,19 @@ Update after every step: what was done, and the commit.
 
 ### Design decisions worth remembering
 
+- **`sessionStorage`, not `localStorage`, for the sign-in token.** It
+  survives a refresh, which is the whole point, and is thrown away when the
+  tab closes. `localStorage` would survive the browser closing and reopening:
+  convenient on your own laptop, wrong on the shared machine in a shipping
+  office. Every read and write is wrapped, because a browser set to block
+  site data throws rather than returning nothing, and not being able to
+  remember a token must never stop the portal loading.
+- **A password change signs out everywhere else.** Tokens carry when they
+  were issued, and anything older than the account's last password change is
+  refused. This is what makes changing a password after a scare mean
+  something. The person doing it gets a replacement token, or they would be
+  signed out by their own change.
+
 - **A temporary password is treated as already compromised.** Staff have seen
   it and it travelled by email or phone, so it buys nothing except the right
   to set a real one. The API refuses to return any order while it is in use,
@@ -287,10 +302,17 @@ Update after every step: what was done, and the commit.
 
 ### Known issues / risks
 
-- **Tokens cannot be revoked.** They are signed and stateless, valid until
-  they expire (12 hours). Changing `SECRET_KEY` signs everyone out.
-- **The token is held in browser memory only**, so a page refresh signs the
-  user out. Fine for now; revisit when the portal goes to real customers.
+- **A token cannot be cancelled one at a time.** Tokens are signed and
+  stateless, valid for 12 hours. What *can* be done: changing a password (or
+  `--reset-password`) retires every token issued before it, and deactivating
+  an account refuses them all at once. Changing `SECRET_KEY` signs everybody
+  out. There is no way to end one particular session and leave the others.
+- **The token is kept in `sessionStorage`**, so it survives a refresh and is
+  thrown away when the tab closes. Not `localStorage`, which would survive
+  the browser being closed and reopened — wrong on a shared office machine.
+  It is readable by JavaScript running on the page, which is the accepted
+  cost of not using cookies; an httpOnly cookie plus CSRF protection is the
+  stronger answer if the portal ever handles more than read-only order data.
 - **A customer who forgets their password must ask staff.** There is no
   "forgot password" email, because there is no working SMTP yet.
   `manage_users.py --reset-password` is the answer today, and it puts the
