@@ -40,9 +40,10 @@ services:
     # to prevent. Verified: with a plain list, `compose config` still shows
     # 80 and 443.
     ports: !override
-      # Loopback only. Nothing here is reachable from the internet except
+      # Loopback only. 8090 and not 8080: on srv1427359, 8080 is
+      # alok-crm-frontend. Confirmed free on the box before choosing it. Nothing here is reachable from the internet except
       # through nginx, and the host firewall does not need a rule.
-      - "127.0.0.1:8080:80"
+      - "127.0.0.1:8090:80"
 
   api:
     environment:

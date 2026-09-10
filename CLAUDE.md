@@ -388,6 +388,7 @@ the customer side needs, and a step is done when both work.
 | 20 | Sign-in rate limiting | — | bulk password guessing is slowed to a stop | **Done** |
 | 21 | A test suite that exists | 123 tests committed, run on every push | — | **Done** |
 | 22 | Ready to share a server | deploy on a host that already runs nginx, without touching it | — | **Done, not yet deployed** |
+| 23 | Port 8090, and the nginx site in the repo | 8080 was taken by alok-crm-frontend | — | **Done, not yet deployed** |
 
 ### Still to build, both sides
 
@@ -473,7 +474,9 @@ Update after every step: what was done, and the commit.
 
 | 2026-09-10 | **Step 21 — A test suite that exists.** Every check reported in steps 14 to 20 had been run and then thrown away: two files in a temp directory, the rest typed inline into shell commands. Nothing was committed, there was no pytest, and nobody could re-run any of it. There are now **123 tests** in `backend/tests/`, run on every push by GitHub Actions. They build their own PostgreSQL database — never SQLite, which disagrees with production about `Numeric`, cascades and unique constraints — using the real migrations, so a migration that will not apply fails the suite. Writing them found two bugs: `migrations/env.py` overwrote the database URL unconditionally, so Alembic could never be pointed anywhere else; and **a token issued in the same second as a password change survived it**, because both timestamps are whole seconds and the check was `<`. Both fixed | _this commit_ |
 
-| 2026-09-10 | **Step 22 — Prepared to share srv1427359 with AlokCRM.** Three approved changes, and three more the work uncovered. `docker-compose.server.yml` moves the portal to `127.0.0.1:8080` so nginx keeps 80 and 443 — with `!override`, because Compose **merges** sequences and a plain list left 80 and 443 published anyway. `COMPOSE_FILES` is overridable in `safe-deploy.sh`. Caddy's `trusted_proxies` fixes a **live bug**: Caddy replaces `X-Forwarded-For` with the peer address, so behind it every visitor looked like Docker's gateway and the whole rate limiter was one shared budget. Also found: the website health check was hardcoded to port 80 and would have rolled back a working server deploy, and `docker compose port` can answer `0` mid-start. New staff-only `GET /api/staff/whoami` reports what the server thinks your address is, because the hop count cannot be guessed. Nothing was done on the server | _this commit_ |
+| 2026-09-10 | **Step 22 — Prepared to share srv1427359 with AlokCRM.** Three approved changes, and three more the work uncovered. `docker-compose.server.yml` moves the portal to `127.0.0.1:8090` (8080 turned out to be alok-crm-frontend) so nginx keeps 80 and 443 — with `!override`, because Compose **merges** sequences and a plain list left 80 and 443 published anyway. `COMPOSE_FILES` is overridable in `safe-deploy.sh`. Caddy's `trusted_proxies` fixes a **live bug**: Caddy replaces `X-Forwarded-For` with the peer address, so behind it every visitor looked like Docker's gateway and the whole rate limiter was one shared budget. Also found: the website health check was hardcoded to port 80 and would have rolled back a working server deploy, and `docker compose port` can answer `0` mid-start. New staff-only `GET /api/staff/whoami` reports what the server thinks your address is, because the hop count cannot be guessed. Nothing was done on the server | _this commit_ |
+
+| 2026-09-10 | **Step 23 — Port 8090, and the nginx site committed.** srv1427359 reported 8080 already taken by `alok-crm-frontend`, so the override moves to `127.0.0.1:8090`. The nginx site had only ever existed as text in a chat message; it is now `deploy/nginx/portal.alokindia.co.in.conf`, version-controlled, with the reasoning for `client_max_body_size 25m` and for `X-Forwarded-For $remote_addr` rather than `$proxy_add_x_forwarded_for` in it. Proved by running real nginx in front of the deployed stack: the whole chain answers, the address nginx writes is the one the API uses (`hops_seen` 2), a forged `X-Forwarded-For` is overwritten at the door, and a 5 MB upload passes where nginx's 1 MB default would have refused it | _this commit_ |
 
 ### Design decisions worth remembering
 
@@ -683,6 +686,20 @@ Update after every step: what was done, and the commit.
   getting it wrong is invisible until one attacker locks out every customer.
   Open it as staff from outside and check it reports your own public
   address.
+
+### Design decisions worth remembering
+
+- **The nginx site lives in the repo, not in a message.** A config that
+  exists only in something somebody was told is a config nobody can review,
+  diff, or find again. `deploy/nginx/portal.alokindia.co.in.conf` carries
+  the install commands and the reasoning in comments, and it is the file
+  that was actually tested.
+- **nginx must write `X-Forwarded-For $remote_addr`, not
+  `$proxy_add_x_forwarded_for`.** The second appends to whatever the caller
+  sent, so a visitor could put any address at the front of the list and
+  spend somebody else's rate-limit budget. nginx is the first hop, so it
+  states what it sees and discards the rest. Verified: a forged header sent
+  from outside does not survive the door.
 
 ### Known issues / risks
 

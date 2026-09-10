@@ -20,7 +20,7 @@ cd "$(dirname "$0")"
 #
 # A server that already has something on 80 and 443 -- srv1427359 runs
 # AlokCRM behind nginx -- adds the server override, which moves the portal
-# to 127.0.0.1:8080 and leaves the front door alone:
+# to 127.0.0.1:8090 and leaves the front door alone:
 #
 #   COMPOSE_FILES="docker-compose.prod.yml docker-compose.server.yml" ./safe-deploy.sh
 COMPOSE_FILES="${COMPOSE_FILES:-docker-compose.prod.yml}"
@@ -313,7 +313,7 @@ ok "API is answering"
 
 # Ask Docker where the website actually ended up rather than assuming 80.
 # On a server that already has nginx the override moves it to
-# 127.0.0.1:8080, and a health check hardcoded to 80 would fail and roll
+# 127.0.0.1:8090, and a health check hardcoded to 80 would fail and roll
 # back a deploy that had in fact worked perfectly.
 # Asked with a retry, because a container that has only just started can
 # answer "0.0.0.0:0" for a moment before the mapping settles -- and a URL
