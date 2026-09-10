@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import axios from 'axios'
+import PhotoGallery from '../components/PhotoGallery'
 import StatusPill from '../components/StatusPill'
 import Toolbar from '../components/Toolbar'
 import { DASH, fmtDate } from '../lib/format'
@@ -203,6 +204,8 @@ export default function OrderDetailScreen({ orderId, onBack, onSignOut, session 
                   <dd>{fmtDate(shipment.eta)}</dd>
                 </div>
               </dl>
+
+              <PhotoGallery photos={shipment.photos} />
 
               <div className="docs">
                 <span className="docs-label">Documents</span>

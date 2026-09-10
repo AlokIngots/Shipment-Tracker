@@ -60,6 +60,33 @@ def check_upload(file_name: str, content_type: str | None) -> str:
     return suffix
 
 
+# A material photo is a photograph, not a document. Allowing a PDF here
+# would let one arrive in the customer's photo gallery, where the browser
+# would try to render it as an image and show a broken picture instead.
+IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png"}
+IMAGE_TYPES = {"image/jpeg", "image/png"}
+
+# The media type to serve a stored image back as, worked out from the
+# suffix rather than trusted from the browser that uploaded it.
+_TYPE_BY_SUFFIX = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png"}
+
+
+def check_image_upload(file_name: str, content_type: str | None) -> tuple[str, str]:
+    """Check a file may be uploaded as a photo. Returns (suffix, media type).
+
+    The media type comes back from the suffix, not from what the browser
+    claimed, because it is stored and later used to serve the file. A
+    browser's word is good enough to refuse an upload on and not good enough
+    to repeat back to somebody else's browser.
+    """
+    suffix = Path(file_name or "").suffix.lower()
+    if suffix not in IMAGE_SUFFIXES:
+        raise UploadRejected("A photo must be a JPG or a PNG file.")
+    if content_type and content_type.split(";")[0].strip() not in IMAGE_TYPES:
+        raise UploadRejected("That file does not look like a photograph.")
+    return suffix, _TYPE_BY_SUFFIX[suffix]
+
+
 def store_upload(stream, suffix: str) -> str:
     """Write an uploaded file into storage under a random name.
 

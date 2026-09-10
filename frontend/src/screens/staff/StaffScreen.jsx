@@ -5,7 +5,7 @@ import StaffOrdersScreen from './StaffOrdersScreen'
 
 const TABS = [
   { key: 'orders', label: 'Orders & shipments' },
-  { key: 'documents', label: 'Documents' },
+  { key: 'documents', label: 'Documents & photos' },
 ]
 
 // The Alok Ingots side. A staff account has no orders of its own, so this is

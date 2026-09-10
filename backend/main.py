@@ -14,9 +14,10 @@ only in the screens:
 
 from fastapi import FastAPI
 
-from app.routers import auth, documents, orders
+from app.routers import auth, documents, orders, photos
 from app.routers.admin import documents as admin_documents
 from app.routers.admin import orders as admin_orders
+from app.routers.admin import photos as admin_photos
 from app.routers.admin import shipments as admin_shipments
 
 app = FastAPI(
@@ -29,8 +30,10 @@ app = FastAPI(
 app.include_router(auth.router, tags=["auth"])
 app.include_router(orders.router, tags=["customer"])
 app.include_router(documents.router, tags=["customer"])
+app.include_router(photos.router, tags=["customer"])
 
 # The admin console: the only place anything is written.
 app.include_router(admin_orders.router, tags=["admin"])
 app.include_router(admin_shipments.router, tags=["admin"])
 app.include_router(admin_documents.router, tags=["admin"])
+app.include_router(admin_photos.router, tags=["admin"])

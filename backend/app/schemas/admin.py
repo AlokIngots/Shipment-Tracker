@@ -99,3 +99,21 @@ class ShipmentIn(BaseModel):
     imo_number: str | None = None
     etd: date | None = None
     eta: date | None = None
+
+
+class StaffPhotoOut(BaseModel):
+    """One material photo, as staff see it."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    caption: str | None
+    file_name: str
+
+
+class StaffShipmentPhotosOut(BaseModel):
+    """Every photo on one shipment, newest last."""
+
+    shipment_id: int
+    shipment_no: str
+    photos: list[StaffPhotoOut]

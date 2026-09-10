@@ -17,7 +17,13 @@ from sqlalchemy.orm import selectinload
 
 from app.core.deps import DbSession, SettledUser, not_found
 from app.models import Order, Shipment
-from app.schemas import DocumentOut, OrderDetailOut, OrderOut, ShipmentOut
+from app.schemas import (
+    DocumentOut,
+    OrderDetailOut,
+    OrderOut,
+    PhotoOut,
+    ShipmentOut,
+)
 from app.services import tracking
 
 router = APIRouter()
@@ -42,7 +48,10 @@ def get_order(
     order = db.scalar(
         select(Order)
         .where(Order.id == order_id, Order.customer_id == current_user.customer_id)
-        .options(selectinload(Order.shipments).selectinload(Shipment.documents))
+        .options(
+            selectinload(Order.shipments).selectinload(Shipment.documents),
+            selectinload(Order.shipments).selectinload(Shipment.photos),
+        )
     )
     if order is None:
         raise not_found("Order not found.")
@@ -67,6 +76,9 @@ def get_order(
                 available=bool(d.stored_path),
             )
             for d in sorted(s.documents, key=lambda d: d.id)
+        ]
+        ship.photos = [
+            PhotoOut.model_validate(p) for p in sorted(s.photos, key=lambda p: p.id)
         ]
         shipments.append(ship)
 

@@ -33,6 +33,20 @@ class DocumentOut(BaseModel):
     available: bool = False
 
 
+class PhotoOut(BaseModel):
+    """One material photo, as a customer sees it listed.
+
+    Only what is needed to draw the gallery. The image itself comes from
+    /api/photos/{id}, which checks ownership the same way a document does.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    caption: str | None
+    file_name: str
+
+
 class ShipmentOut(BaseModel):
     """One part-shipment against an order."""
 
@@ -52,6 +66,7 @@ class ShipmentOut(BaseModel):
     tracking_url: str | None = None
     tracking_provider: str | None = None
     documents: list[DocumentOut] = []
+    photos: list[PhotoOut] = []
 
 
 class OrderDetailOut(OrderOut):

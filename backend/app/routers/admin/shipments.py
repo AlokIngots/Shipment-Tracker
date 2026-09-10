@@ -9,6 +9,7 @@ from fastapi import APIRouter
 
 from app.core.deps import DbSession, StaffUser, bad_request, not_found
 from app.models import Order, Shipment
+from app.services import storage
 from app.routers.admin.orders import apply_shipment, load_order, order_response
 from app.schemas import ShipmentIn, StaffOrderOut
 
@@ -61,7 +62,17 @@ def staff_delete_shipment(
             "document(s) attached. Remove those first."
         )
 
+    # Photos do not block the delete the way documents do -- a snapshot of
+    # a bundle is not filed paperwork -- but their files have to go with
+    # them by hand. The database cascade removes the rows; nothing on disk
+    # knows about it, and orphaned images would pile up silently.
+    for photo in shipment.photos:
+        storage.delete(photo.stored_path or "")
+
     shipment_no = shipment.shipment_no
+    photo_count = len(shipment.photos)
     db.delete(shipment)
     db.commit()
-    return {"detail": f"{shipment_no} removed."}
+
+    note = f" and {photo_count} photo(s)" if photo_count else ""
+    return {"detail": f"{shipment_no}{note} removed."}

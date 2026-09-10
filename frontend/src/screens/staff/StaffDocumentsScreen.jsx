@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import axios from 'axios'
 import StatusPill from '../../components/StatusPill'
+import StaffPhotoStrip from './StaffPhotoStrip'
 import { describeError } from '../../lib/format'
 
 function StaffDocumentRow({ shipment, doc, onChanged }) {
@@ -181,6 +182,8 @@ export default function StaffDocumentsScreen() {
                   onChanged={load}
                 />
               ))}
+
+              <StaffPhotoStrip shipment={shipment} />
             </div>
           ))}
 

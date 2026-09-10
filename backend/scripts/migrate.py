@@ -187,7 +187,28 @@ def show_status(cfg: Config) -> int:
     return 0
 
 
+USAGE = """Bring the database schema up to date, losing nothing.
+
+  python -m scripts.migrate              apply every migration not yet applied
+  python -m scripts.migrate --status     where the schema is, and whether the
+                                         code agrees with it
+  python -m scripts.migrate --check      the same, but exits non-zero on drift
+                                         (for a deploy script to test)
+  python -m scripts.migrate --sql        print the SQL, execute nothing
+  python -m scripts.migrate --revision   print the current revision and stop
+
+Write a new migration with:
+  python -m alembic revision --autogenerate -m "what changed"
+"""
+
+
 def main() -> int:
+    # Checked before anything else: asking for help must never be the thing
+    # that migrates the database.
+    if {"--help", "-h"} & set(sys.argv[1:]):
+        print(USAGE)
+        return 0
+
     cfg = config()
 
     if "--revision" in sys.argv:
@@ -227,7 +248,7 @@ def main() -> int:
     if drift:
         print()
         print("WARNING: the code and the database do not match.")
-        print("Run 'python migrate.py --status' for the details.")
+        print("Run 'python -m scripts.migrate --status' for the details.")
         return 1
 
     return 0

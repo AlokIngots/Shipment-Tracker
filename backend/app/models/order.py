@@ -69,6 +69,9 @@ class Shipment(Base):
     documents: Mapped[list["Document"]] = relationship(
         back_populates="shipment", cascade="all, delete-orphan"
     )
+    photos: Mapped[list["Photo"]] = relationship(
+        back_populates="shipment", cascade="all, delete-orphan"
+    )
 
     def __repr__(self) -> str:
         return f"<Shipment {self.shipment_no}>"

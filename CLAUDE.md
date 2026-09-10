@@ -61,6 +61,11 @@ up later).
 10. **Every step covers both halves.** A customer feature needs the admin
     screen that feeds it. "Documents" means the upload page *and* the
     download page, in the same step.
+11. **Commit messages are plain. No attribution lines.** Never add
+    `Co-Authored-By: Claude`, `Claude-Session:`, or "Generated with Claude
+    Code" to a commit message or a pull request description. (Said again on
+    10 Sep 2026; the same lines were stripped from the whole history once
+    already, on 8 Sep — see the progress log.)
 
 ## How to work
 
@@ -362,12 +367,13 @@ the customer side needs, and a step is done when both work.
 | 12 | Sessions | — | survives a refresh | **Done** |
 | 13 | Documents, on a screen | staff upload / replace / remove page | (already had download) | **Done** |
 | 14 | Orders & shipments, on a screen | create and edit orders and part-shipments | (already had the read side) | **Done** |
+| 15 | Material photos | upload several at once against a shipment, with a caption; remove one | a thumbnail gallery on the order detail page, click for full size | **Done** |
 
 ### Still to build, both sides
 
 | Step | Admin Console side | Customer Portal side |
 | ---- | ------------------ | -------------------- |
-| **Material photos** | upload photos of bars and bundles against a shipment; possibly pull from the Bundle Inspection app instead of uploading by hand | a photo gallery on the order detail page |
+| **Photos from the Bundle app** | pull photos from the existing Bundle Inspection app instead of uploading them by hand | (gallery already built in step 15) |
 | **Container and BL numbers** | two more fields on the shipment form, and in the CSV importer | shown on the order detail page beside the vessel |
 | **The four-step status** | In Production → Packed → Shipped → Delivered as a real sequence rather than free text | the status pill follows it |
 | **Customers & logins on a screen** | add a customer company and create their login from the admin console, instead of `scripts/manage_users.py` on the server | — |
@@ -436,6 +442,8 @@ Update after every step: what was done, and the commit.
 | 2026-09-10 | **Frontend split into files.** `App.jsx` was 966 lines holding nine components; it is now 142 that decide which screen is showing, with `lib/`, `components/`, `screens/` and `screens/staff/`. The toolbar, the status-to-colour map and the reading of an error out of a response stopped being written three times each. `App.css` cut into three contiguous slices imported in the order they were cut — all 109 rules keep their selectors and their cascade position, checked rather than assumed | `979fd44` |
 | 2026-09-10 | **Backend reorganised.** The flat `backend/` became `app/core`, `app/models`, `app/schemas`, `app/routers` (+ `admin/`), `app/services` and `scripts/`, moved with `git mv` so the history follows. New `app/core/config.py`: four modules each worked out the project root with `Path(__file__).parent.parent` and each loaded `.env` again, so moving any of them one folder deeper silently changed where it looked. `notifier.py`/`notify.py` were **not** duplicates — library and command — so nothing was deleted; the two pieces of logic stranded in the script moved into the service. Proved: the same 18 endpoints path by path, all six scripts run, 43 checks pass unchanged | `c7d06da` |
 
+| 2026-09-10 | **Step 15 — Material photos, both halves.** New `photos` table (migration 0004) rather than a new document type: a document is one file per kind per shipment and uploading another replaces it, so photos in `documents` would have been quietly destroyed by the replace rule. Admin: several photos in one upload with a shared caption, all-or-nothing so a bad file in a batch keeps none of it, and Remove on each. Customer: a thumbnail strip per shipment on the order detail page, click for full size, Escape to close. Staff need their own image route because `/api/photos/{id}` depends on `SettledUser`, which refuses a staff account by design. Deleting a shipment now removes its photo files from disk, not just their rows. Proved by 33 new end-to-end checks, plus the 43 from step 14 re-run | _this commit_ |
+
 ### Design decisions worth remembering
 
 - **The tracking link is built by the server, not the browser.** The API
@@ -494,6 +502,27 @@ Update after every step: what was done, and the commit.
   names, in plain words, anything a model has that the database does not.
   Forgetting to write a migration is the mistake this will meet most often,
   and it otherwise stays silent until something breaks.
+
+### Design decisions worth remembering
+
+- **Photos are their own table, not a kind of document.** A document is one
+  file per type per shipment and uploading another replaces it. Photos are
+  many per shipment and none replaces another. Sharing the table would have
+  meant inventing `doc_type` values like "Photo 3", and the
+  replace-on-same-type rule would then have silently destroyed photos.
+- **A photo's media type is worked out from its suffix, never from the
+  browser.** The uploading browser's claim is good enough to refuse an
+  upload on, and not good enough to repeat back to somebody else's browser.
+  Documents were always served as `application/pdf` regardless; a gallery
+  cannot get away with that.
+- **The picture is fetched, not linked.** `<img src="/api/photos/3">` would
+  be sent without the Authorization header and answered 401, so `AuthImage`
+  fetches the image like any other request and points the `<img>` at a blob
+  URL, revoking it on unmount. The same reason document downloads are not
+  plain links.
+- **An upload of several photos is all or nothing.** If the fourth of five
+  files is a PDF, none of the five is kept and the message names the file
+  that was wrong. Keeping three of five leaves somebody working out which.
 
 ### Known issues / risks
 
@@ -572,10 +601,17 @@ Update after every step: what was done, and the commit.
   channel would slot into `app/services/notifications.py` alongside email.
 - **Nothing triggers notifications automatically.** `python -m scripts.notify` must be run
   after each import, by hand or on a schedule.
-- **Material photos do not exist at all.** Neither half has them: no upload
-  on the admin side, no gallery on the customer side, and the `documents`
-  table stores one file per type per shipment, which is the wrong shape for
-  a set of photos. This needs a new table, not a new document type.
+- **Photos are served at full size, every time.** There are no thumbnails:
+  the gallery downloads each photo in full to draw a 116-pixel tile. A
+  shipment with twenty 4 MB photos from a phone will be slow on a bad
+  connection, and an export customer is usually on one. Generating
+  thumbnails needs an image library (Pillow), which is not installed.
+- **Nothing stops the same photo being uploaded twice.** Documents are
+  deduplicated by type; photos have no equivalent, so a double click on
+  Add photos leaves two identical tiles that must be removed one at a time.
+- **A photo's caption cannot be changed after upload.** It is set once for
+  the whole batch. Fixing a typo means removing the photo and adding it
+  again.
 - **Status is free text, not a sequence.** In Production → Packed → Shipped
   → Delivered is a convention the forms suggest and nothing enforces, so a
   shipment can go from Delivered back to Packed, and "Packed" has never

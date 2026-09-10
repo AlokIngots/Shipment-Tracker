@@ -25,6 +25,7 @@ backend/
       customer.py    Customer, User
       order.py       Order, Shipment
       document.py    Document
+      photo.py       Photo
       notification.py  Notification
 
     schemas/         the shapes that cross the wire
@@ -36,10 +37,12 @@ backend/
       auth.py        sign in, /api/me, change your own password
       orders.py      a customer reading their own orders      (read-only)
       documents.py   a customer downloading their documents   (read-only)
+      photos.py      a customer viewing their material photos (read-only)
       admin/         everything that writes. Staff only.
         orders.py    create and edit orders; the checking rules
         shipments.py create and edit part-shipments
         documents.py attach and remove shipping documents
+        photos.py    add and remove material photos
 
     services/        the working logic, with no HTTP in it
       storage.py     where document files live on disk
@@ -60,8 +63,8 @@ backend/
 The portal is an **admin console** and a **customer portal**, and the split
 is in the routing, not only in the screens:
 
-- `app/routers/orders.py` and `app/routers/documents.py` are the customer
-  half. Between them they have **no POST, PUT or DELETE**. A customer can
+- `app/routers/orders.py`, `app/routers/documents.py` and
+  `app/routers/photos.py` are the customer half. Between them they have **no POST, PUT or DELETE**. A customer can
   read their own orders and download their own documents, and that is all.
 - Everything under `app/routers/admin/` writes, and every route in it
   depends on `StaffUser`. That dependency is the enforcement — not the UI.

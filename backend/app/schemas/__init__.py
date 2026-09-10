@@ -16,7 +16,9 @@ from app.schemas.admin import (
     StaffDocumentOut,
     StaffOrderOut,
     StaffOrderShipmentOut,
+    StaffPhotoOut,
     StaffShipmentOut,
+    StaffShipmentPhotosOut,
 )
 from app.schemas.auth import (
     ChangePasswordRequest,
@@ -24,7 +26,13 @@ from app.schemas.auth import (
     LoginRequest,
     LoginResponse,
 )
-from app.schemas.orders import DocumentOut, OrderDetailOut, OrderOut, ShipmentOut
+from app.schemas.orders import (
+    DocumentOut,
+    OrderDetailOut,
+    OrderOut,
+    PhotoOut,
+    ShipmentOut,
+)
 
 __all__ = [
     "ChangePasswordRequest",
@@ -35,11 +43,14 @@ __all__ = [
     "OrderDetailOut",
     "OrderIn",
     "OrderOut",
+    "PhotoOut",
     "ShipmentIn",
     "ShipmentOut",
     "StaffCustomerOut",
     "StaffDocumentOut",
     "StaffOrderOut",
     "StaffOrderShipmentOut",
+    "StaffPhotoOut",
     "StaffShipmentOut",
+    "StaffShipmentPhotosOut",
 ]
