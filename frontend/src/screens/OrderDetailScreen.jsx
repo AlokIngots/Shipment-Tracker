@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import axios from 'axios'
 import PhotoGallery from '../components/PhotoGallery'
 import StatusPill from '../components/StatusPill'
+import StatusTrack from '../components/StatusTrack'
 import Toolbar from '../components/Toolbar'
 import { DASH, fmtDate } from '../lib/format'
 
@@ -173,6 +174,8 @@ export default function OrderDetailScreen({ orderId, onBack, onSignOut, session 
                 </div>
                 <StatusPill status={shipment.status} />
               </div>
+
+              <StatusTrack status={shipment.status} />
 
               <dl className="facts">
                 <div>

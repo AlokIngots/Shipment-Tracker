@@ -370,13 +370,13 @@ the customer side needs, and a step is done when both work.
 | 15 | Material photos | upload several at once against a shipment, with a caption; remove one | a thumbnail gallery on the order detail page, click for full size | **Done** |
 | 16 | Container & B/L number | two fields on the shipment form and in the CSV importer; container check-digit validated | both shown on the order detail beside the vessel, and in the notification email | **Done** |
 | 17 | Customers & logins, on a screen | add a customer, create a login, reset a password, deactivate / reactivate | (nothing — this is an admin-only step) | **Done** |
+| 18 | The status sequence | a dropdown of exactly the valid statuses; a move backwards must be confirmed as a correction | a progress track on each shipment, not just a word | **Done** |
 
 ### Still to build, both sides
 
 | Step | Admin Console side | Customer Portal side |
 | ---- | ------------------ | -------------------- |
 | **Photos from the Bundle app** | pull photos from the existing Bundle Inspection app instead of uploading them by hand | (gallery already built in step 15) |
-| **The four-step status** | In Production → Packed → Shipped → Delivered as a real sequence rather than free text | the status pill follows it |
 | **Notifications — WhatsApp** | choose which statuses message which channel | receives the WhatsApp message |
 | **Self-service password reset** | — | "forgot password" email; blocked on real SMTP |
 | **SAP/PMS auto-pull** | replace the hand-run CSV import with a scheduled pull | — |
@@ -447,6 +447,8 @@ Update after every step: what was done, and the commit.
 | 2026-09-10 | **Step 16 — Container number and B/L number, both halves.** Migration 0005 adds both to `shipments`, nullable because an LCL consignment may have no container and a B/L number does not exist until the carrier issues it. A container number is validated against its ISO 6346 check digit — `valid_container_no` sits in `app/services/tracking.py` beside `valid_imo` and is shared with the CSV importer, so the screen and the importer cannot disagree. Stored upper case with spaces and hyphens stripped. A B/L number has no standard format and none is enforced. Both appear on the staff shipment row, on the customer's order detail beside the vessel, and in the notification email. Proved by 15 new checks plus the 43 and 33 from steps 14 and 15 re-run | _this commit_ |
 
 | 2026-09-10 | **Step 17 — Customers & logins on a screen.** A third staff tab: add a customer, give somebody a login, reset a password, deactivate and reactivate — all of which needed a shell on the server until now. The logic moved into `app/services/accounts.py` and `scripts/manage_users.py` now calls it, so the screen and the command line cannot allow different things. **No route creates a staff account**, deliberately: `create_staff_login` exists in the service and only the script calls it. Two lockouts are refused — deactivating your own account, and deactivating the last active staff account. The customer code is not editable, because the CSV importer matches on it. Proved by 37 checks including that `is_staff` in a request body is ignored, and by the last-staff guard tested directly against a rolled-back transaction | _this commit_ |
+
+| 2026-09-10 | **Step 18 — The status sequence.** `status` was free text: anything could be typed, nothing checked the spelling, and a shipment could go from Delivered back to Packed unremarked. `app/services/statuses.py` now holds the sequence and both the screen and the CSV importer use it, so what one accepts the other does. The forms are dropdowns instead of free-text boxes. A move backwards is refused unless the request states it is a correction, which the screen asks about first. Customers get a progress track on each shipment rather than a bare word. **No rows were rewritten** — the five existing statuses in the database were all already valid. Proved by 21 checks plus 16 unit checks of the service, and steps 14 and 15 re-run | _this commit_ |
 
 ### Design decisions worth remembering
 
@@ -564,6 +566,28 @@ Update after every step: what was done, and the commit.
   with the importer: two implementations of one rule will differ eventually,
   and the difference will be found by a customer.
 
+### Design decisions worth remembering
+
+- **The sequence has five steps, not the four that were asked for.** In
+  production → Packed → Shipped → **In transit** → Delivered. "In transit"
+  was already in the demo data, in the `NOTIFY_ON_STATUSES` default, and is
+  what the whole vessel-tracking feature is about. Rewriting those rows to
+  "Shipped" would have thrown away a real distinction — loaded, versus
+  actually at sea — to make the list shorter. It was kept and placed where
+  it belongs. Say the word and it can go.
+- **Moving backwards is refused, but not forbidden.** Delivered to Packed is
+  almost always a misclick, and a customer told their goods arrived should
+  not silently see them un-arrive. But no way back from a fat-fingered
+  Delivered would be worse than the misclick, so the request can say it is a
+  correction, and the screen asks before it does.
+- **Cancelled is outside the numbering.** Anything can be cancelled without
+  ceremony, because things do get cancelled. Coming back *out* of Cancelled
+  counts as a correction, because that is somebody undoing a decision rather
+  than recording one.
+- **A CSV can never claim a correction.** `allow_backwards` is a field on
+  the API only. An import that moves a shipment backwards is far more likely
+  to be a stale export than a decision, so the importer refuses it outright.
+
 ### Known issues / risks
 
 - **A token cannot be cancelled one at a time.** Tokens are signed and
@@ -665,12 +689,15 @@ Update after every step: what was done, and the commit.
 - **A photo's caption cannot be changed after upload.** It is set once for
   the whole batch. Fixing a typo means removing the photo and adding it
   again.
-- **Status is free text, not a sequence.** In Production → Packed → Shipped
-  → Delivered is a convention the forms suggest and nothing enforces, so a
-  shipment can go from Delivered back to Packed, and "Packed" has never
-  actually been used. The status pill falls back to grey for anything it
-  does not recognise, which is why a typo shows up as a colour rather than
-  an error.
+- **An order's status is set by hand and not derived from its shipments.**
+  Nothing stops an order reading "In production" while every shipment
+  against it says Delivered. Deriving it would be better, and is a
+  judgement call about part-shipped orders that has not been made yet.
+- **Old rows can still hold a status the sequence does not know.** Nothing
+  was rewritten, and validation only runs on the way in. Every row in the
+  database today is valid, but a row written before step 18 by some other
+  route would survive; the customer's progress track simply does not draw
+  for a status it cannot place.
 - **Nothing records who created or changed an order.** The same gap the
   document page already had, now wider: staff can create, edit and delete
   orders and shipments and none of it leaves a trace. Worth an audit trail

@@ -47,7 +47,8 @@ backend/
 
     services/        the working logic, with no HTTP in it
       storage.py     where document files live on disk
-      tracking.py    IMO validation and the live-tracking link
+      tracking.py    IMO and container validation, the tracking link
+      statuses.py    the lifecycle sequence and what may move where
       notifications.py  who is owed a message, and sending it
       accounts.py    customers, logins, temporary passwords
 

@@ -25,10 +25,11 @@ shipment columns left blank. Order fields repeat on every row of that order.
     description         optional
     ordered_qty         required   decimal, e.g. 583.000
     unit                optional   defaults to MT
-    order_status        optional
+    order_status        optional   one of: In production, Packed, Shipped,
+                                   In transit, Delivered, Cancelled
     shipment_no         blank if nothing has shipped yet
     dispatched_qty      required when shipment_no is given
-    shipment_status     optional
+    shipment_status     optional   the same list as order_status
     vessel_name         optional
     imo_number          optional   7 digits, checksum validated
     container_no        optional   ISO 6346, e.g. MSCU1234566, check digit validated
@@ -49,6 +50,7 @@ from pathlib import Path
 from app.core.database import SessionLocal
 from app.models import Customer, Order, Shipment
 from sqlalchemy import select
+from app.services import statuses
 from app.services.tracking import tidy_container_no, valid_container_no, valid_imo
 
 REQUIRED_COLUMNS = [
@@ -134,6 +136,17 @@ def check_row(row: dict, line: int) -> tuple[dict, list[str]]:
     # accepts becomes one nobody can edit afterwards.
     if data["etd"] and data["eta"] and data["eta"] < data["etd"]:
         errors.append("eta is before etd")
+
+    # The same status list the staff screen offers, from the same service,
+    # so a spelling a CSV would accept is one the screen would accept too.
+    # A CSV never claims a correction: an import that moves a shipment
+    # backwards is far more likely to be a stale export than a decision.
+    for field in ("order_status", "shipment_status"):
+        try:
+            data[field] = statuses.canonical(data[field])
+        except statuses.StatusProblem as problem:
+            errors.append(f"{field}: {problem}")
+            data[field] = None
 
     if not data["unit"]:
         data["unit"] = "MT"

@@ -8,7 +8,7 @@ disagree about what a valid order looks like.
 
 from decimal import Decimal
 
-from app.services import tracking
+from app.services import statuses, tracking
 from app.core.deps import DbSession, StaffUser, bad_request, not_found
 from fastapi import APIRouter
 from app.models import Customer, Order, Shipment
@@ -34,6 +34,20 @@ def tidy(value: str | None) -> str | None:
         return None
     value = value.strip()
     return value or None
+
+
+def checked_status(current: str | None, submitted: str | None, allow_backwards: bool):
+    """Normalise a submitted status and refuse an unstated move backwards.
+
+    Both an order and a shipment go through here, and so does the CSV
+    importer through the same service, so what one accepts the others do.
+    """
+    try:
+        new_status = statuses.canonical(submitted)
+        statuses.check_move(current, new_status, allow_backwards=allow_backwards)
+    except statuses.StatusProblem as problem:
+        raise bad_request(str(problem)) from problem
+    return new_status
 
 
 def staff_order_out(order: Order, customer: Customer) -> StaffOrderOut:
@@ -103,7 +117,7 @@ def apply_order(order: Order, body: OrderIn, db: Session) -> None:
     order.description = tidy(body.description)
     order.ordered_qty = body.ordered_qty
     order.unit = tidy(body.unit) or "MT"
-    order.status = tidy(body.status)
+    order.status = checked_status(order.status, body.status, body.allow_backwards)
 
 
 def apply_shipment(shipment: Shipment, body: ShipmentIn, db: Session) -> None:
@@ -148,7 +162,9 @@ def apply_shipment(shipment: Shipment, body: ShipmentIn, db: Session) -> None:
     shipment.shipment_no = shipment_no
     shipment.dispatched_qty = body.dispatched_qty
     shipment.unit = tidy(body.unit) or "MT"
-    shipment.status = tidy(body.status)
+    shipment.status = checked_status(
+        shipment.status, body.status, body.allow_backwards
+    )
     shipment.vessel_name = tidy(body.vessel_name)
     shipment.imo_number = imo_number
     shipment.container_no = container_no

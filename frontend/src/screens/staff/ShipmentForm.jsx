@@ -1,11 +1,27 @@
 import { useState } from 'react'
 import axios from 'axios'
-import { SuggestField, TextField } from '../../components/Field'
-import { SHIPMENT_STATUSES } from '../../components/StatusPill'
+import { ChoiceField, TextField } from '../../components/Field'
+import { ALL_STATUSES, statusStep } from '../../components/StatusPill'
 import { blankToNull, describeError } from '../../lib/format'
 
 // Same form for adding a part-shipment and editing one. `shipment` being
 // null means "new", and then `orderId` says which order it belongs to.
+// The server refuses a move back down the sequence unless the request says
+// it is deliberate. Rather than let it refuse and then explain, ask first:
+// the person knows whether they are correcting a mistake, and the server
+// cannot.
+function confirmBackwards(current, next, what) {
+  const here = statusStep(current)
+  const there = statusStep(next)
+  if (here === null || there === null || there >= here) return true
+  return window.confirm(
+    `This moves ${what} back from ${current} to ${next}.
+
+` +
+      'Going backwards is usually a misclick. Is this a correction?',
+  )
+}
+
 export default function ShipmentForm({ orderId, shipment, onSaved, onCancel }) {
   const [form, setForm] = useState(() => ({
     shipment_no: shipment?.shipment_no ?? '',
@@ -38,6 +54,13 @@ export default function ShipmentForm({ orderId, shipment, onSaved, onCancel }) {
       return
     }
 
+    const backwards =
+      statusStep(blankToNull(form.status)) !== null &&
+      statusStep(shipment?.status) !== null &&
+      statusStep(blankToNull(form.status)) < statusStep(shipment?.status)
+
+    if (backwards && !confirmBackwards(shipment?.status, form.status, 'this shipment')) return
+
     setBusy(true)
     setError(null)
 
@@ -46,6 +69,7 @@ export default function ShipmentForm({ orderId, shipment, onSaved, onCancel }) {
       dispatched_qty: String(form.dispatched_qty).trim(),
       unit: blankToNull(form.unit),
       status: blankToNull(form.status),
+      allow_backwards: backwards,
       vessel_name: blankToNull(form.vessel_name),
       imo_number: blankToNull(form.imo_number),
       container_no: blankToNull(form.container_no),
@@ -88,11 +112,10 @@ export default function ShipmentForm({ orderId, shipment, onSaved, onCancel }) {
 
         <TextField label="Unit" value={form.unit} onChange={set('unit')} />
 
-        <SuggestField
+        <ChoiceField
           label="Status"
-          id="shipment-statuses"
           value={form.status}
-          options={SHIPMENT_STATUSES}
+          options={ALL_STATUSES}
           onChange={set('status')}
         />
 

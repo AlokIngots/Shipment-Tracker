@@ -1,11 +1,27 @@
 import { useState } from 'react'
 import axios from 'axios'
-import { Field, SuggestField, TextField } from '../../components/Field'
-import { ORDER_STATUSES } from '../../components/StatusPill'
+import { ChoiceField, Field, TextField } from '../../components/Field'
+import { ALL_STATUSES, statusStep } from '../../components/StatusPill'
 import { blankToNull, describeError } from '../../lib/format'
 
 // Creating and editing use the same form and the same shape of request; the
 // only difference is where it is sent. `order` being null means "new".
+// The server refuses a move back down the sequence unless the request says
+// it is deliberate. Rather than let it refuse and then explain, ask first:
+// the person knows whether they are correcting a mistake, and the server
+// cannot.
+function confirmBackwards(current, next, what) {
+  const here = statusStep(current)
+  const there = statusStep(next)
+  if (here === null || there === null || there >= here) return true
+  return window.confirm(
+    `This moves ${what} back from ${current} to ${next}.
+
+` +
+      'Going backwards is usually a misclick. Is this a correction?',
+  )
+}
+
 export default function OrderForm({ customers, order, onSaved, onCancel }) {
   const [form, setForm] = useState(() => ({
     customer_id: order?.customer_id ?? customers[0]?.id ?? '',
@@ -40,6 +56,13 @@ export default function OrderForm({ customers, order, onSaved, onCancel }) {
       return
     }
 
+    const backwards =
+      statusStep(blankToNull(form.status)) !== null &&
+      statusStep(order?.status) !== null &&
+      statusStep(blankToNull(form.status)) < statusStep(order?.status)
+
+    if (backwards && !confirmBackwards(order?.status, form.status, 'this order')) return
+
     setBusy(true)
     setError(null)
 
@@ -52,6 +75,7 @@ export default function OrderForm({ customers, order, onSaved, onCancel }) {
       ordered_qty: String(form.ordered_qty).trim(),
       unit: blankToNull(form.unit),
       status: blankToNull(form.status),
+      allow_backwards: backwards,
     }
 
     try {
@@ -113,11 +137,10 @@ export default function OrderForm({ customers, order, onSaved, onCancel }) {
 
         <TextField label="Unit" value={form.unit} onChange={set('unit')} />
 
-        <SuggestField
+        <ChoiceField
           label="Status"
-          id="order-statuses"
           value={form.status}
-          options={ORDER_STATUSES}
+          options={ALL_STATUSES}
           onChange={set('status')}
         />
 

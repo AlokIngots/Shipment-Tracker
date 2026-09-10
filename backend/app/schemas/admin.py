@@ -88,6 +88,9 @@ class OrderIn(BaseModel):
     ordered_qty: Decimal
     unit: str | None = None
     status: str | None = None
+    # Moving a status back down the sequence is refused unless this says it
+    # is deliberate. The screen sets it after asking; a CSV never does.
+    allow_backwards: bool = False
 
 
 class ShipmentIn(BaseModel):
@@ -103,6 +106,9 @@ class ShipmentIn(BaseModel):
     bl_number: str | None = None
     etd: date | None = None
     eta: date | None = None
+    # Moving a status back down the sequence is refused unless this says it
+    # is deliberate. The screen sets it after asking; a CSV never does.
+    allow_backwards: bool = False
 
 
 class StaffPhotoOut(BaseModel):

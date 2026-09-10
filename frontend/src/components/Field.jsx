@@ -11,18 +11,20 @@ export function Field({ label, hint, wide, children }) {
   )
 }
 
-// A text box with suggestions attached, rather than a dropdown: the CSV
-// importer accepts any status, so the form must too. The list only saves
-// typing.
-export function SuggestField({ label, id, value, options, onChange, hint }) {
+// A dropdown of exactly what the server will accept. This used to be a text
+// box with suggestions, because the CSV importer took any status and the
+// form had to match it. Both now share one list, so both can be closed.
+export function ChoiceField({ label, value, options, onChange, hint, blankLabel }) {
   return (
     <Field label={label} hint={hint}>
-      <input list={id} value={value} onChange={(e) => onChange(e.target.value)} />
-      <datalist id={id}>
+      <select value={value ?? ''} onChange={(e) => onChange(e.target.value)}>
+        <option value="">{blankLabel ?? 'Not set'}</option>
         {options.map((option) => (
-          <option key={option} value={option} />
+          <option key={option} value={option}>
+            {option}
+          </option>
         ))}
-      </datalist>
+      </select>
     </Field>
   )
 }
