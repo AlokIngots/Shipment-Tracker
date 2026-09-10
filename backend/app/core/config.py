@@ -56,6 +56,32 @@ if not SECRET_KEY or len(SECRET_KEY) < 32:
 TOKEN_TTL_SECONDS = int(os.getenv("TOKEN_TTL_SECONDS", "43200"))  # 12 hours
 
 
+# --------------------------------------------------------------- rate limits
+
+# Nothing slowed down bulk password guessing before. These are deliberately
+# generous for a real person -- five wrong passwords in a quarter of an hour
+# is already a bad day -- and mean, a script.
+LOGIN_MAX_ATTEMPTS = int(os.getenv("LOGIN_MAX_ATTEMPTS", "5"))
+
+# The same address failing against many different accounts.
+LOGIN_ADDRESS_MAX_ATTEMPTS = int(os.getenv("LOGIN_ADDRESS_MAX_ATTEMPTS", "20"))
+
+LOGIN_WINDOW_SECONDS = int(os.getenv("LOGIN_WINDOW_SECONDS", "900"))     # 15 min
+LOGIN_LOCKOUT_SECONDS = int(os.getenv("LOGIN_LOCKOUT_SECONDS", "900"))   # 15 min
+
+# How many keys the limiter will hold before it starts forgetting the least
+# recently active. Somebody inventing a new email on every attempt must not
+# be able to grow it until the container runs out of memory.
+RATE_LIMIT_MAX_KEYS = int(os.getenv("RATE_LIMIT_MAX_KEYS", "10000"))
+
+# Whether to believe X-Forwarded-For. True is correct for this deployment:
+# the api service publishes no ports, so Caddy is the only thing that can
+# reach it, and the address Caddy appends is therefore the real one. Set it
+# false if the API is ever exposed directly, or a caller could put any
+# address it liked in the header and spend somebody else's budget.
+TRUST_PROXY_HEADER = _flag("TRUST_PROXY_HEADER", "true")
+
+
 # ------------------------------------------------------------------- storage
 
 # Customer documents live outside the repository. Every stored file gets a

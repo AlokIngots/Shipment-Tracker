@@ -3,10 +3,11 @@
 from datetime import datetime, timezone
 
 from app.core import security
-from app.core.deps import CurrentUser, DbSession
+from app.core.deps import ClientAddress, CurrentUser, DbSession
 from fastapi import APIRouter, HTTPException, status
 from app.models import Customer, User
 from app.schemas import ChangePasswordRequest, CustomerOut, LoginRequest, LoginResponse
+from app.services import ratelimit
 from sqlalchemy import select
 
 router = APIRouter()
@@ -19,9 +20,30 @@ def health() -> dict[str, str]:
 
 
 @router.post("/api/login", response_model=LoginResponse)
-def login(credentials: LoginRequest, db: DbSession) -> LoginResponse:
+def login(
+    credentials: LoginRequest, db: DbSession, address: ClientAddress
+) -> LoginResponse:
     """Sign in against the users table and return a signed token."""
     email = credentials.email.strip().lower()
+
+    # Checked before the password is even looked at, and checked the same
+    # way for an email that exists and one that does not -- otherwise the
+    # limiter itself would answer the question "is this a real account?".
+    for limiter, key in ((ratelimit.by_email_and_address, f"{email}|{address}"),
+                         (ratelimit.by_address, address)):
+        try:
+            limiter.check(key)
+        except ratelimit.TooManyAttempts as blocked:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=(
+                    "Too many sign-in attempts. Please wait a few minutes and "
+                    "try again. If you have forgotten your password, ask Alok "
+                    "Ingots to reset it."
+                ),
+                headers={"Retry-After": str(blocked.retry_after)},
+            ) from blocked
+
     user = db.scalar(select(User).where(User.email == email))
 
     # Always run a hash comparison, even when the email is unknown, so a
@@ -30,10 +52,18 @@ def login(credentials: LoginRequest, db: DbSession) -> LoginResponse:
     password_ok = security.verify_password(credentials.password, stored)
 
     if not user or not password_ok or not user.is_active:
+        # A deactivated account counts too: it is still a wrong answer, and
+        # not counting it would leave a way to guess without limit.
+        ratelimit.by_email_and_address.record_failure(f"{email}|{address}")
+        ratelimit.by_address.record_failure(address)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Email or password is incorrect.",
         )
+
+    # Signed in, so this pairing starts again. The address keeps its own
+    # count: one good password does not excuse nineteen bad ones.
+    ratelimit.by_email_and_address.clear(f"{email}|{address}")
 
     customer = db.get(Customer, user.customer_id) if user.customer_id else None
     return LoginResponse(

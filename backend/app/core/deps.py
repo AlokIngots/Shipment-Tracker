@@ -15,10 +15,37 @@ rather than being inferred from whichever route happens to be on screen.
 from typing import Annotated, Iterator
 
 from app.core import security
+from app.core.config import TRUST_PROXY_HEADER
 from app.core.database import SessionLocal
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, Header, HTTPException, Request, status
 from app.models import User
 from sqlalchemy.orm import Session
+
+
+def client_address(request: Request) -> str:
+    """The address a request really came from.
+
+    Caddy appends the peer it saw to X-Forwarded-For, so the RIGHTMOST entry
+    is the one our own proxy added. The leftmost is whatever the caller put
+    there, which is worth nothing: a client can send any X-Forwarded-For it
+    likes, and reading the left of the list would let an attacker spend
+    somebody else's rate-limit budget, or dodge their own by inventing a new
+    address per request.
+
+    Trusting the header at all is only correct because the api service
+    publishes no ports, so Caddy is the only thing that can reach it.
+    TRUST_PROXY_HEADER turns it off if that ever stops being true.
+    """
+    if TRUST_PROXY_HEADER:
+        forwarded = request.headers.get("x-forwarded-for")
+        if forwarded:
+            hops = [h.strip() for h in forwarded.split(",") if h.strip()]
+            if hops:
+                return hops[-1]
+    return request.client.host if request.client else "unknown"
+
+
+ClientAddress = Annotated[str, Depends(client_address)]
 
 
 def get_db() -> Iterator[Session]:

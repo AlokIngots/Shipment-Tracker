@@ -372,6 +372,7 @@ the customer side needs, and a step is done when both work.
 | 17 | Customers & logins, on a screen | add a customer, create a login, reset a password, deactivate / reactivate | (nothing — this is an admin-only step) | **Done** |
 | 18 | The status sequence | a dropdown of exactly the valid statuses; a move backwards must be confirmed as a correction | a progress track on each shipment, not just a word | **Done** |
 | 19 | Deploy verification | `safe-deploy.sh` fixed after the reorganisation, and drilled | — | **Done** |
+| 20 | Sign-in rate limiting | — | bulk password guessing is slowed to a stop | **Done** |
 
 ### Still to build, both sides
 
@@ -452,6 +453,8 @@ Update after every step: what was done, and the commit.
 | 2026-09-10 | **Step 18 — The status sequence.** `status` was free text: anything could be typed, nothing checked the spelling, and a shipment could go from Delivered back to Packed unremarked. `app/services/statuses.py` now holds the sequence and both the screen and the CSV importer use it, so what one accepts the other does. The forms are dropdowns instead of free-text boxes. A move backwards is refused unless the request states it is a correction, which the screen asks about first. Customers get a progress track on each shipment rather than a bare word. **No rows were rewritten** — the five existing statuses in the database were all already valid. Proved by 21 checks plus 16 unit checks of the service, and steps 14 and 15 re-run | _this commit_ |
 
 | 2026-09-10 | **Step 19 — The deploy, verified after the reorganisation.** `safe-deploy.sh` still called `python migrate.py`, which the reorganisation had moved to `scripts/migrate.py`: **every deploy would have failed**, and it would have failed in the worst way, because the revision was read with `2>/dev/null || true`, so a command that could not run gave the same empty answer as a database with no history — and an empty answer tells `restore_schema` there is nothing to roll back to. A wrong command name had silently switched off the schema safety net. Fixed, and the read now fails loudly instead. Then proved: image builds, all six scripts run inside it, a real deploy took the production database from 0003 to **0005** with rows in it, 20 checks passed through Caddy on port 80, and two rollback drills — a migration that applied then reported drift, and a health check that never passed — both put everything back | _this commit_ |
+
+| 2026-09-10 | **Step 20 — Rate limiting on sign-in.** Nothing had slowed bulk password guessing. Failures are now counted per (email, address) — five — and per address — twenty — in a fifteen-minute window, answering 429 with `Retry-After`. The build found two bugs in its own defence: pruning the key table ran on **every** failed login, so each attempt cost one operation per key held and the API got slower the harder it was attacked (a denial of service inside the thing meant to prevent one), and a single key's timestamp list was unbounded. Fixed with a low-water mark and a per-key cap: 20,000 keys went from over two minutes to 50,000 keys in 0.33s. Proved by 14 checks plus memory and timing measurements | _this commit_ |
 
 ### Design decisions worth remembering
 
@@ -607,6 +610,28 @@ Update after every step: what was done, and the commit.
   runs while the new image is still up (the old one does not contain the new
   migration), and that the rows survive both.
 
+### Design decisions worth remembering
+
+- **There is deliberately no limit on an email address alone.** It is the
+  obvious third counter and it is a trap: anyone who knows a customer's
+  address could then lock that customer out by failing five times on
+  purpose. A distributed attack on one account therefore still gets through.
+  That is a considered trade — the alternative hands every passer-by a way
+  to shut a real customer out of their own portal.
+- **The rightmost X-Forwarded-For entry is the one to trust, not the
+  leftmost.** Caddy appends the peer it saw, so the last hop is ours and the
+  rest is whatever the caller typed. Reading from the left would let an
+  attacker spend somebody else's budget, or dodge their own by inventing a
+  fresh address per request. Trusting the header at all is only safe because
+  the api service publishes no ports.
+- **A defence must not become the attack.** Pruning the limiter's key table
+  ran on every failed login, so each attempt cost one operation per key
+  held — the API got slower exactly as an attack got busier. Two fixes: a
+  low-water mark, so a prune is followed by thousands of cheap inserts
+  rather than another prune; and a cap on each key's list, since a key
+  already at its limit is locked and more timestamps change nothing but
+  memory. Anything that allocates per request needs both bounds.
+
 ### Known issues / risks
 
 - **A token cannot be cancelled one at a time.** Tokens are signed and
@@ -634,10 +659,16 @@ Update after every step: what was done, and the commit.
 - **An account can be deactivated but not deleted.** Deactivating is nearly
   always what is actually wanted — a deleted login takes its history with it —
   but there is no tidy way to remove one created by mistake except SQL.
-- **Nothing limits how often a password can be guessed.** There is no rate
-  limit on `/api/login`, so nothing slows down somebody trying passwords in
-  bulk. Long passwords and PBKDF2 make it slow going, but a limit is the
-  proper answer and is not there.
+- **The rate-limit counts live in memory, in one process.** They are lost
+  whenever the API restarts, including on every deploy, so a deploy hands
+  an attacker a clean slate. And if uvicorn is ever run with `--workers N`,
+  each worker keeps its own counts and the effective limit silently becomes
+  N times looser. Redis is the answer to both if either stops being
+  acceptable; for one container in front of a handful of customers, neither
+  is worth the dependency yet.
+- **Only `/api/login` is limited.** `POST /api/change-password` also checks
+  a password and is not counted, though it needs a valid token first, so
+  guessing there means already holding one.
 - **Nothing checks that an email address is real.** `--add-user` accepts
   whatever it is given, so a typo creates an account nobody can sign in to.
   Check the address before pressing enter; `--list` will show it.

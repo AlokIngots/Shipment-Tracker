@@ -51,6 +51,7 @@ backend/
       statuses.py    the lifecycle sequence and what may move where
       notifications.py  who is owed a message, and sending it
       accounts.py    customers, logins, temporary passwords
+      ratelimit.py   slowing down bulk password guessing
 
   scripts/           one-off tools, run by hand on the server
     migrate.py       bring the database schema up to date
