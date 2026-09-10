@@ -105,14 +105,21 @@ def _sign(payload: str) -> str:
     return _b64encode(signature)
 
 
-def create_token(user_id: int) -> str:
+def create_token(user_id: int, issued_at: int | None = None) -> str:
     """Issue a signed token for a user.
 
     "iat" is when it was issued. Because a token cannot be taken back once
     handed out, that timestamp is how changing a password retires the tokens
-    that existed before it: see get_current_user in main.py.
+    that existed before it: see get_current_user in app/core/deps.py.
+
+    `issued_at` overrides the clock. Exactly one caller needs it: the
+    password change, which must hand back a token that is unambiguously
+    NEWER than the change it just made. Both timestamps are whole seconds,
+    so a replacement stamped from the clock could land on the very same
+    second as the change and be indistinguishable from a token issued a
+    moment before it.
     """
-    issued = int(time.time())
+    issued = int(time.time()) if issued_at is None else int(issued_at)
     body = {"uid": user_id, "iat": issued, "exp": issued + TOKEN_TTL_SECONDS}
     payload = _b64encode(json.dumps(body, separators=(",", ":")).encode())
     return f"{payload}.{_sign(payload)}"

@@ -152,6 +152,19 @@ are needed; copy each `.env.example` if they are missing. The development
 copy pre-fills the login form from `frontend/.env`; that file must never
 reach an image, which is what the `**/.env` rules in `.dockerignore` are for.
 
+### Running the tests
+
+```bash
+cd backend
+.venv/Scripts/python.exe -m pip install -r requirements-dev.txt   # once
+.venv/Scripts/python.exe -m pytest
+```
+
+123 tests, about a minute, with the dev database up. They build their own
+database beside the development one and drop it afterwards, so the
+development data is untouched — the row counts are identical before and
+after. They also run on GitHub for every push.
+
 ### Staff tools (run from `backend/`)
 
 | Command | What it does |
@@ -373,6 +386,7 @@ the customer side needs, and a step is done when both work.
 | 18 | The status sequence | a dropdown of exactly the valid statuses; a move backwards must be confirmed as a correction | a progress track on each shipment, not just a word | **Done** |
 | 19 | Deploy verification | `safe-deploy.sh` fixed after the reorganisation, and drilled | — | **Done** |
 | 20 | Sign-in rate limiting | — | bulk password guessing is slowed to a stop | **Done** |
+| 21 | A test suite that exists | 123 tests committed, run on every push | — | **Done** |
 
 ### Still to build, both sides
 
@@ -455,6 +469,8 @@ Update after every step: what was done, and the commit.
 | 2026-09-10 | **Step 19 — The deploy, verified after the reorganisation.** `safe-deploy.sh` still called `python migrate.py`, which the reorganisation had moved to `scripts/migrate.py`: **every deploy would have failed**, and it would have failed in the worst way, because the revision was read with `2>/dev/null || true`, so a command that could not run gave the same empty answer as a database with no history — and an empty answer tells `restore_schema` there is nothing to roll back to. A wrong command name had silently switched off the schema safety net. Fixed, and the read now fails loudly instead. Then proved: image builds, all six scripts run inside it, a real deploy took the production database from 0003 to **0005** with rows in it, 20 checks passed through Caddy on port 80, and two rollback drills — a migration that applied then reported drift, and a health check that never passed — both put everything back | _this commit_ |
 
 | 2026-09-10 | **Step 20 — Rate limiting on sign-in.** Nothing had slowed bulk password guessing. Failures are now counted per (email, address) — five — and per address — twenty — in a fifteen-minute window, answering 429 with `Retry-After`. The build found two bugs in its own defence: pruning the key table ran on **every** failed login, so each attempt cost one operation per key held and the API got slower the harder it was attacked (a denial of service inside the thing meant to prevent one), and a single key's timestamp list was unbounded. Fixed with a low-water mark and a per-key cap: 20,000 keys went from over two minutes to 50,000 keys in 0.33s. Proved by 14 checks plus memory and timing measurements | _this commit_ |
+
+| 2026-09-10 | **Step 21 — A test suite that exists.** Every check reported in steps 14 to 20 had been run and then thrown away: two files in a temp directory, the rest typed inline into shell commands. Nothing was committed, there was no pytest, and nobody could re-run any of it. There are now **123 tests** in `backend/tests/`, run on every push by GitHub Actions. They build their own PostgreSQL database — never SQLite, which disagrees with production about `Numeric`, cascades and unique constraints — using the real migrations, so a migration that will not apply fails the suite. Writing them found two bugs: `migrations/env.py` overwrote the database URL unconditionally, so Alembic could never be pointed anywhere else; and **a token issued in the same second as a password change survived it**, because both timestamps are whole seconds and the check was `<`. Both fixed | _this commit_ |
 
 ### Design decisions worth remembering
 
@@ -632,6 +648,21 @@ Update after every step: what was done, and the commit.
   already at its limit is locked and more timestamps change nothing but
   memory. Anything that allocates per request needs both bounds.
 
+### Design decisions worth remembering
+
+- **The tests use PostgreSQL, not SQLite.** SQLite would be faster and would
+  quietly disagree with production about `Numeric`, about `ON DELETE
+  CASCADE` and about unique constraints — the exact class of bug a suite
+  exists to catch. They build a throwaway database beside the development
+  one and run the real migrations into it, so the migrations are tested too.
+- **Each test rolls back rather than cleaning up.** The endpoints call
+  `commit()` themselves, so the session joins the outer transaction with a
+  savepoint. Tests cannot see each other's rows and the database is
+  identical at the end of a run — which is checked, not assumed.
+- **A warning from our own code is an error in the suite.** Library warnings
+  we do not control are silenced by name, never wholesale, so a new one
+  still shows up.
+
 ### Known issues / risks
 
 - **A token cannot be cancelled one at a time.** Tokens are signed and
@@ -757,10 +788,10 @@ Update after every step: what was done, and the commit.
   drills, against the reorganised backend. What it has still never met is a
   real machine, a real domain, or Caddy actually obtaining an HTTPS
   certificate — that cannot be tested until DNS points somewhere.
-- **`requests` is installed in the dev venv but is not in
-  `requirements.txt`**, deliberately — it is only used by the end-to-end
-  test script, and shipping it into the API image would be wrong. Anyone
-  re-running those tests on a fresh machine has to install it by hand.
+- **The frontend has no tests.** The 123 committed tests are all backend.
+  Nothing checks that the progress track draws, that the photo gallery
+  revokes its blob URLs, or that a backwards status change asks before it
+  saves. `npm run build` passing only means it compiles.
 - **MarineTraffic shows a vessel's current position, not the cargo.** It
   cannot confirm a container or parcel is aboard, and free pages can be rate
   limited or blocked. A paid carrier API is the answer if customers need

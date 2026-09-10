@@ -95,7 +95,12 @@ def get_current_user(
     # This is what makes changing a password mean something: whoever else
     # was signed in with the old one is signed out by it, including on a
     # computer nobody has access to any more.
-    if user.password_changed_at and token["iat"] < user.password_changed_at.timestamp():
+    # <= and not <, so a token issued in the SAME second as the change is
+    # refused too. Both are whole seconds, so < left a one-second window in
+    # which a session the change was meant to end quietly survived it. The
+    # replacement token handed out by the password change is stamped one
+    # second later precisely so that it is not caught by this.
+    if user.password_changed_at and token["iat"] <= user.password_changed_at.timestamp():
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Your password was changed. Please sign in again.",

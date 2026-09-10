@@ -136,5 +136,11 @@ def change_password(
     # changed the password stays signed in and everybody else does not.
     return {
         "detail": "Your password has been changed.",
-        "token": security.create_token(current_user.id),
+        # One second after the change, so it survives the check that retires
+        # every other token. Anything stamped at or before the change is now
+        # refused, and without this the replacement would be too.
+        "token": security.create_token(
+            current_user.id,
+            issued_at=int(current_user.password_changed_at.timestamp()) + 1,
+        ),
     }

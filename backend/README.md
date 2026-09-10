@@ -76,6 +76,26 @@ is in the routing, not only in the screens:
 The one exception is `POST /api/change-password`, which a customer must be
 able to call, because it changes nothing but their own password.
 
+## Running the tests
+
+```bash
+.venv/Scripts/python.exe -m pip install -r requirements-dev.txt
+.venv/Scripts/python.exe -m pytest
+```
+
+The dev database must be up (`docker compose up -d` at the project root).
+The suite builds its **own** database beside it, named after the development
+one with `_test` on the end, creates the schema by running the real Alembic
+migrations, and drops it at the end. It never touches the development data:
+each test runs inside a transaction that is rolled back, so the row counts
+are the same before and after.
+
+Because the schema is built by the migrations, a migration that does not
+apply fails the suite before a single assertion runs.
+
+Tests also run on GitHub for every push and pull request — see
+`.github/workflows/tests.yml`.
+
 ## Running it
 
 From `backend/`, with the dev database up (`docker compose up -d` at the

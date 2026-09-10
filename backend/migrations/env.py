@@ -22,7 +22,16 @@ config = context.config
 
 # Feed the address from .env to Alembic, escaping any '%' so that
 # configparser does not treat it as a placeholder.
-config.set_main_option("sqlalchemy.url", DATABASE_URL.replace("%", "%%"))
+#
+# Only if the caller has not already chosen one. It used to be unconditional,
+# which meant every migration went to whatever DATABASE_URL said and there
+# was no way to point Alembic at a different database -- not a staging copy,
+# and not the throwaway database the test suite builds to prove the
+# migrations actually apply. Setting it explicitly is now respected; leaving
+# it unset still gets the one source of truth and no password in a committed
+# file.
+if not config.get_main_option("sqlalchemy.url", None):
+    config.set_main_option("sqlalchemy.url", DATABASE_URL.replace("%", "%%"))
 
 target_metadata = Base.metadata
 
