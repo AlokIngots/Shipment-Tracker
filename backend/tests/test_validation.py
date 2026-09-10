@@ -202,3 +202,59 @@ def test_recording_a_failure_stays_fast_when_the_table_is_full():
         limiter.record_failure(f"more{i}")
     elapsed = time.perf_counter() - started
     assert elapsed < 5.0, f"2000 failures took {elapsed:.1f}s with a full table"
+
+
+# ------------------------------------------------- which address is the client
+
+
+def _request(header: str | None, peer: str = "10.9.9.9"):
+    """A real Starlette Request, built from a scope, with no server needed."""
+    from starlette.requests import Request
+
+    headers = [(b"x-forwarded-for", header.encode())] if header else []
+    return Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/",
+            "headers": headers,
+            "client": (peer, 12345),
+        }
+    )
+
+
+@pytest.mark.parametrize(
+    "header, hops, expected, why",
+    [
+        ("203.0.113.9", 1, "203.0.113.9", "Caddy alone: it appended the client"),
+        ("203.0.113.9, 10.0.0.2", 2, "203.0.113.9", "nginx wrote it, Caddy appended nginx"),
+        ("1.2.3.4, 203.0.113.9", 1, "203.0.113.9", "a forged leftmost is stepped over"),
+        ("1.2.3.4, 203.0.113.9, 10.0.0.2", 2, "203.0.113.9", "forged leftmost, two real hops"),
+        ("203.0.113.9", 2, "203.0.113.9", "fewer hops than configured: take the leftmost"),
+        (None, 1, "10.9.9.9", "no header at all: fall back to the peer"),
+    ],
+)
+def test_which_entry_of_forwarded_for_is_the_client(monkeypatch, header, hops, expected, why):
+    """The rate limiter is only as good as this.
+
+    Get it wrong and every visitor looks like one address: one shared proxy
+    absorbs everybody's budget, and a single attacker locks out every
+    customer at once.
+    """
+    from app.core import deps
+
+    monkeypatch.setattr(deps, "TRUSTED_PROXY_HOPS", hops)
+    assert deps.client_address(_request(header)) == expected, why
+
+
+def test_the_header_is_ignored_when_it_is_not_to_be_trusted():
+    """For a deployment where the API is reachable directly, a caller could
+    otherwise put any address it liked in the header."""
+    from app.core import deps
+
+    original = deps.TRUST_PROXY_HEADER
+    try:
+        deps.TRUST_PROXY_HEADER = False
+        assert deps.client_address(_request("203.0.113.9")) == "10.9.9.9"
+    finally:
+        deps.TRUST_PROXY_HEADER = original

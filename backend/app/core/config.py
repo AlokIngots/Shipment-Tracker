@@ -74,6 +74,20 @@ LOGIN_LOCKOUT_SECONDS = int(os.getenv("LOGIN_LOCKOUT_SECONDS", "900"))   # 15 mi
 # be able to grow it until the container runs out of memory.
 RATE_LIMIT_MAX_KEYS = int(os.getenv("RATE_LIMIT_MAX_KEYS", "10000"))
 
+# How many entries at the END of X-Forwarded-For were put there by our own
+# infrastructure, and are therefore the ones to look past to find the real
+# client.
+#
+#   1  Caddy is the front door          XFF: "<client>"
+#   2  nginx in front of Caddy          XFF: "<client>, <nginx>"
+#
+# Counting rather than pattern-matching, because it is the only thing that
+# is true regardless of what addresses the proxies happen to have. Get it
+# wrong and every visitor looks like the same address to the rate limiter:
+# too low and one shared proxy address absorbs everybody's budget, too high
+# and a caller can spend somebody else's by prepending their own header.
+TRUSTED_PROXY_HOPS = max(1, int(os.getenv("TRUSTED_PROXY_HOPS", "1")))
+
 # Whether to believe X-Forwarded-For. True is correct for this deployment:
 # the api service publishes no ports, so Caddy is the only thing that can
 # reach it, and the address Caddy appends is therefore the real one. Set it

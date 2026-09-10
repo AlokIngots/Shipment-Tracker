@@ -15,7 +15,7 @@ rather than being inferred from whichever route happens to be on screen.
 from typing import Annotated, Iterator
 
 from app.core import security
-from app.core.config import TRUST_PROXY_HEADER
+from app.core.config import TRUST_PROXY_HEADER, TRUSTED_PROXY_HOPS
 from app.core.database import SessionLocal
 from fastapi import Depends, Header, HTTPException, Request, status
 from app.models import User
@@ -40,8 +40,18 @@ def client_address(request: Request) -> str:
         forwarded = request.headers.get("x-forwarded-for")
         if forwarded:
             hops = [h.strip() for h in forwarded.split(",") if h.strip()]
+            if len(hops) >= TRUSTED_PROXY_HOPS:
+                # Step back past the hops our own proxies added. With one
+                # proxy that is the last entry; with nginx in front of Caddy
+                # it is the one before it, because Caddy appended nginx.
+                return hops[-TRUSTED_PROXY_HOPS]
             if hops:
-                return hops[-1]
+                # Fewer hops than configured: something is in front that was
+                # not expected, or the header was truncated. The leftmost is
+                # the most cautious answer -- it is the furthest from us, so
+                # the worst case is that one caller spends its own budget
+                # rather than everybody sharing one.
+                return hops[0]
     return request.client.host if request.client else "unknown"
 
 

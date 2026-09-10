@@ -15,8 +15,25 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
-COMPOSE_FILE="docker-compose.prod.yml"
-COMPOSE=(docker compose -f "$COMPOSE_FILE")
+# Which compose files to deploy with. Defaults to the production stack on
+# its own, which is what a machine of its own wants.
+#
+# A server that already has something on 80 and 443 -- srv1427359 runs
+# AlokCRM behind nginx -- adds the server override, which moves the portal
+# to 127.0.0.1:8080 and leaves the front door alone:
+#
+#   COMPOSE_FILES="docker-compose.prod.yml docker-compose.server.yml" ./safe-deploy.sh
+COMPOSE_FILES="${COMPOSE_FILES:-docker-compose.prod.yml}"
+
+COMPOSE=(docker compose)
+for _file in $COMPOSE_FILES; do
+  [ -f "$_file" ] || { printf 'No such compose file: %s
+' "$_file" >&2; exit 1; }
+  COMPOSE+=(-f "$_file")
+done
+
+# The first one, for the messages that print a restore command.
+COMPOSE_FILE="${COMPOSE_FILES%% *}"
 BACKUP_ROOT="backups"
 KEEP_BACKUPS=10
 HEALTH_TRIES=30
@@ -294,15 +311,42 @@ done
 $api_ok || { rollback; die "The API never became healthy."; }
 ok "API is answering"
 
+# Ask Docker where the website actually ended up rather than assuming 80.
+# On a server that already has nginx the override moves it to
+# 127.0.0.1:8080, and a health check hardcoded to 80 would fail and roll
+# back a deploy that had in fact worked perfectly.
+# Asked with a retry, because a container that has only just started can
+# answer "0.0.0.0:0" for a moment before the mapping settles -- and a URL
+# with port 0 in it fails, rolls back a deploy that worked, and blames the
+# website. That happened once while this was being written. Anything that
+# is not a usable port number counts as "not ready yet", not as an answer.
+web_published_port() {
+  local answer port
+  for _ in $(seq 1 10); do
+    answer="$("${COMPOSE[@]}" port web 80 2>/dev/null | tr -d '[:space:]')"
+    port="${answer##*:}"
+    case "$port" in
+      "" | 0 | *[!0-9]*) ;;
+      *) printf '%s' "$port"; return 0 ;;
+    esac
+    sleep 1
+  done
+  # Never found one: fall back to the default rather than refuse to deploy.
+  printf '80'
+}
+
+WEB_PORT="$(web_published_port)"
+WEB_URL="http://127.0.0.1:${WEB_PORT}/api/health"
+
 web_ok=false
 for _ in $(seq 1 "$HEALTH_TRIES"); do
-  if curl -fsSkL -o /dev/null --max-time 5 "http://127.0.0.1/api/health" 2>/dev/null; then
+  if curl -fsSkL -o /dev/null --max-time 5 "$WEB_URL" 2>/dev/null; then
     web_ok=true; break
   fi
   sleep "$HEALTH_WAIT"
 done
-$web_ok || { rollback; die "The website is not reachable on port 80."; }
-ok "Website is reachable and reaching the API through it"
+$web_ok || { rollback; die "The website is not reachable at $WEB_URL."; }
+ok "Website is reachable on port $WEB_PORT and reaching the API through it"
 
 # ---------------------------------------------------------------- tidy
 
@@ -323,7 +367,13 @@ ok "Keeping the newest $KEEP_BACKUPS backups"
 printf '\n%s==> Deployed%s\n' "$GREEN" "$OFF"
 ok "Backup of this deploy: $BACKUP_DIR"
 if [ -z "$DOMAIN" ] || [ "$DOMAIN" = ":80" ]; then
-  ok "Open it at http://localhost"
+  if [ "$WEB_PORT" = "80" ]; then
+    ok "Open it at http://localhost"
+  else
+    # Bound to loopback behind somebody else's nginx: not reachable from a
+    # browser elsewhere, and saying "open it at localhost" would be a lie.
+    ok "Answering on http://127.0.0.1:${WEB_PORT} — reach it through nginx"
+  fi
 else
   ok "Open it at https://${DOMAIN}"
 fi

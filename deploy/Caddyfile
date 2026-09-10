@@ -5,6 +5,25 @@
 #                              and renews it, with nothing to remember
 #   :80                     -> plain HTTP, used when testing locally
 #
+# Caddy REPLACES X-Forwarded-For with the address it is talking to, unless
+# that address is a trusted proxy -- in which case it keeps what arrived.
+# Without this block the API sees the same address for every visitor:
+#
+#   * exposed directly, that address is Docker's gateway, so all customers
+#     share one rate-limit budget and one attacker locks everybody out
+#   * behind nginx, the client's real address is discarded at the door and
+#     replaced with nginx's own
+#
+# Trusting private ranges is the right rule for both. A real customer
+# arrives from a public address, is not trusted, and Caddy correctly records
+# the address it sees. nginx on the same host arrives from a private one, is
+# trusted, and the client address it wrote is preserved.
+{
+	servers {
+		trusted_proxies static private_ranges
+	}
+}
+
 {$PORTAL_DOMAIN::80} {
 	encode zstd gzip
 

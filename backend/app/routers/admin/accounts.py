@@ -16,10 +16,10 @@ What is deliberately NOT here, and must not be added:
     always had.
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from sqlalchemy import select
 
-from app.core.deps import DbSession, StaffUser, bad_request, not_found
+from app.core.deps import ClientAddress, DbSession, StaffUser, bad_request, not_found
 from app.models import Customer, User
 from app.schemas import (
     ActiveIn,
@@ -31,6 +31,7 @@ from app.schemas import (
     StaffLoginOut,
     TemporaryPasswordOut,
 )
+from app.core.config import TRUST_PROXY_HEADER, TRUSTED_PROXY_HOPS
 from app.services import accounts
 
 router = APIRouter(prefix="/api/staff")
@@ -167,3 +168,40 @@ def staff_set_active(
     except accounts.AccountProblem as problem:
         raise refuse(problem) from problem
     return accounts_response(db)
+
+
+@router.get("/whoami")
+def staff_whoami(
+    request: Request, staff: StaffUser, address: ClientAddress
+) -> dict:
+    """What the server thinks your address is, and how it worked that out.
+
+    This exists because TRUSTED_PROXY_HOPS cannot be guessed. It depends on
+    how many proxies sit in front of the API and what each of them does to
+    X-Forwarded-For, which differs between a machine of its own and a
+    machine shared with something else behind nginx. Get it wrong and every
+    visitor looks like one address to the rate limiter, so one attacker
+    locks out every customer at once -- and nothing about the portal looks
+    broken until that happens.
+
+    Open it as staff from the outside world and check that `client_address`
+    is your own public address. If it is not, `forwarded_for` shows the
+    chain and `hops_seen` says what to set TRUSTED_PROXY_HOPS to.
+
+    Staff only, and it reveals nothing but the caller's own connection.
+    """
+    forwarded = request.headers.get("x-forwarded-for")
+    hops = [h.strip() for h in (forwarded or "").split(",") if h.strip()]
+    return {
+        "client_address": address,
+        "forwarded_for": forwarded,
+        "hops_seen": len(hops),
+        "trusted_proxy_hops": TRUSTED_PROXY_HOPS,
+        "trust_proxy_header": TRUST_PROXY_HEADER,
+        "direct_peer": request.client.host if request.client else None,
+        "hint": (
+            "client_address should be your own public IP. If it is not, set "
+            "TRUSTED_PROXY_HOPS so that counting that many entries back from "
+            "the end of forwarded_for lands on it."
+        ),
+    }

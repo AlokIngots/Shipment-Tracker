@@ -387,6 +387,7 @@ the customer side needs, and a step is done when both work.
 | 19 | Deploy verification | `safe-deploy.sh` fixed after the reorganisation, and drilled | — | **Done** |
 | 20 | Sign-in rate limiting | — | bulk password guessing is slowed to a stop | **Done** |
 | 21 | A test suite that exists | 123 tests committed, run on every push | — | **Done** |
+| 22 | Ready to share a server | deploy on a host that already runs nginx, without touching it | — | **Done, not yet deployed** |
 
 ### Still to build, both sides
 
@@ -471,6 +472,8 @@ Update after every step: what was done, and the commit.
 | 2026-09-10 | **Step 20 — Rate limiting on sign-in.** Nothing had slowed bulk password guessing. Failures are now counted per (email, address) — five — and per address — twenty — in a fifteen-minute window, answering 429 with `Retry-After`. The build found two bugs in its own defence: pruning the key table ran on **every** failed login, so each attempt cost one operation per key held and the API got slower the harder it was attacked (a denial of service inside the thing meant to prevent one), and a single key's timestamp list was unbounded. Fixed with a low-water mark and a per-key cap: 20,000 keys went from over two minutes to 50,000 keys in 0.33s. Proved by 14 checks plus memory and timing measurements | _this commit_ |
 
 | 2026-09-10 | **Step 21 — A test suite that exists.** Every check reported in steps 14 to 20 had been run and then thrown away: two files in a temp directory, the rest typed inline into shell commands. Nothing was committed, there was no pytest, and nobody could re-run any of it. There are now **123 tests** in `backend/tests/`, run on every push by GitHub Actions. They build their own PostgreSQL database — never SQLite, which disagrees with production about `Numeric`, cascades and unique constraints — using the real migrations, so a migration that will not apply fails the suite. Writing them found two bugs: `migrations/env.py` overwrote the database URL unconditionally, so Alembic could never be pointed anywhere else; and **a token issued in the same second as a password change survived it**, because both timestamps are whole seconds and the check was `<`. Both fixed | _this commit_ |
+
+| 2026-09-10 | **Step 22 — Prepared to share srv1427359 with AlokCRM.** Three approved changes, and three more the work uncovered. `docker-compose.server.yml` moves the portal to `127.0.0.1:8080` so nginx keeps 80 and 443 — with `!override`, because Compose **merges** sequences and a plain list left 80 and 443 published anyway. `COMPOSE_FILES` is overridable in `safe-deploy.sh`. Caddy's `trusted_proxies` fixes a **live bug**: Caddy replaces `X-Forwarded-For` with the peer address, so behind it every visitor looked like Docker's gateway and the whole rate limiter was one shared budget. Also found: the website health check was hardcoded to port 80 and would have rolled back a working server deploy, and `docker compose port` can answer `0` mid-start. New staff-only `GET /api/staff/whoami` reports what the server thinks your address is, because the hop count cannot be guessed. Nothing was done on the server | _this commit_ |
 
 ### Design decisions worth remembering
 
@@ -663,6 +666,24 @@ Update after every step: what was done, and the commit.
   we do not control are silenced by name, never wholesale, so a new one
   still shows up.
 
+### Design decisions worth remembering
+
+- **Compose merges lists; it does not replace them.** An override file that
+  sets `ports:` as a plain list *adds* to the ports underneath. On a shared
+  server that would have published 80 and 443 anyway and taken the other
+  application off the air. `ports: !override` is what replaces them, and
+  `docker compose config` is what proves it.
+- **Caddy replaces X-Forwarded-For unless the peer is a trusted proxy.**
+  Not appends — replaces. Every visitor therefore looked like Docker's
+  gateway to the rate limiter. `trusted_proxies static private_ranges` makes
+  Caddy keep what arrived; it then appends its own hop, which is why
+  `TRUSTED_PROXY_HOPS` is 2 behind nginx and 1 standalone.
+- **`/api/staff/whoami` exists because the hop count cannot be guessed.** It
+  depends on what sits in front and what each part does to the header, and
+  getting it wrong is invisible until one attacker locks out every customer.
+  Open it as staff from outside and check it reports your own public
+  address.
+
 ### Known issues / risks
 
 - **A token cannot be cancelled one at a time.** Tokens are signed and
@@ -690,6 +711,9 @@ Update after every step: what was done, and the commit.
 - **An account can be deactivated but not deleted.** Deactivating is nearly
   always what is actually wanted — a deleted login takes its history with it —
   but there is no tidy way to remove one created by mistake except SQL.
+- **The rate limiter was measuring the wrong address behind Caddy** until
+  step 22, so any deploy made before it treated every visitor as one client.
+  Fixed, but worth knowing when reading anything written earlier about it.
 - **The rate-limit counts live in memory, in one process.** They are lost
   whenever the API restarts, including on every deploy, so a deploy hands
   an attacker a clean slate. And if uvicorn is ever run with `--workers N`,

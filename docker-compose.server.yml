@@ -1,0 +1,50 @@
+# Running the portal on a server that already has something else on 80/443.
+#
+#   docker compose -f docker-compose.prod.yml -f docker-compose.server.yml ...
+#   COMPOSE_FILES="docker-compose.prod.yml docker-compose.server.yml" ./safe-deploy.sh
+#
+# srv1427359 already runs AlokCRM behind nginx, which owns 80 and 443.
+# docker-compose.prod.yml publishes both, so using it there would either fail
+# with "port is already allocated" or -- if nginx happened to be stopped --
+# take the CRM offline. This file overrides only what has to change.
+#
+# Everything else is inherited: the same images, the same database with no
+# published port, the same volumes, the same project name. The stack that was
+# drilled locally is the stack that runs on the server, minus its front door.
+
+services:
+  web:
+    environment:
+      # Plain HTTP inside the container. nginx on the host terminates TLS and
+      # holds the certificate, so Caddy must not try to obtain one -- two
+      # things fighting over an ACME challenge on one domain gets neither.
+      PORTAL_DOMAIN: ":80"
+      # Two hops, and both halves of that are measured, not guessed:
+      #
+      #   Caddy's trusted_proxies (deploy/Caddyfile) makes it PRESERVE the
+      #   address nginx wrote instead of overwriting it -- without that the
+      #   client's address never reaches the API at all.
+      #
+      #   Having preserved it, Caddy then appends its own view of the peer,
+      #   so the header arrives as "<client>, <docker bridge>". Two entries,
+      #   and the client is the second from the end.
+      #
+      # Standalone, Caddy is the only hop and the default of 1 is right.
+      # Confirm on the server after deploying, from outside:
+      #   GET /api/staff/whoami  -> client_address must be your public IP
+      TRUSTED_PROXY_HOPS: "2"
+
+    # !override, not a plain list. Compose MERGES sequences by default, so
+    # without this the 80 and 443 from docker-compose.prod.yml survive and
+    # get published anyway -- which is the exact accident this file exists
+    # to prevent. Verified: with a plain list, `compose config` still shows
+    # 80 and 443.
+    ports: !override
+      # Loopback only. Nothing here is reachable from the internet except
+      # through nginx, and the host firewall does not need a rule.
+      - "127.0.0.1:8080:80"
+
+  api:
+    environment:
+      # The API is what reads the header, so it needs the same answer.
+      TRUSTED_PROXY_HOPS: "2"
