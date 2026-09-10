@@ -20,7 +20,7 @@ export default function ChangePasswordScreen({
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(false)
 
-  const longEnough = next.length >= 12
+  const longEnough = next.length >= 8
 
   async function handleSubmit(event) {
     event.preventDefault()
@@ -102,7 +102,7 @@ export default function ChangePasswordScreen({
         <p className={longEnough ? 'hint hint--met' : 'hint'}>
           {longEnough
             ? 'Long enough.'
-            : `At least 12 characters — ${next.length} so far.`}{' '}
+            : `At least 8 characters — ${next.length} so far.`}{' '}
           Longer is better than complicated.
         </p>
 

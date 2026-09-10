@@ -25,9 +25,9 @@ from app.core.config import SECRET_KEY, TOKEN_TTL_SECONDS
 _ALGORITHM = "pbkdf2_sha256"
 _ITERATIONS = 240_000
 
-# Short enough to read out over the phone, long enough to be worth nothing to
-# a guesser. Staff hand this over once; the portal then forces a change.
-PASSWORD_MIN_LENGTH = 12
+# The shortest password the portal will accept. Length is what protects a
+# password, which is why there are no rules about punctuation below.
+PASSWORD_MIN_LENGTH = 8
 
 # No 0/O, no 1/l/I. A customer being read their password down a bad line
 # should not have to ask which character it was.

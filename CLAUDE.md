@@ -523,7 +523,7 @@ Update after every step: what was done, and the commit.
 - **There is no web page for creating accounts**, on purpose, and the same
   reasoning as document uploads: nothing customer-facing can create an
   account, so nothing customer-facing can be tricked into creating one.
-- **Password rules are short on purpose** — 12 characters and not the same
+- **Password rules are short on purpose** — 8 characters and not the same
   character repeated. Length is what protects a password; rules about
   punctuation mostly teach people to write `Password1!` and reuse it.
 
