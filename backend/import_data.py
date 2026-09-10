@@ -115,6 +115,12 @@ def check_row(row: dict, line: int) -> tuple[dict, list[str]]:
     if data["imo_number"] and not valid_imo(data["imo_number"]):
         errors.append(f"imo_number: {data['imo_number']!r} is not a valid IMO number")
 
+    # The staff screen refuses this too. Both sides of the portal have to
+    # agree on what a valid shipment looks like, or a row the importer
+    # accepts becomes one nobody can edit afterwards.
+    if data["etd"] and data["eta"] and data["eta"] < data["etd"]:
+        errors.append("eta is before etd")
+
     if not data["unit"]:
         data["unit"] = "MT"
 
