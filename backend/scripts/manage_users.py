@@ -40,9 +40,9 @@ create an account, so nothing customer-facing can be tricked into creating one.
 import argparse
 from datetime import datetime, timezone
 
-import security
-from database import SessionLocal
-from models import Customer, Order, User
+from app.core import security
+from app.core.database import SessionLocal
+from app.models import Customer, Order, User
 from sqlalchemy import func, select
 
 

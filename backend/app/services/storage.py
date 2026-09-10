@@ -9,19 +9,11 @@ supplies is ever used to build a path. That removes any chance of a crafted
 name reaching outside the storage directory.
 """
 
-import os
 import secrets
 import shutil
 from pathlib import Path
 
-from dotenv import load_dotenv
-
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-load_dotenv(PROJECT_ROOT / ".env")
-
-STORAGE_DIR = Path(
-    os.getenv("DOCUMENT_STORAGE_DIR") or (PROJECT_ROOT / "storage" / "documents")
-).resolve()
+from app.core.config import STORAGE_DIR
 
 
 def ensure_storage() -> Path:

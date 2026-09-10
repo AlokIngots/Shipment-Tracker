@@ -14,10 +14,10 @@ rather than being inferred from whichever route happens to be on screen.
 
 from typing import Annotated, Iterator
 
-import security
-from database import SessionLocal
+from app.core import security
+from app.core.database import SessionLocal
 from fastapi import Depends, Header, HTTPException, status
-from models import User
+from app.models import User
 from sqlalchemy.orm import Session
 
 

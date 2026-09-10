@@ -39,13 +39,16 @@ from alembic.migration import MigrationContext
 from alembic.script import ScriptDirectory
 from sqlalchemy import inspect
 
-from database import Base, engine
+from app.core.database import Base, engine
 
 # Importing the models registers every table, so the drift check below can
 # compare the code against the database.
-import models  # noqa: F401
+from app import models  # noqa: F401
 
-HERE = Path(__file__).resolve().parent
+# alembic.ini and migrations/ stay at the backend root, beside the
+# Dockerfile, because that is where alembic expects to be run from.
+# This script lives one level down in scripts/.
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
 BASELINE = "0001"
 
 # A table that only the portal creates. If this exists, the database is the
@@ -55,8 +58,8 @@ MARKER_TABLE = "customers"
 
 def config() -> Config:
     """Alembic's settings, with paths that work from any directory."""
-    cfg = Config(str(HERE / "alembic.ini"))
-    cfg.set_main_option("script_location", str(HERE / "migrations"))
+    cfg = Config(str(BACKEND_ROOT / "alembic.ini"))
+    cfg.set_main_option("script_location", str(BACKEND_ROOT / "migrations"))
     return cfg
 
 

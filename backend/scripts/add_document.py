@@ -18,9 +18,9 @@ import argparse
 import sys
 from pathlib import Path
 
-import storage
-from database import SessionLocal
-from models import Document, Order, Shipment
+from app.services import storage
+from app.core.database import SessionLocal
+from app.models import Document, Order, Shipment
 from sqlalchemy import select
 
 DOC_TYPES = [

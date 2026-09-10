@@ -20,13 +20,13 @@ import sys
 from decimal import Decimal
 from pathlib import Path
 
-import migrate
-import security
-from database import Base, SessionLocal, engine
+from scripts import migrate
+from app.core import security
+from app.core.database import Base, SessionLocal, engine
 from dotenv import load_dotenv
 from datetime import date
 
-from models import Customer, Document, Order, Shipment, User
+from app.models import Customer, Document, Order, Shipment, User
 from sqlalchemy import select, text
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")

@@ -10,19 +10,9 @@ a code change, and the UI does not move at all.
     TRACKING_PROVIDER_NAME=MarineTraffic
 """
 
-import os
-from pathlib import Path
+from app.core.config import TRACKING_PROVIDER_NAME, TRACKING_URL_TEMPLATE
 
-from dotenv import load_dotenv
-
-load_dotenv(Path(__file__).resolve().parent.parent / ".env")
-
-TRACKING_URL_TEMPLATE = os.getenv(
-    "TRACKING_URL_TEMPLATE",
-    "https://www.marinetraffic.com/en/ais/details/ships/imo:{imo}",
-).strip()
-
-TRACKING_PROVIDER_NAME = os.getenv("TRACKING_PROVIDER_NAME", "MarineTraffic").strip()
+__all__ = ["TRACKING_PROVIDER_NAME", "TRACKING_URL_TEMPLATE", "tracking_url", "valid_imo"]
 
 
 def valid_imo(value: str) -> bool:

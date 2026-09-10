@@ -2,11 +2,11 @@
 
 from datetime import datetime, timezone
 
-import security
-from deps import CurrentUser, DbSession
+from app.core import security
+from app.core.deps import CurrentUser, DbSession
 from fastapi import APIRouter, HTTPException, status
-from models import Customer, User
-from schemas import ChangePasswordRequest, CustomerOut, LoginRequest, LoginResponse
+from app.models import Customer, User
+from app.schemas import ChangePasswordRequest, CustomerOut, LoginRequest, LoginResponse
 from sqlalchemy import select
 
 router = APIRouter()

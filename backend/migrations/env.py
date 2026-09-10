@@ -13,10 +13,10 @@ Two things are deliberate here:
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-from database import Base, DATABASE_URL
+from app.core.database import Base, DATABASE_URL
 
 # Importing the models registers every table on Base.metadata.
-import models  # noqa: F401
+from app import models  # noqa: F401
 
 config = context.config
 

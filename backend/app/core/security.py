@@ -17,23 +17,10 @@ import base64
 import hashlib
 import hmac
 import json
-import os
 import secrets
 import time
-from pathlib import Path
 
-from dotenv import load_dotenv
-
-load_dotenv(Path(__file__).resolve().parent.parent / ".env")
-
-SECRET_KEY = os.getenv("SECRET_KEY", "")
-if not SECRET_KEY or len(SECRET_KEY) < 32:
-    raise RuntimeError(
-        "SECRET_KEY must be set in .env and at least 32 characters long. "
-        "Generate one with: python -c \"import secrets; print(secrets.token_urlsafe(48))\""
-    )
-
-TOKEN_TTL_SECONDS = int(os.getenv("TOKEN_TTL_SECONDS", "43200"))  # 12 hours
+from app.core.config import SECRET_KEY, TOKEN_TTL_SECONDS
 
 _ALGORITHM = "pbkdf2_sha256"
 _ITERATIONS = 240_000

@@ -17,40 +17,33 @@ real customer something wrong:
                              blank once you genuinely want to mail everyone.
 """
 
-import os
 import smtplib
 from email.message import EmailMessage
-from pathlib import Path
 
-from dotenv import load_dotenv
+from sqlalchemy import select
 
-load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+from app.core.config import (
+    NOTIFIABLE_STATUSES,
+    NOTIFY_ONLY_EMAILS,
+    PORTAL_URL,
+    SEND_EMAILS,
+    SMTP_FROM,
+    SMTP_HOST,
+    SMTP_PASSWORD,
+    SMTP_PORT,
+    SMTP_USE_TLS,
+    SMTP_USER,
+)
+from app.models import Customer, Notification, Order, Shipment, User
 
-
-def _flag(name: str, default: str = "false") -> bool:
-    return os.getenv(name, default).strip().lower() in ("1", "true", "yes", "on")
-
-
-SEND_EMAILS = _flag("SEND_EMAILS")
-SMTP_HOST = os.getenv("SMTP_HOST", "").strip()
-SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
-SMTP_USER = os.getenv("SMTP_USER", "").strip()
-SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
-SMTP_USE_TLS = _flag("SMTP_USE_TLS", "true")
-SMTP_FROM = os.getenv("SMTP_FROM", "").strip() or "portal@alokindia.co.in"
-PORTAL_URL = os.getenv("PORTAL_URL", "https://portal.alokindia.co.in").strip()
-
-NOTIFY_ONLY_EMAILS = [
-    e.strip().lower()
-    for e in os.getenv("NOTIFY_ONLY_EMAILS", "").split(",")
-    if e.strip()
-]
-
-# Shipment statuses worth telling a customer about.
-NOTIFIABLE_STATUSES = [
-    s.strip()
-    for s in os.getenv("NOTIFY_ON_STATUSES", "Shipped,In transit,Delivered").split(",")
-    if s.strip()
+__all__ = [
+    "NOTIFIABLE_STATUSES",
+    "build_message",
+    "pending",
+    "record_outcome",
+    "send",
+    "subject_for",
+    "would_send_to",
 ]
 
 SUBJECTS = {
@@ -148,3 +141,72 @@ def send(message: EmailMessage) -> tuple[str, str | None]:
         return "failed", f"{type(exc).__name__}: {exc}"
 
     return "sent", None
+
+
+# --------------------------------------------------------- what is still owed
+#
+# These two used to live in notify.py. They are logic, not command-line
+# plumbing: a scheduled job or an API endpoint that sends notifications needs
+# them just as much as the script does, and neither should have to import a
+# script to get them.
+
+
+def pending(session):
+    """Every (shipment, order, customer, user) still owed a notification."""
+    rows = session.execute(
+        select(Shipment, Order, Customer, User)
+        .join(Order, Shipment.order_id == Order.id)
+        .join(Customer, Order.customer_id == Customer.id)
+        .join(User, User.customer_id == Customer.id)
+        .where(
+            Shipment.status.in_(NOTIFIABLE_STATUSES),
+            User.is_active.is_(True),
+        )
+        .order_by(Shipment.id, User.id)
+    ).all()
+
+    # Only a message that genuinely went out counts as done. An attempt that
+    # was suppressed (SEND_EMAILS off, or not on the pilot list) or that
+    # failed must be tried again on the next run - otherwise switching
+    # SEND_EMAILS on would silently skip every shipment recorded while it
+    # was off, and a bounced email would never be retried.
+    already = {
+        (n.shipment_id, n.event, n.user_id)
+        for n in session.scalars(
+            select(Notification).where(Notification.outcome == "sent")
+        )
+    }
+
+    return [
+        (shipment, order, customer, user)
+        for shipment, order, customer, user in rows
+        if (shipment.id, shipment.status, user.id) not in already
+    ]
+
+
+def record_outcome(session, shipment, user, outcome: str, detail: str | None):
+    """Write down what happened to one message, replacing any earlier attempt.
+
+    An earlier attempt may already have left a row here, recorded as
+    suppressed or failed. Updating that row rather than inserting a second
+    one is what lets the unique constraint keep its promise: one record per
+    (shipment, status, user), so nobody is ever told the same thing twice.
+    """
+    record = session.scalar(
+        select(Notification).where(
+            Notification.shipment_id == shipment.id,
+            Notification.event == shipment.status,
+            Notification.user_id == user.id,
+        )
+    )
+    if record is None:
+        record = Notification(
+            shipment_id=shipment.id,
+            user_id=user.id,
+            event=shipment.status,
+            channel="email",
+        )
+        session.add(record)
+    record.outcome = outcome
+    record.detail = detail
+    return record

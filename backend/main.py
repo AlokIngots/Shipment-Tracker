@@ -1,24 +1,36 @@
-"""Alok Ingots Customer Portal — FastAPI backend.
+"""Alok Ingots Customer Portal — API entry point.
 
-This file does one thing: build the app and hand it the four routers. The
-routes themselves live in routers/, the shapes they exchange in schemas.py,
-and the rules about who may call what in deps.py.
+This file does one thing: build the app and hand it its routers. Everything
+else lives under app/ — see backend/README.md for the code map.
 
-Every customer-facing route scopes on the customer taken from the sign-in
-token, never on anything in the request, so a signed-in user can only ever
-read their own orders.
+The portal has two halves and they are separated here, in the routing, not
+only in the screens:
+
+  * The customer half (auth, orders, documents) is read-only. It has no
+    POST, PUT or DELETE except the one that changes your own password.
+  * The admin half, everything under /api/staff, is where data is written,
+    and every route in it depends on StaffUser.
 """
 
 from fastapi import FastAPI
-from routers import auth, orders, staff_documents, staff_orders
+
+from app.routers import auth, documents, orders
+from app.routers.admin import documents as admin_documents
+from app.routers.admin import orders as admin_orders
+from app.routers.admin import shipments as admin_shipments
 
 app = FastAPI(
     title="Alok Ingots Customer Portal API",
     description="Backend API for the Alok Ingots export customer portal.",
-    version="0.3.0",
+    version="0.4.0",
 )
 
+# The customer portal: read-only.
 app.include_router(auth.router, tags=["auth"])
 app.include_router(orders.router, tags=["customer"])
-app.include_router(staff_orders.router, tags=["staff"])
-app.include_router(staff_documents.router, tags=["staff"])
+app.include_router(documents.router, tags=["customer"])
+
+# The admin console: the only place anything is written.
+app.include_router(admin_orders.router, tags=["admin"])
+app.include_router(admin_shipments.router, tags=["admin"])
+app.include_router(admin_documents.router, tags=["admin"])

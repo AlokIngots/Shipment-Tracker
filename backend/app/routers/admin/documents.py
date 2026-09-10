@@ -4,11 +4,11 @@ Uploading is the only way a browser can write a file into the portal, and
 everything it is allowed to write is decided in storage.py, not here.
 """
 
-import storage
-from deps import DbSession, StaffUser, bad_request, not_found
+from app.services import storage
+from app.core.deps import DbSession, StaffUser, bad_request, not_found
 from fastapi import APIRouter, File, Form, UploadFile
-from models import Customer, Document, Order, Shipment
-from schemas import StaffDocumentOut, StaffShipmentOut
+from app.models import Customer, Document, Order, Shipment
+from app.schemas import StaffDocumentOut, StaffShipmentOut
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from typing import Annotated

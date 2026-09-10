@@ -1,25 +1,26 @@
-"""What a customer may read: their own orders, and their own documents.
+"""What a customer may read: their own orders.
 
 Every route here scopes on the customer taken from the sign-in token, never
-from anything in the request. Asking for somebody else's order or document
-answers 404 rather than 403, so the API never confirms that a row belonging
-to another customer exists.
+on anything in the request. Asking for somebody else's order answers 404
+rather than 403, so the API never confirms that a row belonging to another
+customer exists.
+
+Read-only, and not by accident: there is no POST, PUT or DELETE anywhere in
+the customer half of the API. Only the admin console writes.
 """
 
 from decimal import Decimal
 
-import storage
-import tracking
-from deps import DbSession, SettledUser, not_found
 from fastapi import APIRouter
-from fastapi.responses import FileResponse
-from models import Document, Order, Shipment
-from schemas import DocumentOut, OrderDetailOut, OrderOut, ShipmentOut
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-router = APIRouter()
+from app.core.deps import DbSession, SettledUser, not_found
+from app.models import Order, Shipment
+from app.schemas import DocumentOut, OrderDetailOut, OrderOut, ShipmentOut
+from app.services import tracking
 
+router = APIRouter()
 
 @router.get("/api/orders", response_model=list[OrderOut])
 def list_orders(current_user: SettledUser, db: DbSession) -> list[Order]:
@@ -74,37 +75,4 @@ def get_order(
         dispatched_qty=dispatched,
         balance_qty=ordered - dispatched,
         shipments=shipments,
-    )
-
-
-@router.get("/api/documents/{document_id}/download")
-def download_document(
-    document_id: int, current_user: SettledUser, db: DbSession
-) -> FileResponse:
-    """Send a document file back to the customer it belongs to.
-
-    Ownership is walked all the way up (document -> shipment -> order ->
-    customer) and compared with the customer on the token.
-    """
-    document = db.scalar(
-        select(Document)
-        .join(Shipment, Document.shipment_id == Shipment.id)
-        .join(Order, Shipment.order_id == Order.id)
-        .where(
-            Document.id == document_id,
-            Order.customer_id == current_user.customer_id,
-        )
-    )
-    if document is None:
-        raise not_found("Document not found.")
-
-    path = storage.resolve(document.stored_path or "")
-    if path is None:
-        # The row exists but the file has not been uploaded yet.
-        raise not_found("This document has not been uploaded yet.")
-
-    return FileResponse(
-        path,
-        media_type="application/pdf",
-        filename=document.file_name,
     )
