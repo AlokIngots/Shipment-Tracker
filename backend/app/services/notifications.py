@@ -79,6 +79,10 @@ def build_message(user, customer, order, shipment) -> EmailMessage:
         lines.append(f"  Vessel        {shipment.vessel_name}")
     if shipment.imo_number:
         lines.append(f"  IMO           {shipment.imo_number}")
+    if shipment.container_no:
+        lines.append(f"  Container     {shipment.container_no}")
+    if shipment.bl_number:
+        lines.append(f"  B/L           {shipment.bl_number}")
     if shipment.etd:
         lines.append(f"  Departed      {shipment.etd:%d %b %Y}")
     if shipment.eta:

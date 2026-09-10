@@ -59,6 +59,8 @@ class ShipmentOut(BaseModel):
     status: str | None
     vessel_name: str | None
     imo_number: str | None
+    container_no: str | None
+    bl_number: str | None
     etd: date | None
     eta: date | None
     # Built by the server so the provider can change without touching the UI.

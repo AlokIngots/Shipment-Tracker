@@ -14,6 +14,8 @@ export default function ShipmentForm({ orderId, shipment, onSaved, onCancel }) {
     status: shipment?.status ?? '',
     vessel_name: shipment?.vessel_name ?? '',
     imo_number: shipment?.imo_number ?? '',
+    container_no: shipment?.container_no ?? '',
+    bl_number: shipment?.bl_number ?? '',
     etd: shipment?.etd ?? '',
     eta: shipment?.eta ?? '',
   }))
@@ -46,6 +48,8 @@ export default function ShipmentForm({ orderId, shipment, onSaved, onCancel }) {
       status: blankToNull(form.status),
       vessel_name: blankToNull(form.vessel_name),
       imo_number: blankToNull(form.imo_number),
+      container_no: blankToNull(form.container_no),
+      bl_number: blankToNull(form.bl_number),
       etd: blankToNull(form.etd),
       eta: blankToNull(form.eta),
     }
@@ -105,6 +109,23 @@ export default function ShipmentForm({ orderId, shipment, onSaved, onCancel }) {
           inputMode="numeric"
           maxLength={7}
           hint="Seven digits. The last one is a check digit, so a typo is refused."
+        />
+
+        <TextField
+          label="Container number"
+          value={form.container_no}
+          onChange={set('container_no')}
+          maxLength={20}
+          placeholder="MSCU1234566"
+          hint="Four letters then seven digits. The last one is a check digit, so a typo is refused."
+        />
+
+        <TextField
+          label="B/L number"
+          value={form.bl_number}
+          onChange={set('bl_number')}
+          maxLength={60}
+          hint="As the carrier issued it. No format is enforced."
         />
 
         <TextField label="ETD" value={form.etd} onChange={set('etd')} type="date" />

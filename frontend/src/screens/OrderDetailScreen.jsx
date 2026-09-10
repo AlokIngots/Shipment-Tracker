@@ -196,6 +196,14 @@ export default function OrderDetailScreen({ orderId, onBack, onSignOut, session 
                   <dd className="mono">{shipment.imo_number || DASH}</dd>
                 </div>
                 <div>
+                  <dt>Container</dt>
+                  <dd className="mono">{shipment.container_no || DASH}</dd>
+                </div>
+                <div>
+                  <dt>B/L number</dt>
+                  <dd className="mono">{shipment.bl_number || DASH}</dd>
+                </div>
+                <div>
                   <dt>ETD</dt>
                   <dd>{fmtDate(shipment.etd)}</dd>
                 </div>

@@ -50,6 +50,8 @@ class StaffOrderShipmentOut(BaseModel):
     status: str | None
     vessel_name: str | None
     imo_number: str | None
+    container_no: str | None
+    bl_number: str | None
     etd: date | None
     eta: date | None
     # So the page can say why a shipment refuses to be removed.
@@ -97,6 +99,8 @@ class ShipmentIn(BaseModel):
     status: str | None = None
     vessel_name: str | None = None
     imo_number: str | None = None
+    container_no: str | None = None
+    bl_number: str | None = None
     etd: date | None = None
     eta: date | None = None
 

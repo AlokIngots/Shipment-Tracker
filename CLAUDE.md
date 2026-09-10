@@ -368,13 +368,13 @@ the customer side needs, and a step is done when both work.
 | 13 | Documents, on a screen | staff upload / replace / remove page | (already had download) | **Done** |
 | 14 | Orders & shipments, on a screen | create and edit orders and part-shipments | (already had the read side) | **Done** |
 | 15 | Material photos | upload several at once against a shipment, with a caption; remove one | a thumbnail gallery on the order detail page, click for full size | **Done** |
+| 16 | Container & B/L number | two fields on the shipment form and in the CSV importer; container check-digit validated | both shown on the order detail beside the vessel, and in the notification email | **Done** |
 
 ### Still to build, both sides
 
 | Step | Admin Console side | Customer Portal side |
 | ---- | ------------------ | -------------------- |
 | **Photos from the Bundle app** | pull photos from the existing Bundle Inspection app instead of uploading them by hand | (gallery already built in step 15) |
-| **Container and BL numbers** | two more fields on the shipment form, and in the CSV importer | shown on the order detail page beside the vessel |
 | **The four-step status** | In Production → Packed → Shipped → Delivered as a real sequence rather than free text | the status pill follows it |
 | **Customers & logins on a screen** | add a customer company and create their login from the admin console, instead of `scripts/manage_users.py` on the server | — |
 | **Notifications — WhatsApp** | choose which statuses message which channel | receives the WhatsApp message |
@@ -443,6 +443,8 @@ Update after every step: what was done, and the commit.
 | 2026-09-10 | **Backend reorganised.** The flat `backend/` became `app/core`, `app/models`, `app/schemas`, `app/routers` (+ `admin/`), `app/services` and `scripts/`, moved with `git mv` so the history follows. New `app/core/config.py`: four modules each worked out the project root with `Path(__file__).parent.parent` and each loaded `.env` again, so moving any of them one folder deeper silently changed where it looked. `notifier.py`/`notify.py` were **not** duplicates — library and command — so nothing was deleted; the two pieces of logic stranded in the script moved into the service. Proved: the same 18 endpoints path by path, all six scripts run, 43 checks pass unchanged | `c7d06da` |
 
 | 2026-09-10 | **Step 15 — Material photos, both halves.** New `photos` table (migration 0004) rather than a new document type: a document is one file per kind per shipment and uploading another replaces it, so photos in `documents` would have been quietly destroyed by the replace rule. Admin: several photos in one upload with a shared caption, all-or-nothing so a bad file in a batch keeps none of it, and Remove on each. Customer: a thumbnail strip per shipment on the order detail page, click for full size, Escape to close. Staff need their own image route because `/api/photos/{id}` depends on `SettledUser`, which refuses a staff account by design. Deleting a shipment now removes its photo files from disk, not just their rows. Proved by 33 new end-to-end checks, plus the 43 from step 14 re-run | _this commit_ |
+
+| 2026-09-10 | **Step 16 — Container number and B/L number, both halves.** Migration 0005 adds both to `shipments`, nullable because an LCL consignment may have no container and a B/L number does not exist until the carrier issues it. A container number is validated against its ISO 6346 check digit — `valid_container_no` sits in `app/services/tracking.py` beside `valid_imo` and is shared with the CSV importer, so the screen and the importer cannot disagree. Stored upper case with spaces and hyphens stripped. A B/L number has no standard format and none is enforced. Both appear on the staff shipment row, on the customer's order detail beside the vessel, and in the notification email. Proved by 15 new checks plus the 43 and 33 from steps 14 and 15 re-run | _this commit_ |
 
 ### Design decisions worth remembering
 
@@ -524,6 +526,20 @@ Update after every step: what was done, and the commit.
   files is a PDF, none of the five is kept and the message names the file
   that was wrong. Keeping three of five leaves somebody working out which.
 
+### Design decisions worth remembering
+
+- **A container number is check-digit validated; a B/L number is not.** ISO
+  6346 puts a check digit on every container number precisely so a
+  transposition is caught, and `valid_container_no` catches it at the one
+  screen where somebody types it rather than in front of a customer trying
+  to trace a box that does not exist. Bills of Lading have no standard
+  format at all — every carrier numbers its own way — so validating one
+  would only ever refuse a real one.
+- **`valid_container_no` lives beside `valid_imo` in the tracking service**
+  and is imported by the CSV importer, for the same reason `valid_imo` is:
+  what the screen refuses and what the importer refuses must be the same
+  thing, and the only way to guarantee that is one function.
+
 ### Known issues / risks
 
 - **A token cannot be cancelled one at a time.** Tokens are signed and
@@ -559,10 +575,16 @@ Update after every step: what was done, and the commit.
   ready; real values arrive once the SAP/PMS export is settled.
 - **The demo database now also holds `CUST-100` / `CUST-101`** from importing
   the template. They have no users, so nobody can sign in as them.
-- **Container number and BL number are not recorded anywhere.** The
-  shipment form has vessel, IMO, quantity, status and dates, and the CSV
-  importer has the same set. Both need two more fields before a customer can
-  be shown a container number, and the admin side needs them first.
+- **A container number that is not ISO 6346 will be refused.** Virtually
+  every shipping container complies, but if a forwarder ever supplies a
+  non-standard reference — some LCL and groupage paperwork does — the
+  screen and the importer will both reject it and the only way through is
+  to leave the field blank. Worth knowing before somebody assumes the
+  portal is broken.
+- **Container tracking is still vessel tracking.** The container number is
+  now recorded and shown, but the "View live on..." link still points at
+  MarineTraffic by IMO, which shows where the *ship* is. Nothing tracks the
+  box itself. Real container-level tracking needs a paid carrier API.
 - **Nothing records who uploaded or removed a document.** The staff page
   makes both easy, and neither leaves a trace beyond the file itself. Worth
   an audit trail before more than one or two people have staff logins.

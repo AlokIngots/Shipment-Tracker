@@ -1,4 +1,4 @@
-customer_code,customer_name,customer_country,sales_order_no,customer_po,grade,description,ordered_qty,unit,order_status,shipment_no,dispatched_qty,shipment_status,vessel_name,imo_number,etd,eta
-CUST-100,Example Buyer GmbH,Germany,AIMPL/SO/EXP/001/2025-26,PO-000000001,304 / 1.4301,"Bright bar rounds 10-25 mm, h9",250.000,MT,In transit,AIMPL/SHP/001-1,150.000,Delivered,MV EXAMPLE ONE,9074729,2025-05-04,2025-06-01
-CUST-100,Example Buyer GmbH,Germany,AIMPL/SO/EXP/001/2025-26,PO-000000001,304 / 1.4301,"Bright bar rounds 10-25 mm, h9",250.000,MT,In transit,AIMPL/SHP/001-2,100.000,In transit,MV EXAMPLE TWO,9633082,2025-07-11,2025-08-06
-CUST-101,Example Trading SpA,Italy,AIMPL/SO/EXP/002/2025-26,PO-000000002,431 / 1.4057,"Bright bar rounds 20-40 mm, h9",90.000,MT,In production,,,,,,,
+customer_code,customer_name,customer_country,sales_order_no,customer_po,grade,description,ordered_qty,unit,order_status,shipment_no,dispatched_qty,shipment_status,vessel_name,imo_number,container_no,bl_number,etd,eta
+CUST-100,Example Buyer GmbH,Germany,AIMPL/SO/EXP/001/2025-26,PO-000000001,304 / 1.4301,"Bright bar rounds 10-25 mm, h9",250.000,MT,In transit,AIMPL/SHP/001-1,150.000,Delivered,MV EXAMPLE ONE,9074729,CSQU3054383,MAEU240518771,2025-05-04,2025-06-01
+CUST-100,Example Buyer GmbH,Germany,AIMPL/SO/EXP/001/2025-26,PO-000000001,304 / 1.4301,"Bright bar rounds 10-25 mm, h9",250.000,MT,In transit,AIMPL/SHP/001-2,100.000,In transit,MV EXAMPLE TWO,9633082,MSCU1234566,MSCUZZ1234567,2025-07-11,2025-08-06
+CUST-101,Example Trading SpA,Italy,AIMPL/SO/EXP/002/2025-26,PO-000000002,431 / 1.4057,"Bright bar rounds 20-40 mm, h9",90.000,MT,In production,,,,,,,,,

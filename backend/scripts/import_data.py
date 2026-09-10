@@ -31,6 +31,8 @@ shipment columns left blank. Order fields repeat on every row of that order.
     shipment_status     optional
     vessel_name         optional
     imo_number          optional   7 digits, checksum validated
+    container_no        optional   ISO 6346, e.g. MSCU1234566, check digit validated
+    bl_number           optional   the carrier's Bill of Lading number, any format
     etd                 optional   YYYY-MM-DD
     eta                 optional   YYYY-MM-DD
 
@@ -47,7 +49,7 @@ from pathlib import Path
 from app.core.database import SessionLocal
 from app.models import Customer, Order, Shipment
 from sqlalchemy import select
-from app.services.tracking import valid_imo
+from app.services.tracking import tidy_container_no, valid_container_no, valid_imo
 
 REQUIRED_COLUMNS = [
     "customer_code",
@@ -60,7 +62,7 @@ ALL_COLUMNS = [
     "sales_order_no", "customer_po", "grade", "description",
     "ordered_qty", "unit", "order_status",
     "shipment_no", "dispatched_qty", "shipment_status",
-    "vessel_name", "imo_number", "etd", "eta",
+    "vessel_name", "imo_number", "container_no", "bl_number", "etd", "eta",
 ]
 
 
@@ -108,12 +110,24 @@ def check_row(row: dict, line: int) -> tuple[dict, list[str]]:
         errors.append("dispatched_qty is required when shipment_no is given")
 
     if not data["shipment_no"] and any(
-        data[f] for f in ("vessel_name", "imo_number", "shipment_status")
+        data[f]
+        for f in ("vessel_name", "imo_number", "container_no", "bl_number",
+                  "shipment_status")
     ):
         errors.append("shipment details given without a shipment_no")
 
     if data["imo_number"] and not valid_imo(data["imo_number"]):
         errors.append(f"imo_number: {data['imo_number']!r} is not a valid IMO number")
+
+    # Same rule as the staff screen applies, from the same function, so a
+    # container number the screen refuses cannot arrive through a CSV.
+    if data["container_no"]:
+        data["container_no"] = tidy_container_no(data["container_no"])
+        if not valid_container_no(data["container_no"]):
+            errors.append(
+                f"container_no: {data['container_no']!r} is not a valid "
+                "container number (ISO 6346, e.g. MSCU1234566)"
+            )
 
     # The staff screen refuses this too. Both sides of the portal have to
     # agree on what a valid shipment looks like, or a row the importer
@@ -193,6 +207,8 @@ def apply_rows(rows: list[dict], dry_run: bool) -> dict:
                     "status": data["shipment_status"] or None,
                     "vessel_name": data["vessel_name"] or None,
                     "imo_number": data["imo_number"] or None,
+                    "container_no": data["container_no"] or None,
+                    "bl_number": data["bl_number"] or None,
                     "etd": data["etd"],
                     "eta": data["eta"],
                 }

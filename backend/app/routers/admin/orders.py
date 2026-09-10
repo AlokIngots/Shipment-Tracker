@@ -64,6 +64,8 @@ def staff_order_out(order: Order, customer: Customer) -> StaffOrderOut:
                 status=s.status,
                 vessel_name=s.vessel_name,
                 imo_number=s.imo_number,
+                container_no=s.container_no,
+                bl_number=s.bl_number,
                 etd=s.etd,
                 eta=s.eta,
                 document_count=len(s.documents),
@@ -128,6 +130,18 @@ def apply_shipment(shipment: Shipment, body: ShipmentIn, db: Session) -> None:
             "following a link to the wrong ship."
         )
 
+    # A container number carries its own check digit, exactly as an IMO
+    # number does, so a transposed pair of characters is caught here rather
+    # than by a customer trying to trace a box that does not exist.
+    container_no = tracking.tidy_container_no(body.container_no)
+    if container_no and not tracking.valid_container_no(container_no):
+        raise bad_request(
+            f"{container_no} is not a valid container number. It is four "
+            "letters then seven digits (like MSCU1234566), and the last "
+            "digit is a check digit worked out from the rest — so a typo "
+            "or two characters the wrong way round is refused here."
+        )
+
     if body.etd and body.eta and body.eta < body.etd:
         raise bad_request("The arrival date cannot be before the departure date.")
 
@@ -137,6 +151,10 @@ def apply_shipment(shipment: Shipment, body: ShipmentIn, db: Session) -> None:
     shipment.status = tidy(body.status)
     shipment.vessel_name = tidy(body.vessel_name)
     shipment.imo_number = imo_number
+    shipment.container_no = container_no
+    # No format to check: every carrier numbers its Bills of Lading its own
+    # way, so refusing anything here would only refuse real ones.
+    shipment.bl_number = tidy(body.bl_number)
     shipment.etd = body.etd
     shipment.eta = body.eta
 

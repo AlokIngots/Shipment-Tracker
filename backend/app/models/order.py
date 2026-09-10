@@ -62,6 +62,12 @@ class Shipment(Base):
     status: Mapped[str | None] = mapped_column(String(50))
     vessel_name: Mapped[str | None] = mapped_column(String(140))
     imo_number: Mapped[str | None] = mapped_column(String(20))
+    # ISO 6346: four letters and seven digits, e.g. MSCU1234566. Stored
+    # upper case with no spaces, and check-digit validated on the way in.
+    container_no: Mapped[str | None] = mapped_column(String(20))
+    # The carrier's Bill of Lading number. No standard format exists --
+    # every line numbers its own way -- so this is stored as given.
+    bl_number: Mapped[str | None] = mapped_column(String(60))
     etd: Mapped[date | None] = mapped_column(Date)
     eta: Mapped[date | None] = mapped_column(Date)
 

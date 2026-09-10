@@ -14,6 +14,8 @@ function ShipmentRow({ shipment, onEdit, onRemove, busy }) {
           {shipment.dispatched_qty} {shipment.unit} · {shipment.vessel_name || DASH}
           {shipment.imo_number ? ` (IMO ${shipment.imo_number})` : ''} ·{' '}
           {fmtDate(shipment.etd)} → {fmtDate(shipment.eta)}
+          {shipment.container_no ? ` · ${shipment.container_no}` : ''}
+          {shipment.bl_number ? ` · B/L ${shipment.bl_number}` : ''}
           {shipment.document_count > 0
             ? ` · ${shipment.document_count} document(s)`
             : ''}
