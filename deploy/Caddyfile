@@ -1,0 +1,30 @@
+# The portal's front door.
+#
+# PORTAL_DOMAIN decides how this behaves:
+#   portal.alokindia.co.in  -> Caddy obtains a real HTTPS certificate itself
+#                              and renews it, with nothing to remember
+#   :80                     -> plain HTTP, used when testing locally
+#
+{$PORTAL_DOMAIN::80} {
+	encode zstd gzip
+
+	# Anything under /api is the FastAPI backend. The browser only ever
+	# talks to this one origin, so there are no CORS problems.
+	handle /api/* {
+		reverse_proxy api:8000
+	}
+
+	# Everything else is the React app. Unknown paths fall back to
+	# index.html so the app can handle them itself.
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+	}
+}
