@@ -41,17 +41,19 @@ import argparse
 from datetime import datetime, timezone
 
 from app.core import security
+from app.services import accounts
 from app.core.database import SessionLocal
 from app.models import Customer, Order, User
 from sqlalchemy import func, select
 
 
-def find_user(session, email: str) -> User | None:
-    return session.scalar(select(User).where(User.email == email.strip().lower()))
+# Every decision below is made in app/services/accounts.py, so this script
+# and the Customers & logins screen in the admin console cannot drift apart
+# in what they allow. This file parses arguments and prints; that one
+# decides. AccountProblem carries the reason, already phrased for a person.
 
-
-def find_customer(session, code: str) -> Customer | None:
-    return session.scalar(select(Customer).where(Customer.code == code.strip()))
+find_user = accounts.find_user
+find_customer = accounts.find_customer
 
 
 def announce(email: str, password: str) -> None:
@@ -70,117 +72,73 @@ def announce(email: str, password: str) -> None:
     print("  them choose their own password before showing them any orders.")
 
 
-# ------------------------------------------------------------------ actions
-
-
 def do_list(session) -> int:
-    """Show every customer, and who can sign in for them."""
-    staff = session.scalars(
-        select(User).where(User.is_staff.is_(True)).order_by(User.email)
-    ).all()
+    """Every customer, who signs in for them, and the staff."""
+    staff = accounts.staff_users(session)
     if staff:
         print("Alok Ingots staff")
         for user in staff:
-            flags = []
-            if not user.is_active:
-                flags.append("DEACTIVATED")
-            if user.must_change_password:
-                flags.append("temporary password, not yet changed")
-            suffix = f"   [{'; '.join(flags)}]" if flags else ""
-            name = f" ({user.full_name})" if user.full_name else ""
-            print(f"    {user.email}{name}{suffix}")
+            print(f"    {describe_user(user)}")
+        print()
 
-    customers = session.scalars(select(Customer).order_by(Customer.code)).all()
-    if not customers:
+    rows = accounts.customers_with_logins(session)
+    if not rows:
         print("No customers yet. Add one with --add-customer.")
         return 0
 
-    without_logins = 0
-    for customer in customers:
-        orders = session.scalar(
-            select(func.count(Order.id)).where(Order.customer_id == customer.id)
-        )
-        country = f", {customer.country}" if customer.country else ""
-        print(f"\n{customer.code} - {customer.name}{country}   ({orders} order(s))")
-
-        users = session.scalars(
-            select(User).where(User.customer_id == customer.id).order_by(User.email)
-        ).all()
+    for customer, users, order_count in rows:
+        where = f", {customer.country}" if customer.country else ""
+        print(f"{customer.code} - {customer.name}{where}   "
+              f"({order_count} order(s))")
         if not users:
-            without_logins += 1
             print("    (nobody can sign in for this customer yet)")
-            continue
-
         for user in users:
-            flags = []
-            if not user.is_active:
-                flags.append("DEACTIVATED")
-            if user.must_change_password:
-                flags.append("temporary password, not yet changed")
-            elif user.password_changed_at:
-                flags.append(f"chose their password {user.password_changed_at:%d %b %Y}")
-            suffix = f"   [{'; '.join(flags)}]" if flags else ""
-            name = f" ({user.full_name})" if user.full_name else ""
-            print(f"    {user.email}{name}{suffix}")
-
-    if without_logins:
-        print(f"\nNote: {without_logins} customer(s) above have nobody who can sign in.")
+            print(f"    {describe_user(user)}")
+        print()
     return 0
 
 
+def describe_user(user) -> str:
+    name = f" ({user.full_name})" if user.full_name else ""
+    flags = []
+    if not user.is_active:
+        flags.append("DEACTIVATED")
+    if user.must_change_password:
+        flags.append("temporary password, not yet changed")
+    suffix = f"   [{', '.join(flags)}]" if flags else ""
+    return f"{user.email}{name}{suffix}"
+
+
 def do_add_customer(session, args) -> int:
-    code = args.add_customer.strip()
     if not args.name:
         print("! --add-customer also needs --name.")
         return 1
-    if find_customer(session, code):
-        print(f"! A customer with code {code} already exists. See --list.")
-        return 1
+    code = args.add_customer.strip()
 
     if args.dry_run:
         print(f"Would add customer {code} - {args.name}")
         return 0
 
-    session.add(Customer(
-        code=code,
-        name=args.name.strip(),
-        country=(args.country or "").strip() or None,
-    ))
-    session.commit()
-    print(f"Added customer {code} - {args.name}")
+    customer = accounts.create_customer(session, code, args.name, args.country)
+    print(f"Added customer {customer.code} - {customer.name}")
     print("Now give somebody a login for it:")
-    print(f"  python manage_users.py --add-user EMAIL --customer {code}")
+    print(f"  python -m scripts.manage_users --add-user EMAIL --customer {customer.code}")
     return 0
 
 
 def do_add_staff(session, args) -> int:
     email = args.add_staff.strip().lower()
-    if find_user(session, email):
-        print(f"! {email} can already sign in.")
-        print("  A customer login cannot be turned into a staff one: they see")
-        print("  different things, and mixing them up is how a customer ends")
-        print("  up looking at somebody else's shipments.")
-        return 1
-
     if args.dry_run:
         print(f"Would add {email} as Alok Ingots staff,")
         print("and print a temporary password once.")
         return 0
 
-    password = security.temporary_password()
-    session.add(User(
-        customer_id=None,
-        email=email,
-        password_hash=security.hash_password(password),
-        full_name=(args.full_name or "").strip() or None,
-        is_active=True,
-        is_staff=True,
-        must_change_password=True,
-    ))
-    session.commit()
-
-    print(f"Added {email} as Alok Ingots staff.")
-    announce(email, password)
+    # Only reachable from here. There is no route in the API that creates a
+    # staff account, on purpose: staff is the flag that unlocks every write
+    # in the portal.
+    user, password = accounts.create_staff_login(session, email, args.full_name)
+    print(f"Added {user.email} as Alok Ingots staff.")
+    announce(user.email, password)
     return 0
 
 
@@ -194,29 +152,15 @@ def do_add_user(session, args) -> int:
     if customer is None:
         print(f"! No customer with code {args.customer}. Add it first, or see --list.")
         return 1
-    if find_user(session, email):
-        print(f"! {email} can already sign in.")
-        print("  Use --reset-password to give them a new password.")
-        return 1
 
     if args.dry_run:
         print(f"Would add {email} to {customer.code} - {customer.name},")
         print("and print a temporary password once.")
         return 0
 
-    password = security.temporary_password()
-    session.add(User(
-        customer_id=customer.id,
-        email=email,
-        password_hash=security.hash_password(password),
-        full_name=(args.full_name or "").strip() or None,
-        is_active=True,
-        must_change_password=True,
-    ))
-    session.commit()
-
-    print(f"Added {email} to {customer.code} - {customer.name}.")
-    announce(email, password)
+    user, password = accounts.create_login(session, customer, email, args.full_name)
+    print(f"Added {user.email} to {customer.code} - {customer.name}.")
+    announce(user.email, password)
     return 0
 
 
@@ -231,17 +175,9 @@ def do_reset_password(session, args) -> int:
         print(f"Would give {email} a new temporary password.")
         return 0
 
-    password = security.temporary_password()
-    user.password_hash = security.hash_password(password)
-    user.must_change_password = True
-    # Stamping this now signs out anything already holding a token for this
-    # account. A password is usually reset because somebody should not be
-    # signed in any more, and leaving them signed in would defeat it.
-    user.password_changed_at = datetime.now(timezone.utc).replace(microsecond=0)
-    session.commit()
-
-    print(f"Reset the password for {email}.")
-    announce(email, password)
+    password = accounts.reset_password(session, user)
+    print(f"Reset the password for {user.email}.")
+    announce(user.email, password)
     return 0
 
 
@@ -251,18 +187,18 @@ def set_active(session, args, email: str, active: bool) -> int:
         print(f"! Nobody signs in as {email}. See --list.")
         return 1
 
-    if user.is_active == active:
-        state = "active" if active else "deactivated"
-        print(f"{user.email} is already {state}. Nothing to do.")
-        return 0
-
     word = "let back in" if active else "locked out"
     if args.dry_run:
         print(f"Would have {user.email} {word}.")
         return 0
 
-    user.is_active = active
-    session.commit()
+    # acting_user is None: run from the server, there is nobody to lock out
+    # of a session, and somebody with a shell can always undo it.
+    if not accounts.set_active(session, user, active):
+        state = "active" if active else "deactivated"
+        print(f"{user.email} is already {state}. Nothing to do.")
+        return 0
+
     print(f"{user.email} has been {word}.")
     if not active:
         print("This takes effect immediately, including for a token they already hold.")
@@ -329,5 +265,15 @@ def main() -> int:
     return 0
 
 
+def run() -> int:
+    """main(), with the service's refusals printed the way this script always
+    printed its own: one line, starting with '!', and a non-zero exit."""
+    try:
+        return main()
+    except accounts.AccountProblem as problem:
+        print(f"! {problem}")
+        return 1
+
+
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(run())

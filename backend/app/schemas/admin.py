@@ -121,3 +121,75 @@ class StaffShipmentPhotosOut(BaseModel):
     shipment_id: int
     shipment_no: str
     photos: list[StaffPhotoOut]
+
+
+class StaffLoginOut(BaseModel):
+    """One person who can sign in, as the admin console lists them."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    email: str
+    full_name: str | None
+    is_active: bool
+    is_staff: bool
+    # True while they are still on the temporary password staff gave them.
+    must_change_password: bool
+
+
+class StaffCustomerAccountOut(BaseModel):
+    """A customer company, who signs in for it, and how much work it has."""
+
+    id: int
+    code: str
+    name: str
+    country: str | None
+    order_count: int
+    logins: list[StaffLoginOut]
+
+
+class StaffAccountsOut(BaseModel):
+    """The whole Customers & logins screen in one response."""
+
+    customers: list[StaffCustomerAccountOut]
+    staff: list[StaffLoginOut]
+
+
+class CustomerIn(BaseModel):
+    """A customer company as staff submit it."""
+
+    code: str
+    name: str
+    country: str | None = None
+
+
+class CustomerEditIn(BaseModel):
+    """Editing a customer. The code is not here: it is the join to SAP/PMS."""
+
+    name: str
+    country: str | None = None
+
+
+class LoginIn(BaseModel):
+    """A new login for a customer."""
+
+    email: str
+    full_name: str | None = None
+
+
+class ActiveIn(BaseModel):
+    """Letting somebody in, or locking them out."""
+
+    active: bool
+
+
+class TemporaryPasswordOut(BaseModel):
+    """A new login or a reset, with the one-time password.
+
+    The password is in this response and nowhere else, ever again: only its
+    hash is stored, so nobody, including the server, can read it back.
+    """
+
+    detail: str
+    email: str
+    temporary_password: str

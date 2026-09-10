@@ -39,6 +39,7 @@ backend/
       documents.py   a customer downloading their documents   (read-only)
       photos.py      a customer viewing their material photos (read-only)
       admin/         everything that writes. Staff only.
+        accounts.py  customers and their logins (never staff logins)
         orders.py    create and edit orders; the checking rules
         shipments.py create and edit part-shipments
         documents.py attach and remove shipping documents
@@ -48,6 +49,7 @@ backend/
       storage.py     where document files live on disk
       tracking.py    IMO validation and the live-tracking link
       notifications.py  who is owed a message, and sending it
+      accounts.py    customers, logins, temporary passwords
 
   scripts/           one-off tools, run by hand on the server
     migrate.py       bring the database schema up to date

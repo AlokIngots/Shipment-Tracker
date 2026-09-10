@@ -500,3 +500,45 @@
 .lightbox-close:hover {
   background: rgba(255, 255, 255, 0.3);
 }
+
+/* ---- customers & logins ---- */
+
+/* A one-time password. Loud on purpose: closing this box is the last time
+   anybody can read it. */
+.card--password {
+  border: 2px solid var(--navy);
+  background: #f7f8fb;
+}
+
+.password-value {
+  margin: 4px 0 14px;
+  padding: 14px 16px;
+  border: 1px dashed var(--navy);
+  border-radius: 7px;
+  background: #fff;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 20px;
+  letter-spacing: 0.04em;
+  color: var(--navy);
+  text-align: center;
+  overflow-wrap: anywhere;
+  /* Selectable with one gesture, for whoever does not trust the copy button. */
+  user-select: all;
+}
+
+.card--password .lead {
+  margin-bottom: 10px;
+}
+
+.shipment-sub code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: #eef0f6;
+  font-size: 11.5px;
+}
+
+.formgrid input:disabled {
+  background: #f2f3f7;
+  color: var(--muted);
+  cursor: not-allowed;
+}

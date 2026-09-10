@@ -369,6 +369,7 @@ the customer side needs, and a step is done when both work.
 | 14 | Orders & shipments, on a screen | create and edit orders and part-shipments | (already had the read side) | **Done** |
 | 15 | Material photos | upload several at once against a shipment, with a caption; remove one | a thumbnail gallery on the order detail page, click for full size | **Done** |
 | 16 | Container & B/L number | two fields on the shipment form and in the CSV importer; container check-digit validated | both shown on the order detail beside the vessel, and in the notification email | **Done** |
+| 17 | Customers & logins, on a screen | add a customer, create a login, reset a password, deactivate / reactivate | (nothing — this is an admin-only step) | **Done** |
 
 ### Still to build, both sides
 
@@ -376,7 +377,6 @@ the customer side needs, and a step is done when both work.
 | ---- | ------------------ | -------------------- |
 | **Photos from the Bundle app** | pull photos from the existing Bundle Inspection app instead of uploading them by hand | (gallery already built in step 15) |
 | **The four-step status** | In Production → Packed → Shipped → Delivered as a real sequence rather than free text | the status pill follows it |
-| **Customers & logins on a screen** | add a customer company and create their login from the admin console, instead of `scripts/manage_users.py` on the server | — |
 | **Notifications — WhatsApp** | choose which statuses message which channel | receives the WhatsApp message |
 | **Self-service password reset** | — | "forgot password" email; blocked on real SMTP |
 | **SAP/PMS auto-pull** | replace the hand-run CSV import with a scheduled pull | — |
@@ -445,6 +445,8 @@ Update after every step: what was done, and the commit.
 | 2026-09-10 | **Step 15 — Material photos, both halves.** New `photos` table (migration 0004) rather than a new document type: a document is one file per kind per shipment and uploading another replaces it, so photos in `documents` would have been quietly destroyed by the replace rule. Admin: several photos in one upload with a shared caption, all-or-nothing so a bad file in a batch keeps none of it, and Remove on each. Customer: a thumbnail strip per shipment on the order detail page, click for full size, Escape to close. Staff need their own image route because `/api/photos/{id}` depends on `SettledUser`, which refuses a staff account by design. Deleting a shipment now removes its photo files from disk, not just their rows. Proved by 33 new end-to-end checks, plus the 43 from step 14 re-run | _this commit_ |
 
 | 2026-09-10 | **Step 16 — Container number and B/L number, both halves.** Migration 0005 adds both to `shipments`, nullable because an LCL consignment may have no container and a B/L number does not exist until the carrier issues it. A container number is validated against its ISO 6346 check digit — `valid_container_no` sits in `app/services/tracking.py` beside `valid_imo` and is shared with the CSV importer, so the screen and the importer cannot disagree. Stored upper case with spaces and hyphens stripped. A B/L number has no standard format and none is enforced. Both appear on the staff shipment row, on the customer's order detail beside the vessel, and in the notification email. Proved by 15 new checks plus the 43 and 33 from steps 14 and 15 re-run | _this commit_ |
+
+| 2026-09-10 | **Step 17 — Customers & logins on a screen.** A third staff tab: add a customer, give somebody a login, reset a password, deactivate and reactivate — all of which needed a shell on the server until now. The logic moved into `app/services/accounts.py` and `scripts/manage_users.py` now calls it, so the screen and the command line cannot allow different things. **No route creates a staff account**, deliberately: `create_staff_login` exists in the service and only the script calls it. Two lockouts are refused — deactivating your own account, and deactivating the last active staff account. The customer code is not editable, because the CSV importer matches on it. Proved by 37 checks including that `is_staff` in a request body is ignored, and by the last-staff guard tested directly against a rolled-back transaction | _this commit_ |
 
 ### Design decisions worth remembering
 
@@ -540,6 +542,28 @@ Update after every step: what was done, and the commit.
   what the screen refuses and what the importer refuses must be the same
   thing, and the only way to guarantee that is one function.
 
+### Design decisions worth remembering
+
+- **A staff account can still only be created on the server.** The admin
+  console creates customers and customer logins; it cannot create staff,
+  and there is no route that does. Staff is the flag that unlocks every
+  write in the portal, so somebody who could grant it could grant it to
+  themselves twice over and no one could un-grant it. `--add-staff` needs a
+  shell, and that is the point. Sending `is_staff` in a request body does
+  nothing: the schema has no such field and the service never sets it.
+- **Two deactivations are refused, both of which lock the door from
+  inside**: your own account, and the last staff account still active.
+  Either would leave the admin console reachable by nobody, undoable only
+  by somebody with access to the server.
+- **A customer's code cannot be edited, only its name and country.** The
+  code is the join between this portal and whatever SAP/PMS exports, and
+  `import_data.py` matches on it. Changing it on a screen would orphan
+  every future import for that customer with nothing appearing to fail.
+- **The account rules live in `app/services/accounts.py`.** Both the screen
+  and `manage_users.py` call it, for the same reason `valid_imo` is shared
+  with the importer: two implementations of one rule will differ eventually,
+  and the difference will be found by a customer.
+
 ### Known issues / risks
 
 - **A token cannot be cancelled one at a time.** Tokens are signed and
@@ -553,6 +577,13 @@ Update after every step: what was done, and the commit.
   It is readable by JavaScript running on the page, which is the accepted
   cost of not using cookies; an httpOnly cookie plus CSRF protection is the
   stronger answer if the portal ever handles more than read-only order data.
+- **Creating logins is now possible remotely, not just from the server.**
+  That is the point of step 17, but it does widen what a stolen staff token
+  can do: previously an attacker needed shell access to create a login, and
+  now a staff session is enough. They still cannot create staff, so they
+  cannot entrench themselves, and a password change or `--deactivate`
+  retires every token at once. Rate limiting on `/api/login` (still absent,
+  below) matters more now than it did.
 - **A customer who forgets their password must ask staff.** There is no
   "forgot password" email, because there is no working SMTP yet.
   `scripts.manage_users --reset-password` is the answer today, and it puts the

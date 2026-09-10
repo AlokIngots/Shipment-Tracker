@@ -15,6 +15,7 @@ only in the screens:
 from fastapi import FastAPI
 
 from app.routers import auth, documents, orders, photos
+from app.routers.admin import accounts as admin_accounts
 from app.routers.admin import documents as admin_documents
 from app.routers.admin import orders as admin_orders
 from app.routers.admin import photos as admin_photos
@@ -33,6 +34,7 @@ app.include_router(documents.router, tags=["customer"])
 app.include_router(photos.router, tags=["customer"])
 
 # The admin console: the only place anything is written.
+app.include_router(admin_accounts.router, tags=["admin"])
 app.include_router(admin_orders.router, tags=["admin"])
 app.include_router(admin_shipments.router, tags=["admin"])
 app.include_router(admin_documents.router, tags=["admin"])

@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import Toolbar from '../../components/Toolbar'
+import StaffAccountsScreen from './StaffAccountsScreen'
 import StaffDocumentsScreen from './StaffDocumentsScreen'
 import StaffOrdersScreen from './StaffOrdersScreen'
 
 const TABS = [
   { key: 'orders', label: 'Orders & shipments' },
   { key: 'documents', label: 'Documents & photos' },
+  { key: 'accounts', label: 'Customers & logins' },
 ]
 
 // The Alok Ingots side. A staff account has no orders of its own, so this is
@@ -46,7 +48,9 @@ export default function StaffScreen({ session, onSignOut, onChangePassword }) {
       {/* Remounted rather than hidden when the tab changes, so each page
           reloads its data and neither can show what the other has just
           changed underneath it. */}
-      {tab === 'orders' ? <StaffOrdersScreen /> : <StaffDocumentsScreen />}
+      {tab === 'orders' && <StaffOrdersScreen />}
+      {tab === 'documents' && <StaffDocumentsScreen />}
+      {tab === 'accounts' && <StaffAccountsScreen />}
     </>
   )
 }
