@@ -224,21 +224,45 @@ fi
 ok "Containers started"
 
 step "Bringing the database schema up to date"
+# Read the current revision, or fail loudly.
+#
+# This used to be `... 2>/dev/null || true`, which meant a command that
+# could not run at all gave exactly the same empty answer as a database
+# with no migration history. Those two must never be confused: the second
+# tells restore_schema there is nothing to go back to, and it then declines
+# to roll the schema back. So a wrong command name would quietly switch off
+# the schema safety net for the whole deploy -- and it did. The backend
+# reorganisation moved migrate.py to scripts/migrate.py and this script
+# went on calling the old path.
+schema_revision() {
+  local out
+  if ! out="$("${COMPOSE[@]}" exec -T api python -m scripts.migrate --revision 2>&1)"; then
+    warn "Could not read the database revision. The API said:"
+    printf '%s\n' "$out" | sed 's/^/    /' >&2
+    return 1
+  fi
+  printf '%s' "$out" | tr -d '\r\n'
+}
+
 # A container that crashes on start-up is restarted by Docker, so it can
 # still report itself as "running". The honest test is whether we can
 # actually execute something inside it.
 #
 # Note where the schema is BEFORE migrating, so a deploy that fails later
 # can put it back exactly there.
-SCHEMA_BEFORE="$("${COMPOSE[@]}" exec -T api python migrate.py --revision 2>/dev/null | tr -d '\r\n' || true)"
+SCHEMA_BEFORE="$(schema_revision)" || {
+  rollback
+  die "Could not read the database revision before migrating, so nothing
+    was changed. The message above says why."
+}
 
 MIGRATED_CLEANLY=true
-"${COMPOSE[@]}" exec -T api python migrate.py || MIGRATED_CLEANLY=false
+"${COMPOSE[@]}" exec -T api python -m scripts.migrate || MIGRATED_CLEANLY=false
 
 # Read where the schema ended up BEFORE deciding what to do about the
 # result. A migration can be applied and still report a problem afterwards,
 # and rolling back without knowing that would leave the schema moved.
-SCHEMA_AFTER="$("${COMPOSE[@]}" exec -T api python migrate.py --revision 2>/dev/null | tr -d '\r\n' || true)"
+SCHEMA_AFTER="$(schema_revision)" || SCHEMA_AFTER=""
 
 if ! $MIGRATED_CLEANLY; then
   printf '

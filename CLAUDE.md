@@ -371,6 +371,7 @@ the customer side needs, and a step is done when both work.
 | 16 | Container & B/L number | two fields on the shipment form and in the CSV importer; container check-digit validated | both shown on the order detail beside the vessel, and in the notification email | **Done** |
 | 17 | Customers & logins, on a screen | add a customer, create a login, reset a password, deactivate / reactivate | (nothing — this is an admin-only step) | **Done** |
 | 18 | The status sequence | a dropdown of exactly the valid statuses; a move backwards must be confirmed as a correction | a progress track on each shipment, not just a word | **Done** |
+| 19 | Deploy verification | `safe-deploy.sh` fixed after the reorganisation, and drilled | — | **Done** |
 
 ### Still to build, both sides
 
@@ -449,6 +450,8 @@ Update after every step: what was done, and the commit.
 | 2026-09-10 | **Step 17 — Customers & logins on a screen.** A third staff tab: add a customer, give somebody a login, reset a password, deactivate and reactivate — all of which needed a shell on the server until now. The logic moved into `app/services/accounts.py` and `scripts/manage_users.py` now calls it, so the screen and the command line cannot allow different things. **No route creates a staff account**, deliberately: `create_staff_login` exists in the service and only the script calls it. Two lockouts are refused — deactivating your own account, and deactivating the last active staff account. The customer code is not editable, because the CSV importer matches on it. Proved by 37 checks including that `is_staff` in a request body is ignored, and by the last-staff guard tested directly against a rolled-back transaction | _this commit_ |
 
 | 2026-09-10 | **Step 18 — The status sequence.** `status` was free text: anything could be typed, nothing checked the spelling, and a shipment could go from Delivered back to Packed unremarked. `app/services/statuses.py` now holds the sequence and both the screen and the CSV importer use it, so what one accepts the other does. The forms are dropdowns instead of free-text boxes. A move backwards is refused unless the request states it is a correction, which the screen asks about first. Customers get a progress track on each shipment rather than a bare word. **No rows were rewritten** — the five existing statuses in the database were all already valid. Proved by 21 checks plus 16 unit checks of the service, and steps 14 and 15 re-run | _this commit_ |
+
+| 2026-09-10 | **Step 19 — The deploy, verified after the reorganisation.** `safe-deploy.sh` still called `python migrate.py`, which the reorganisation had moved to `scripts/migrate.py`: **every deploy would have failed**, and it would have failed in the worst way, because the revision was read with `2>/dev/null || true`, so a command that could not run gave the same empty answer as a database with no history — and an empty answer tells `restore_schema` there is nothing to roll back to. A wrong command name had silently switched off the schema safety net. Fixed, and the read now fails loudly instead. Then proved: image builds, all six scripts run inside it, a real deploy took the production database from 0003 to **0005** with rows in it, 20 checks passed through Caddy on port 80, and two rollback drills — a migration that applied then reported drift, and a health check that never passed — both put everything back | _this commit_ |
 
 ### Design decisions worth remembering
 
@@ -588,6 +591,22 @@ Update after every step: what was done, and the commit.
   the API only. An import that moves a shipment backwards is far more likely
   to be a stale export than a decision, so the importer refuses it outright.
 
+### Design decisions worth remembering
+
+- **A value the safety net depends on must fail loudly, never quietly.**
+  `safe-deploy.sh` read the schema revision with `2>/dev/null || true`, so a
+  command that could not run at all produced exactly the same empty string
+  as a database with no migration history — and an empty string is what
+  tells the rollback there is nothing to go back to. One typo therefore
+  disabled the schema safety net for the whole deploy, silently. It now
+  prints what went wrong and abandons the deploy. Worth applying to anything
+  else that reads a value a safety check depends on.
+- **A drill is worth more than a passing deploy.** The deploy that failed on
+  purpose found more than the one that worked: it proved the drift check
+  catches a migration that does not match the models, that the downgrade
+  runs while the new image is still up (the old one does not contain the new
+  migration), and that the rows survive both.
+
 ### Known issues / risks
 
 - **A token cannot be cancelled one at a time.** Tokens are signed and
@@ -702,10 +721,11 @@ Update after every step: what was done, and the commit.
   document page already had, now wider: staff can create, edit and delete
   orders and shipments and none of it leaves a trace. Worth an audit trail
   before more than one or two people have staff logins.
-- **The deployed image has never been built since the reorganisation.** The
-  Dockerfile copies the whole `backend/` folder and still runs
-  `uvicorn main:app`, so it should be unaffected, but "should be" is not
-  "has been". Build it before trusting the next deploy.
+- **`safe-deploy.sh` has now met the reorganised code, but still not a real
+  server.** It has been run end to end locally, including two rollback
+  drills, against the reorganised backend. What it has still never met is a
+  real machine, a real domain, or Caddy actually obtaining an HTTPS
+  certificate — that cannot be tested until DNS points somewhere.
 - **`requests` is installed in the dev venv but is not in
   `requirements.txt`**, deliberately — it is only used by the end-to-end
   test script, and shipping it into the API image would be wrong. Anyone
