@@ -90,11 +90,22 @@ sign-in page had the email link but not the usability pass or steps 28–29,
 so deploying `dev` brings all of those at once. No real customer has used
 it yet.
 
-**Step 31, sign-in by email link only**, is built and tested on
-`feature/magic-link-only`, not yet merged. **Step 30, "Forgot your
-password", is held unmerged** on `feature/step30-password-reset`
-(`a37b9b7`) on the user's decision: do not merge or delete it without
-asking.
+**Step 31, sign-in by email link only**, is merged to `dev` and pushed
+(11 Sep 2026, on the user's OK) but **not deployed**. The user's two
+conditions for deploying `dev` to the live server:
+
+1. The fresh sign-in link requested from the live server for
+   **exports@alokindia.com** (a live staff login) at 11:46 UTC on 11 Sep
+   2026 is confirmed received in that inbox. Alok checks.
+2. Alok confirms he is OK with step 28 working order status out from the
+   shipments instead of it being typed. The live portal holds no orders
+   yet, so migration 0009 loses nothing there.
+
+Do not deploy, or tell the user it is safe to, until both are confirmed.
+
+**Step 30, "Forgot your password", is held unmerged** on
+`feature/step30-password-reset` (`a37b9b7`) on the user's decision: do not
+merge or delete it without asking.
 
 GitHub: **https://github.com/AlokIngots/Shipment-Tracker** (private). The repo
 is named `Shipment-Tracker`, not `alok-customer-portal` as originally planned.
@@ -152,10 +163,13 @@ photo: they are gone from the files for good, which is the point.
 **Restore point:** tag `pre-magic-link-only` is `dev` after step 29, before
 step 31 (sign-in by email link only). Undo it on `dev` with
 `git revert --no-edit pre-magic-link-only..dev`. There is no migration. On a
-server already running it there is a faster way back that needs no code:
-add `PASSWORD_SIGN_IN=true` to `.env` and restart the API. That reopens
-password sign-in in the API, but the sign-in screen has no password box
-until the revert is deployed too.
+server already running it, `PASSWORD_SIGN_IN=true` in `.env` reopens
+password sign-in **in the API only**: the sign-in screen has no password
+box, so nobody can use it from a browser until the old screen is back. It
+takes effect when the API container is recreated,
+`docker compose -f docker-compose.prod.yml -f docker-compose.server.yml up -d --force-recreate --no-build api`
+(a plain `restart` does not re-read `.env`). The way back that works in a
+browser is the rollback under "Deploying".
 
 **`dev` is the branch to work from.** **`main` is still the empty anchor
 commit, deliberately** — it gets its first real content only when the portal
@@ -347,6 +361,29 @@ to prove it really is a picture, and saved again without its hidden details
 Set `PORTAL_DOMAIN` in `.env`: a real domain makes Caddy obtain HTTPS
 automatically; `:80` serves plain HTTP for testing on your own machine.
 
+**Rolling back a whole deploy on srv1427359**, in one line, run in the
+project folder on the server:
+
+```bash
+C="docker compose -f docker-compose.prod.yml -f docker-compose.server.yml"; $C exec -T api python -m alembic downgrade 0008 && docker tag alok-portal-api:rollback alok-portal-api:latest && docker tag alok-portal-web:rollback alok-portal-web:latest && $C up -d --no-build
+```
+
+It takes the database back from 0009 to 0008 while the new version is
+still running (the old one does not contain migration 0009, so it could not
+undo it), then puts back the images `safe-deploy.sh` saved as `:rollback`
+just before building the new ones. Worth knowing:
+
+- `0008` is right only if the deploy printed "Schema moved from 0008 to
+  0009". Use whichever "from" revision it printed.
+- `:rollback` is overwritten by the next run of `safe-deploy.sh`, so this
+  undoes the most recent deploy only.
+- The server's git checkout is not moved. Put it back to the old commit
+  before deploying again, or the next deploy brings the new code back.
+- Downgrading 0009 refills the order status from the shipments; typed
+  statuses cannot come back. The live portal holds no orders, so none are
+  lost. For the database exactly as it was, the deploy also printed the
+  path of its backup.
+
 ## What is left before a real customer can use this
 
 Moved into the roadmap below, so there is one list and not two that drift
@@ -449,7 +486,7 @@ the customer side needs, and a step is done when both work.
 | 28 | Order status from shipments | the order form shows the status instead of asking for it; a Cancelled tick on the order; a Last shipment tick on each shipment; a reminder when nearly all of an order has gone and nothing is ticked; `last_shipment` in the CSV importer | the order says Part shipped until the last lot is ticked, then follows the lot furthest behind; "final shipment" on that lot | **Done, not yet deployed** |
 | 29 | Hidden details out of full-size photos | every photo saved without its camera, time and GPS position as it is uploaded; a line on the photo box says so; a command cleans photos uploaded before; phone photos with a second picture inside (MPO) accepted instead of refused; a photo cut short refused | the full-size photo they download carries only the picture | **Done** |
 | 30 | Forgot your password (`feature/step30-password-reset`, `a37b9b7`) | Email reset link on each login | "Forgot your password?" on the sign-in card | **Built, held unmerged** on the user's decision, 11 Sep 2026; moot while sign-in is link-only. Do not merge or delete without asking |
-| 31 | Sign in by email link only (`feature/magic-link-only`) | no Change password or Reset password button; Add customer login says "tell them to sign in with email link" instead of showing a temporary password; the four quick actions unchanged | the sign-in card has only the email box and Sign in with email link: no password box, no password Sign in button, no "or"; no Change password button | **Built and tested, not yet merged** |
+| 31 | Sign in by email link only (`feature/magic-link-only`) | no Change password or Reset password button; Add customer login says "tell them to sign in with email link" instead of showing a temporary password; the four quick actions unchanged | the sign-in card has only the email box and Sign in with email link: no password box, no password Sign in button, no "or"; no Change password button | **Merged, not deployed**: deploying waits on two confirmations, see "Where we are now" |
 
 ### Still to build, both sides
 
@@ -551,7 +588,7 @@ Update after every step: what was done, and the commit.
 
 | 2026-09-11 | **Step 29 — Hidden details out of full-size photos, both halves** (`feature/step29-strip-photo-details`, restore tag `pre-strip-photo-details`). Since step 25 the preview carried none of a phone photo's hidden details, but a customer who clicked a tile downloaded the original with the camera, the time and often the GPS position of the factory in it. On the user's decision of 11 Sep 2026, every photo is now saved again without them the moment it is uploaded, before anybody, staff included, can download it. What stays is only what says how to draw the picture: its colour profile and, for a PNG, its transparency. A JPEG that is already upright is saved with its own compression settings, so it looks the same (the test allows an average difference under 2 levels out of 255); a sideways one is turned upright first, because the note saying which way is up is itself one of the details, and saved at quality 95. A photo with nothing hidden in it is kept byte for byte. `scripts/strip_photo_details.py` cleans photos uploaded before; each photo is saved as it is done and its old file removed only after, so a run stopped halfway leaves everything showing. Staff see a line on the empty photo box saying details are removed. Found on the way, and fixed: **ordinary iPhone and Samsung photos with a second picture inside (MPO) were refused as "not a picture"**, because Pillow names them MPO and only JPEG and PNG were allowed; they are now accepted, and the second picture goes with the other details. And a photo cut short while copying used to pass the picture check and show as a broken tile; it is now refused with a message saying so. No migration, no new setting. Proved by 7 new tests (205 in all): the camera, the GPS position, XMP and a comment present before and absent from what the customer and staff download, with the picture the same size and look; a sideways photo stored tall; a PNG's notes gone and its transparency kept; an MPO accepted and served as one plain JPEG; a cut-short photo refused with nothing left on disk; and the command cleaning an older photo, a dry run changing nothing, and a second run doing nothing. The frontend build passes, and a dry run of the command on the development database found its 5 photos already clean. **Not looked at in a browser; not tried on a real phone photo** | _this commit_ |
 
-| 2026-09-11 | **Step 31 — Sign in by email link only, both halves** (`feature/magic-link-only`, restore tag `pre-magic-link-only`). On the user's decision, the sign-in card keeps only the email box and **Sign in with email link**: the password box, the password Sign in button and the "or" divider are gone. (`dev` never had a "Forgot your password?" link; step 30, which adds one, is held unmerged.) The password code is **dormant, not deleted**. A new setting, `PASSWORD_SIGN_IN`, off unless `.env` says true, makes `POST /api/login` give everybody the same refusal before anything is looked up, and switches off the rule that keeps a person on a temporary password away from their orders. Without that second part, every new login would have signed in by link and then been asked for a temporary password nobody sent them. Switched back on, both work exactly as before. Staff lose the Change password and Reset password buttons; Add customer login now says "tell them to open the portal and press Sign in with email link" instead of showing a temporary password, and the Start here checklist says the same. Customers lose Change password. The four quick actions, `manage_users.py`, and the change-password and forced-password screens are all kept. The sign-in email and the too-many-links message no longer mention a password. Proved by 6 new tests (211 in all; every older test now runs with password sign-in switched on, as the proof the dormant code still works): a right password, a wrong one and an unknown address all get the same 403; a brand-new login signs in by link and sees its orders; a staff login signs in by link and adds a customer, a customer login, an order, a shipment and a document, and that customer then signs in by link and sees the order and the document; the email says nothing of a password; and switched on, the temporary-password rule is back. The frontend build passes, `manage_users --list` runs, and a headless Edge run on the development site passed 22 checks: one button on the sign-in card at desktop and phone width, no password box, no divider, no Forgot link, `/api/login` refused from the browser, no Change password or Reset password button on either half, all four quick actions open (Upload document onto Documents & photos with its Upload buttons), Add customer login shows the new note and no password, and no browser errors. The two runs left two development-only logins (`link-only-check-…@demo-customer.example`) and their change-history entries. A fresh sign-in link requested from the live server for mis@alokindia.com has **not arrived**; see Known issues. **Not merged, not deployed** | _this commit_ |
+| 2026-09-11 | **Step 31 — Sign in by email link only, both halves** (`feature/magic-link-only`, restore tag `pre-magic-link-only`). On the user's decision, the sign-in card keeps only the email box and **Sign in with email link**: the password box, the password Sign in button and the "or" divider are gone. (`dev` never had a "Forgot your password?" link; step 30, which adds one, is held unmerged.) The password code is **dormant, not deleted**. A new setting, `PASSWORD_SIGN_IN`, off unless `.env` says true, makes `POST /api/login` give everybody the same refusal before anything is looked up, and switches off the rule that keeps a person on a temporary password away from their orders. Without that second part, every new login would have signed in by link and then been asked for a temporary password nobody sent them. Switched back on, both work exactly as before. Staff lose the Change password and Reset password buttons; Add customer login now says "tell them to open the portal and press Sign in with email link" instead of showing a temporary password, and the Start here checklist says the same. Customers lose Change password. The four quick actions, `manage_users.py`, and the change-password and forced-password screens are all kept. The sign-in email and the too-many-links message no longer mention a password. Proved by 6 new tests (211 in all; every older test now runs with password sign-in switched on, as the proof the dormant code still works): a right password, a wrong one and an unknown address all get the same 403; a brand-new login signs in by link and sees its orders; a staff login signs in by link and adds a customer, a customer login, an order, a shipment and a document, and that customer then signs in by link and sees the order and the document; the email says nothing of a password; and switched on, the temporary-password rule is back. The frontend build passes, `manage_users --list` runs, and a headless Edge run on the development site passed 22 checks: one button on the sign-in card at desktop and phone width, no password box, no divider, no Forgot link, `/api/login` refused from the browser, no Change password or Reset password button on either half, all four quick actions open (Upload document onto Documents & photos with its Upload buttons), Add customer login shows the new note and no password, and no browser errors. The two runs left two development-only logins (`link-only-check-…@demo-customer.example`) and their change-history entries. A fresh sign-in link requested from the live server for mis@alokindia.com has **not arrived**; see Known issues. Merged to `dev` and pushed the same day on the user's OK; **not deployed** | `f1c8ac7` + _this commit_ |
 
 ### Design decisions worth remembering
 
@@ -965,8 +1002,15 @@ Update after every step: what was done, and the commit.
   next 10 minutes. The answer is the same whether or not an address has an
   account, so the likeliest reason is that mis@alokindia.com has no login on
   the live portal, or is not on `NOTIFY_ONLY_EMAILS`, rather than sending
-  having broken, but that is not proven. Confirm with an address that does
-  have a login before deploying step 31.
+  having broken, but that is not proven. A second link was requested for
+  **exports@alokindia.com**, which has a live staff login, at 11:46 UTC
+  (answer 202); Alok is to confirm it arrived. Deploying waits on that.
+- **`PASSWORD_SIGN_IN=true` is not a browser escape hatch.** It reopens
+  password sign-in in the API, but step 31's sign-in screen has no password
+  box, so from a browser nobody can use it. Until that changes, the only
+  way back that works for real users is the whole-deploy rollback under
+  "Deploying". Making the sign-in screen show the password box when the
+  server switch is on would fix this; not built.
 - **Email sign-in makes a staff inbox a key to the admin console.**
   Whoever can read a staff member's email can now sign in as them. Worth a
   second factor for staff if more than a few people hold staff logins.
