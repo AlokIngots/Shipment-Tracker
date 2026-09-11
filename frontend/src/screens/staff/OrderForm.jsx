@@ -1,25 +1,15 @@
 import { useState } from 'react'
 import axios from 'axios'
-import { ChoiceField, Field, TextField } from '../../components/Field'
-import { ALL_STATUSES, statusStep } from '../../components/StatusPill'
+import { Field, TextField } from '../../components/Field'
+import StatusPill from '../../components/StatusPill'
 import { blankToNull, describeError } from '../../lib/format'
 
 // Creating and editing use the same form and the same shape of request; the
 // only difference is where it is sent. `order` being null means "new".
-// The server refuses a move back down the sequence unless the request says
-// it is deliberate. Rather than let it refuse and then explain, ask first:
-// the person knows whether they are correcting a mistake, and the server
-// cannot.
-function confirmBackwards(current, next, what) {
-  const here = statusStep(current)
-  const there = statusStep(next)
-  if (here === null || there === null || there >= here) return true
-  return window.confirm(
-    `This moves ${what} back from ${current} to ${next}.\n\n` +
-      'Going backwards is usually a slip. Press OK only if you are correcting a mistake.',
-  )
-}
-
+//
+// There is no status to choose. The server works an order's status out from
+// its shipments, so the form only shows it, and offers the one part still
+// decided by hand: whether the order has been cancelled.
 export default function OrderForm({ customers, order, onSaved, onCancel }) {
   const [form, setForm] = useState(() => ({
     customer_id: order?.customer_id ?? customers[0]?.id ?? '',
@@ -29,7 +19,7 @@ export default function OrderForm({ customers, order, onSaved, onCancel }) {
     description: order?.description ?? '',
     ordered_qty: order?.ordered_qty ?? '',
     unit: order?.unit ?? 'MT',
-    status: order?.status ?? '',
+    cancelled: order?.cancelled ?? false,
   }))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
@@ -54,12 +44,20 @@ export default function OrderForm({ customers, order, onSaved, onCancel }) {
       return
     }
 
-    const backwards =
-      statusStep(blankToNull(form.status)) !== null &&
-      statusStep(order?.status) !== null &&
-      statusStep(blankToNull(form.status)) < statusStep(order?.status)
-
-    if (backwards && !confirmBackwards(order?.status, form.status, 'this order')) return
+    // Taking an order back out of Cancelled is refused unless the request
+    // says it is deliberate. Rather than let the server refuse and then
+    // explain, ask first: the person knows whether they are correcting a
+    // mistake, and the server cannot.
+    const uncancelling = Boolean(order?.cancelled) && !form.cancelled
+    if (
+      uncancelling &&
+      !window.confirm(
+        `This takes ${order.sales_order_no} back out of Cancelled.\n\n` +
+          'Press OK only if cancelling it was a mistake.',
+      )
+    ) {
+      return
+    }
 
     setBusy(true)
     setError(null)
@@ -72,8 +70,8 @@ export default function OrderForm({ customers, order, onSaved, onCancel }) {
       description: blankToNull(form.description),
       ordered_qty: String(form.ordered_qty).trim(),
       unit: blankToNull(form.unit),
-      status: blankToNull(form.status),
-      allow_backwards: backwards,
+      cancelled: form.cancelled,
+      allow_backwards: uncancelling,
     }
 
     try {
@@ -142,12 +140,33 @@ export default function OrderForm({ customers, order, onSaved, onCancel }) {
           hint="MT means metric tonnes."
         />
 
-        <ChoiceField
-          label="Order status"
-          value={form.status}
-          options={ALL_STATUSES}
-          onChange={set('status')}
-        />
+        {/* Not a .field: that styles every span inside it as a label, which
+            would take the colour off the pill. A new order has no status
+            to show and nothing to cancel, so both appear only when editing. */}
+        {order && (
+          <div className="formnote">
+            <span className="formnote-label">Order status</span>
+            <StatusPill status={order.status} />
+            <small className="field-hint">
+              Set for you from the shipments. When the final lot goes, tick
+              “Last shipment” on it.
+            </small>
+          </div>
+        )}
+
+        {order && (
+          <div className="formnote">
+            <span className="formnote-label">Cancelled</span>
+            <label className="checkline checkline--form">
+              <input
+                type="checkbox"
+                checked={form.cancelled}
+                onChange={(e) => set('cancelled')(e.target.checked)}
+              />
+              <span>This order is cancelled</span>
+            </label>
+          </div>
+        )}
 
         <Field
           label="Product description"

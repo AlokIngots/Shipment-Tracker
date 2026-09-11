@@ -124,6 +124,15 @@ now. Start the next step with a fresh branch off `dev`.
 deployed, first take the database back with
 `docker compose -f docker-compose.prod.yml exec api python -m alembic downgrade 0007`.
 
+**Restore point:** tag `pre-status-from-shipments` is `dev` after the
+usability pass, before step 28 (order status worked out from shipments).
+Once step 28 is merged, undo it on `dev` with
+`git revert --no-edit pre-status-from-shipments..dev`. If it was already
+deployed, first take the database back with
+`docker compose -f docker-compose.prod.yml exec api python -m alembic downgrade 0008`
+— that refills the old typed status from the shipments, writing Shipped
+where the new code said Part shipped.
+
 **`dev` is the branch to work from.** **`main` is still the empty anchor
 commit, deliberately** — it gets its first real content only when the portal
 has actually been deployed to a real server and proved to work there.
@@ -167,7 +176,7 @@ cd backend
 .venv/Scripts/python.exe -m pytest
 ```
 
-175 tests, about a minute, with the dev database up. They build their own
+198 tests, about a minute, with the dev database up. They build their own
 database beside the development one and drop it afterwards, so the
 development data is untouched — the row counts are identical before and
 after. They also run on GitHub for every push.
@@ -409,6 +418,7 @@ the customer side needs, and a step is done when both work.
 | 26 | Sign in with an email link | staff can sign in by link too | "Sign in with email link" beside the password; single-use 15-minute link; same answer for any address; rate limited | **Done, no real email yet** |
 | 27 | Screens that fit | on a phone the toolbar, the four tabs and every row fit; no page scrolls sideways | every order-list column visible on any screen, order cards below 880px; the whole progress track and the totals fit a phone | **Done, not seen on a real phone** |
 | — | Easy for real users (`feature/easy-usability`) | quick actions above the tabs (Add customer, Add customer login, New order, Upload document); a "Start here" 1-2-3 checklist on empty screens; plain labels; no screen mentions a server command | plain labels (Order status, Your documents, Track your shipment); friendly empty and error states with Try again | **Built and tested, not yet deployed** |
+| 28 | Order status from shipments | the order form shows the status instead of asking for it; a Cancelled tick on the order; a Last shipment tick on each shipment; a reminder when nearly all of an order has gone and nothing is ticked; `last_shipment` in the CSV importer | the order says Part shipped until the last lot is ticked, then follows the lot furthest behind; "final shipment" on that lot | **Done, not yet merged** |
 
 ### Still to build, both sides
 
@@ -507,6 +517,8 @@ Update after every step: what was done, and the commit.
 | 2026-09-11 | **Step 27 — Screens that fit, both halves.** The customer's order list kept every cell on one line inside a page 880px wide, so one realistic description pushed *Ordered quantity* and *Status* out of sight — on a 1440px monitor as much as on a phone (484px of the table hidden at 1440 and 1024, 974px at 390), with no scrollbar showing to say so. Now the description and grade wrap and every column shows; below 880px each order is drawn as a small card: sales order and status, then description, then grade and quantity. On a phone the staff side scrolled sideways as a whole page, because the Change password / Sign out buttons and the four tabs ran past the edge, and shipment, document and login rows crushed their text into a column a few letters wide. Now the buttons move under the title, the tabs sit two by two, rows put their buttons underneath, and page and card margins shrink. The customer's order detail on a phone hid the end of the progress track — Delivered — and left an empty grey square beside Ordered / Dispatched / Balance; all five steps now fit and the totals stack. Styles, class names and table roles only; no backend change. Proved by a headless Edge run over the six signed-in screens of both halves at 1440, 1024, 768, 390 and 360px, measured before and after, with two long orders added to the list inside the browser only (the database untouched): before, 9 of 24 screens hid content or scrolled sideways; after, none of 30 do, apart from the photo strips, which scroll sideways by design. Frontend build passes. **Not looked at on a real phone** | _this commit_ |
 
 | 2026-09-11 | **Easy for real users, both halves** (`feature/easy-usability`, restore tag `pre-easy-usability`). Every staff action already had a screen, but they were spread over four tabs, an empty orders screen told staff to run `manage_users.py --add-customer`, and empty screens said nothing about what to do first. Staff now get four quick actions above the tabs — Add customer, Add customer login, New order, Upload document — each opening the right tab with its form ready (Add customer login asks which customer first when there is more than one); a "Start here" checklist on an empty screen (add the customer, give someone there a login, add their order) that ticks itself; a Documents & photos button on each shipment row; "Disable login" / "Enable login" instead of Deactivate; plain field labels and hints (Vessel IMO number, Bill of Lading number, Departure date (ETD)); and "Change history" instead of Activity. No screen names a server command any more. Customers get Order number / Product / Quantity / Order status, Shipped so far / Still to ship, a "Track your shipment" section that shows only what is known, "Your documents" with "Not ready yet", and empty and error states that explain themselves with Try again or Sign in again. Two existing glitches fixed on the way: form hints were pulled 8px up across the bottom edge of their input, and each progress-track line cut into the previous dot. **No backend change**: every action still goes through the existing `/api/staff` routes behind `StaffUser`, and the scripts still work. Proved by the 175 backend tests, the frontend build, and a headless Edge pass over 16 screens of both halves (real development data, plus empty data faked inside the browser only): no browser errors, no page scrolling sideways at 390px, no server command on the checklist, only read-only controls on the customer order page, and a customer's token refused with 403 on five staff routes. **Creating a team (staff) login is still server-only, on purpose** | `5d1ed1d`, `f0748a2` + _this commit_ |
+
+| 2026-09-11 | **Step 28 — Order status worked out from the shipments, both halves** (`feature/step28-status-from-shipments`, restore tag `pre-status-from-shipments`). An order's status was typed by hand, so an order could say In production while every shipment said Delivered. Nobody types it now; it is worked out every time it is read. On the user's decision about part-shipped orders, staff tick **Last shipment** on the final lot: until one is ticked, an order that has started to leave says **Part shipped**; once ticked, it says the step of the lot furthest behind. Cancelling stays a decision made by hand — a Cancelled tick on the order — and taking an order back out of Cancelled counts as a correction. Staff see the status on the order form instead of a dropdown, "last shipment" on the shipment row, and a reminder when 90% or more of an order has been dispatched and nothing is ticked (a hint only; the server applies no 90% rule). Customers see the worked-out status on their list and order page, and "final shipment" on that lot. The CSV importer gains `last_shipment` (blank leaves a tick alone, so one made on the screen survives the next import), accepts only blank or Cancelled for `order_status`, and now refuses a file that moves a shipment backwards — promised by the docs since step 18, and done by nothing until now. Migration 0009 adds `orders.cancelled` and `shipments.is_final` and drops `orders.status`; its downgrade refills that column from the shipments. Picked up from the paused work-in-progress commit `c628afb` on `feature/step28-order-status`, re-applied onto `dev` after the usability pass, with the clashes in two staff screens resolved. Proved by 23 new tests (198 in all), the frontend build, migration 0009 applied to the development database and drilled back to 0008 and forward with every row count unchanged, and a headless Edge run over both halves at 1440 and 390px: no browser errors, nothing scrolls sideways, a real tick saved through the shipment form turned the order from Part shipped to In transit on the staff page, the customer list and the customer order page (which has no inputs at all), and unticking put it back. The reminder was shown with the order faked to 400 MT inside the browser only. That round trip left entries in the development database's change history, which by design cannot be removed. **Not deployed, not merged** | _this commit_ |
 
 ### Design decisions worth remembering
 
@@ -828,6 +840,30 @@ Update after every step: what was done, and the commit.
   room on a monitor, but it changes how every screen looks; not done
   without asking.
 
+### Design decisions worth remembering
+
+- **Staff tick the last shipment; the quantities do not decide.** The
+  user's decision, 11 Sep 2026. Steel orders finish a few tonnes over or
+  under, so "shipped = ordered" would leave a short order Part shipped for
+  ever and call an over-shipped one finished a lot early. Only staff know
+  which lot is the last.
+- **The status is never stored.** It is worked out on every read from the
+  shipments, so it cannot drift from them the way a typed one did. The
+  price is loading an order's shipments to show its status, which the
+  customer list does in one query.
+- **Once finished, an order follows the lot furthest behind.** Delivered
+  means all of it arrived, not some of it. A cancelled lot is left out as
+  though it were never there.
+- **A file can cancel an order but never un-cancel it**, and a blank
+  `last_shipment` leaves a tick alone. The morning's export must not undo
+  a decision somebody made on the screen.
+- **An import that moves a shipment backwards stops the whole file.** The
+  docs promised this since step 18; nothing enforced it until step 28. A
+  file going backwards is a stale export far more often than a decision.
+- **The migration carries its own copy of the rule.** A migration must go
+  on doing what it did when written, whatever later happens to
+  `statuses.py`; a test checks the copy still agrees.
+
 ### Known issues / risks
 
 - **Screens that fit have been checked in an emulated browser only.**
@@ -858,7 +894,9 @@ Update after every step: what was done, and the commit.
   phone usually include the camera, the time, and the GPS position where
   they were taken — which for these photos is the factory. A customer who
   clicks a tile downloads the original, details and all. The previews carry
-  none of it. Stripping the originals too is a one-line change, if wanted.
+  none of it. Stripping the originals too is a one-line change. **On 11 Sep
+  2026 the user decided the originals should be stripped too; not built
+  yet.**
 - **Run `scripts.make_thumbnails` once after deploying to a server that
   already holds photos.** Until it runs, older photos show full size, as
   they always did. The server holds none yet, so on a first deploy there is
@@ -989,10 +1027,17 @@ Update after every step: what was done, and the commit.
 - **A photo's caption cannot be changed after upload.** It is set once for
   the whole batch. Fixing a typo means removing the photo and adding it
   again.
-- **An order's status is set by hand and not derived from its shipments.**
-  Nothing stops an order reading "In production" while every shipment
-  against it says Delivered. Deriving it would be better, and is a
-  judgement call about part-shipped orders that has not been made yet.
+- **A forgotten Last shipment tick leaves an order Part shipped for
+  ever.** Nothing ticks it automatically, by design. The staff reminder
+  appears only once 90% of the ordered quantity has been dispatched, so an
+  order that finishes further under than that gets no reminder.
+- **Migration 0009 throws away every typed order status.** Only Cancelled
+  survives, as the new `cancelled` tick. The activity record still holds
+  each change made to the old status since step 24, and taking the
+  database back to 0008 refills the column from the shipments rather than
+  from what was typed.
+- **An order with no shipments says In production**, even if nothing has
+  started — there is no "Not started" step, and there was none before.
 - **Old rows can still hold a status the sequence does not know.** Nothing
   was rewritten, and validation only runs on the way in. Every row in the
   database today is valid, but a row written before step 18 by some other
@@ -1003,7 +1048,7 @@ Update after every step: what was done, and the commit.
   drills, against the reorganised backend. What it has still never met is a
   real machine, a real domain, or Caddy actually obtaining an HTTPS
   certificate — that cannot be tested until DNS points somewhere.
-- **The frontend has no tests.** The 175 committed tests are all backend.
+- **The frontend has no tests.** The 198 committed tests are all backend.
   Nothing checks that the progress track draws, that the photo gallery
   revokes its blob URLs, or that a backwards status change asks before it
   saves. `npm run build` passing only means it compiles.

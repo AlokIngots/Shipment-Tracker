@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import axios from 'axios'
 import StartHere from '../../components/StartHere'
-import StatusPill from '../../components/StatusPill'
+import StatusPill, { PART_SHIPPED } from '../../components/StatusPill'
 import { describeError, fmtDate, plural } from '../../lib/format'
 import OrderForm from './OrderForm'
 import ShipmentForm from './ShipmentForm'
@@ -11,6 +11,7 @@ function ShipmentRow({ shipment, onEdit, onRemove, onDocuments, busy }) {
   // is booked reads as broken, when all it means is "not yet".
   const facts = [
     `${shipment.dispatched_qty} ${shipment.unit ?? ''}`.trim(),
+    shipment.is_final && 'last shipment',
     shipment.vessel_name &&
       `${shipment.vessel_name}${shipment.imo_number ? ` (IMO ${shipment.imo_number})` : ''}`,
     shipment.etd && `departs ${fmtDate(shipment.etd)}`,
@@ -56,6 +57,16 @@ function OrderCard({ order, onEdit, onRemoveOrder, onRemoveShipment, onSaved, on
     await onSaved()
   }
 
+  // Nothing ticks the last shipment for staff, because steel orders finish a
+  // few tonnes over or under. So when nearly all of an order has gone and no
+  // lot is ticked, say so -- otherwise it would read Part shipped for ever.
+  // Only a reminder: the 90% is not a rule the server applies.
+  const tickForgotten =
+    order.status === PART_SHIPPED &&
+    !order.shipments.some((s) => s.is_final) &&
+    Number(order.ordered_qty) > 0 &&
+    Number(order.dispatched_qty) >= Number(order.ordered_qty) * 0.9
+
   return (
     <div className="card">
       <div className="shipment-head">
@@ -90,6 +101,15 @@ function OrderCard({ order, onEdit, onRemoveOrder, onRemoveShipment, onSaved, on
           </span>
         </div>
       </div>
+
+      {tickForgotten && (
+        <p className="guide" role="status">
+          {order.dispatched_qty} of {order.ordered_qty} {order.unit} has been
+          dispatched, but no shipment is ticked as the last one, so the
+          customer sees “Part shipped”. If nothing more is going on this order,
+          edit its final shipment and tick “Last shipment”.
+        </p>
+      )}
 
       {order.shipments.length === 0 && !shipmentForm && (
         <p className="message message--quiet">

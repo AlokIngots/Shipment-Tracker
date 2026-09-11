@@ -211,7 +211,6 @@ def order(db, client, staff_auth, customer):
             "ordered_qty": "100.000",
             "unit": "MT",
             "grade": "431 / 1.4057",
-            "status": "In production",
         },
     ).json()
     with_shipment = client.post(

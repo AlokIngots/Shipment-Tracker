@@ -18,6 +18,11 @@ export const CANCELLED = 'Cancelled'
 
 export const ALL_STATUSES = [...SEQUENCE, CANCELLED]
 
+// Only an order says this: some of it has left the factory, and either the
+// rest has not or no shipment is ticked as the last one. The server works an
+// order's status out (order_status in statuses.py); the portal only draws it.
+export const PART_SHIPPED = 'Part shipped'
+
 // Which step a status is, 1-based. Null for unset and for Cancelled, which
 // is reachable from anywhere and is not part of the progression.
 export function statusStep(status) {
@@ -33,6 +38,7 @@ const STATUS_CLASS = {
   'in transit': 'pill--transit',
   delivered: 'pill--delivered',
   cancelled: 'pill--cancelled',
+  'part shipped': 'pill--part',
 }
 
 // emptyLabel: what an unset status reads as. Staff see "Not set", which is

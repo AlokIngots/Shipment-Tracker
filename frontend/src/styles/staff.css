@@ -448,6 +448,29 @@
   color: var(--muted);
 }
 
+/* A labelled line on a form that is not a text box: an order's status,
+   shown rather than chosen, and the Cancelled and Last shipment ticks.
+   Spaced like a .field, without .field's rule that turns every span inside
+   it into a label -- which would take the colour off a status pill. */
+.formnote {
+  margin-bottom: 16px;
+}
+
+.formnote-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+/* As tall as the text boxes beside it, so the tick lines up with them. */
+.checkline--form {
+  min-height: 40px;
+  font-size: 14px;
+  color: var(--ink);
+}
+
 /* The page's main button beside its one-line summary, not a bar the width
    of the page that reads like a heading. */
 .card--summary .button {

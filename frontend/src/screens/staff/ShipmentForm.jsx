@@ -26,6 +26,7 @@ export default function ShipmentForm({ orderId, shipment, onSaved, onCancel }) {
     dispatched_qty: shipment?.dispatched_qty ?? '',
     unit: shipment?.unit ?? 'MT',
     status: shipment?.status ?? '',
+    is_final: shipment?.is_final ?? false,
     vessel_name: shipment?.vessel_name ?? '',
     imo_number: shipment?.imo_number ?? '',
     container_no: shipment?.container_no ?? '',
@@ -68,6 +69,7 @@ export default function ShipmentForm({ orderId, shipment, onSaved, onCancel }) {
       unit: blankToNull(form.unit),
       status: blankToNull(form.status),
       allow_backwards: backwards,
+      is_final: form.is_final,
       vessel_name: blankToNull(form.vessel_name),
       imo_number: blankToNull(form.imo_number),
       container_no: blankToNull(form.container_no),
@@ -122,6 +124,23 @@ export default function ShipmentForm({ orderId, shipment, onSaved, onCancel }) {
           onChange={set('status')}
           hint="The customer sees this as a progress bar."
         />
+
+        {/* The only way the portal knows an order is finished. Steel orders
+            end a few tonnes over or under, so the quantities cannot say. */}
+        <div className="formnote">
+          <span className="formnote-label">Last shipment</span>
+          <label className="checkline checkline--form">
+            <input
+              type="checkbox"
+              checked={form.is_final}
+              onChange={(e) => set('is_final')(e.target.checked)}
+            />
+            <span>This is the last shipment for this order</span>
+          </label>
+          <small className="field-hint">
+            Tick it on the final lot. Until then the order shows “Part shipped”.
+          </small>
+        </div>
 
         <TextField
           label="Vessel name"

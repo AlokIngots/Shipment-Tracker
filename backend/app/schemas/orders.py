@@ -18,7 +18,8 @@ class OrderOut(BaseModel):
     description: str | None
     ordered_qty: Decimal | None
     unit: str | None
-    status: str | None
+    # Worked out from the shipments on every read; see statuses.order_status.
+    status: str
 
 
 class DocumentOut(BaseModel):
@@ -57,6 +58,9 @@ class ShipmentOut(BaseModel):
     dispatched_qty: Decimal | None
     unit: str | None
     status: str | None
+    # The last shipment against the order. Shown to the customer, because it
+    # explains an order that says Delivered with a few tonnes of balance.
+    is_final: bool = False
     vessel_name: str | None
     imo_number: str | None
     container_no: str | None

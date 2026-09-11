@@ -11,6 +11,11 @@ Safe to run repeatedly. Rows are matched on sales_order_no and shipment_no,
 so re-importing an updated export refreshes the existing rows rather than
 creating duplicates. Nothing is ever deleted.
 
+A file never makes a correction. A row that would move a shipment back down
+the status sequence -- Delivered to Packed, say -- stops the whole import and
+nothing is saved, because an export that goes backwards is far more likely
+to be a stale file than a decision. Corrections are made on the staff screen.
+
 CSV columns
 -----------
 One row per shipment. An order with no shipments yet gets one row with the
@@ -25,11 +30,17 @@ shipment columns left blank. Order fields repeat on every row of that order.
     description         optional
     ordered_qty         required   decimal, e.g. 583.000
     unit                optional   defaults to MT
-    order_status        optional   one of: In production, Packed, Shipped,
-                                   In transit, Delivered, Cancelled
+    order_status        optional   blank, or Cancelled to cancel the order.
+                                   Nothing else: an order's status is worked
+                                   out from its shipments. A blank never takes
+                                   an order back out of Cancelled
     shipment_no         blank if nothing has shipped yet
     dispatched_qty      required when shipment_no is given
-    shipment_status     optional   the same list as order_status
+    shipment_status     optional   one of: In production, Packed, Shipped,
+                                   In transit, Delivered, Cancelled
+    last_shipment       optional   yes on the order's last shipment, or no.
+                                   Blank leaves it as it is, so a tick made on
+                                   the staff screen survives the next import
     vessel_name         optional
     imo_number          optional   7 digits, checksum validated
     container_no        optional   ISO 6346, e.g. MSCU1234566, check digit validated
@@ -63,9 +74,12 @@ ALL_COLUMNS = [
     "customer_code", "customer_name", "customer_country",
     "sales_order_no", "customer_po", "grade", "description",
     "ordered_qty", "unit", "order_status",
-    "shipment_no", "dispatched_qty", "shipment_status",
+    "shipment_no", "dispatched_qty", "shipment_status", "last_shipment",
     "vessel_name", "imo_number", "container_no", "bl_number", "etd", "eta",
 ]
+
+YES = {"yes", "y", "true", "1", "x"}
+NO = {"no", "n", "false", "0"}
 
 
 # ----------------------------------------------------------------- checking
@@ -94,6 +108,19 @@ def parse_date(value: str, field: str, errors: list[str]) -> date | None:
         return None
 
 
+def parse_yes_no(value: str, field: str, errors: list[str]) -> bool | None:
+    """True or False, or None for a blank -- which means "leave it as it is"."""
+    cleaned = value.strip().lower()
+    if not cleaned:
+        return None
+    if cleaned in YES:
+        return True
+    if cleaned in NO:
+        return False
+    errors.append(f"{field}: {value!r} is not yes or no")
+    return None
+
+
 def check_row(row: dict, line: int) -> tuple[dict, list[str]]:
     """Clean up one row and collect everything wrong with it."""
     errors: list[str] = []
@@ -114,7 +141,7 @@ def check_row(row: dict, line: int) -> tuple[dict, list[str]]:
     if not data["shipment_no"] and any(
         data[f]
         for f in ("vessel_name", "imo_number", "container_no", "bl_number",
-                  "shipment_status")
+                  "shipment_status", "last_shipment")
     ):
         errors.append("shipment details given without a shipment_no")
 
@@ -139,14 +166,23 @@ def check_row(row: dict, line: int) -> tuple[dict, list[str]]:
 
     # The same status list the staff screen offers, from the same service,
     # so a spelling a CSV would accept is one the screen would accept too.
-    # A CSV never claims a correction: an import that moves a shipment
-    # backwards is far more likely to be a stale export than a decision.
     for field in ("order_status", "shipment_status"):
         try:
             data[field] = statuses.canonical(data[field])
         except statuses.StatusProblem as problem:
             errors.append(f"{field}: {problem}")
             data[field] = None
+
+    # An order's status is worked out from its shipments, so Cancelled is the
+    # one thing a file can still say about it. Anything else would be thrown
+    # away without a word, so it is refused instead.
+    if data["order_status"] not in (None, statuses.CANCELLED):
+        errors.append(
+            f"order_status: {data['order_status']!r} is worked out from the "
+            "shipments now, so leave it blank, or put Cancelled"
+        )
+
+    data["last_shipment"] = parse_yes_no(data["last_shipment"], "last_shipment", errors)
 
     if not data["unit"]:
         data["unit"] = "MT"
@@ -224,10 +260,16 @@ def apply_rows(rows: list[dict], dry_run: bool, file_name: str = "a CSV file") -
                 "description": data["description"] or None,
                 "ordered_qty": data["ordered_qty"],
                 "unit": data["unit"],
-                "status": data["order_status"] or None,
             }
+            # A file can cancel an order, but a blank never takes it back
+            # out: that is a correction, and only the staff screen makes one.
+            cancels = data["order_status"] == statuses.CANCELLED
             if order is None:
-                order = Order(sales_order_no=data["sales_order_no"], **order_values)
+                order = Order(
+                    sales_order_no=data["sales_order_no"],
+                    cancelled=cancels,
+                    **order_values,
+                )
                 session.add(order)
                 session.flush()
                 counts["orders_created"] += 1
@@ -240,6 +282,8 @@ def apply_rows(rows: list[dict], dry_run: bool, file_name: str = "a CSV file") -
                 before = audit.order_state(session, order)
                 for field, value in order_values.items():
                     setattr(order, field, value)
+                if cancels:
+                    order.cancelled = True
                 counts["orders_updated"] += 1
                 record(
                     "order.updated", f"Changed order {order.sales_order_no}",
@@ -264,7 +308,9 @@ def apply_rows(rows: list[dict], dry_run: bool, file_name: str = "a CSV file") -
                 }
                 if shipment is None:
                     shipment = Shipment(
-                        shipment_no=data["shipment_no"], **shipment_values
+                        shipment_no=data["shipment_no"],
+                        is_final=bool(data["last_shipment"]),
+                        **shipment_values,
                     )
                     session.add(shipment)
                     counts["shipments_created"] += 1
@@ -276,9 +322,29 @@ def apply_rows(rows: list[dict], dry_run: bool, file_name: str = "a CSV file") -
                         audit.SHIPMENT_FIELDS,
                     )
                 else:
+                    # A file never makes a correction. Stopping here, before
+                    # anything is committed, means nothing in the file is
+                    # saved -- not just this row.
+                    try:
+                        statuses.check_move(
+                            shipment.status, shipment_values["status"],
+                            allow_backwards=False,
+                        )
+                    except statuses.StatusProblem:
+                        raise ValueError(
+                            f"shipment {shipment.shipment_no} would move back from "
+                            f"{shipment.status} to {shipment_values['status']}. An "
+                            "import never makes a correction: if the earlier status "
+                            "was wrong, change it on the staff screen first"
+                        ) from None
+
                     before = audit.snapshot(shipment, audit.SHIPMENT_FIELDS)
                     for field, value in shipment_values.items():
                         setattr(shipment, field, value)
+                    # Blank means "leave it", so a tick made on the staff
+                    # screen is not wiped by the next morning's export.
+                    if data["last_shipment"] is not None:
+                        shipment.is_final = data["last_shipment"]
                     counts["shipments_updated"] += 1
                     record(
                         "shipment.updated",

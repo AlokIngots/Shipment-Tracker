@@ -151,6 +151,14 @@
   color: var(--muted);
 }
 
+/* Only an order says Part shipped. The Shipped blue, outlined, so it reads
+   as on the way there rather than there. */
+.pill--part {
+  background: #f3f7ff;
+  color: #1b4a9c;
+  box-shadow: inset 0 0 0 1px #b8cbef;
+}
+
 /* ---- clickable order rows ---- */
 
 .row--clickable {

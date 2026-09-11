@@ -48,6 +48,8 @@ class StaffOrderShipmentOut(BaseModel):
     dispatched_qty: Decimal | None
     unit: str | None
     status: str | None
+    # Ticked on the last lot of the order.
+    is_final: bool
     vessel_name: str | None
     imo_number: str | None
     container_no: str | None
@@ -71,14 +73,20 @@ class StaffOrderOut(BaseModel):
     description: str | None
     ordered_qty: Decimal | None
     unit: str | None
-    status: str | None
+    # Worked out from the shipments; see statuses.order_status.
+    status: str
+    cancelled: bool
     dispatched_qty: Decimal
     balance_qty: Decimal
     shipments: list[StaffOrderShipmentOut]
 
 
 class OrderIn(BaseModel):
-    """An order as staff submit it, creating or editing."""
+    """An order as staff submit it, creating or editing.
+
+    There is no status. An order's status is worked out from its shipments,
+    and one sent anyway is ignored.
+    """
 
     customer_id: int
     sales_order_no: str
@@ -87,9 +95,9 @@ class OrderIn(BaseModel):
     description: str | None = None
     ordered_qty: Decimal
     unit: str | None = None
-    status: str | None = None
-    # Moving a status back down the sequence is refused unless this says it
-    # is deliberate. The screen sets it after asking; a CSV never does.
+    cancelled: bool = False
+    # Taking an order back out of Cancelled is refused unless this says it
+    # is deliberate. The screen sets it after asking; a CSV never can.
     allow_backwards: bool = False
 
 
@@ -100,6 +108,9 @@ class ShipmentIn(BaseModel):
     dispatched_qty: Decimal
     unit: str | None = None
     status: str | None = None
+    # The last shipment against its order. Until one is ticked, an order
+    # that has started shipping says Part shipped.
+    is_final: bool = False
     vessel_name: str | None = None
     imo_number: str | None = None
     container_no: str | None = None

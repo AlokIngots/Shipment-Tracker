@@ -37,7 +37,9 @@ ORDER_FIELDS = {
     "description": "Description",
     "ordered_qty": "Ordered quantity",
     "unit": "Unit",
-    "status": "Status",
+    # Not the status: that is worked out from the shipments, and the change
+    # to a shipment that moved it is what gets recorded.
+    "cancelled": "Cancelled",
 }
 # An order's customer is shown by its code, not its id. See order_state.
 ORDER_LABELS = {"customer": "Customer", **ORDER_FIELDS}
@@ -47,6 +49,7 @@ SHIPMENT_FIELDS = {
     "dispatched_qty": "Dispatched quantity",
     "unit": "Unit",
     "status": "Status",
+    "is_final": "Last shipment",
     "vessel_name": "Vessel",
     "imo_number": "IMO number",
     "container_no": "Container number",

@@ -37,10 +37,10 @@ def tidy(value: str | None) -> str | None:
 
 
 def checked_status(current: str | None, submitted: str | None, allow_backwards: bool):
-    """Normalise a submitted status and refuse an unstated move backwards.
+    """Normalise a submitted shipment status and refuse an unstated move backwards.
 
-    Both an order and a shipment go through here, and so does the CSV
-    importer through the same service, so what one accepts the others do.
+    The CSV importer goes through the same service, so what one accepts the
+    other does. An order has no status to submit; see apply_order.
     """
     try:
         new_status = statuses.canonical(submitted)
@@ -67,6 +67,7 @@ def staff_order_out(order: Order, customer: Customer) -> StaffOrderOut:
         ordered_qty=order.ordered_qty,
         unit=order.unit,
         status=order.status,
+        cancelled=order.cancelled,
         dispatched_qty=dispatched,
         balance_qty=(order.ordered_qty or Decimal("0")) - dispatched,
         shipments=[
@@ -76,6 +77,7 @@ def staff_order_out(order: Order, customer: Customer) -> StaffOrderOut:
                 dispatched_qty=s.dispatched_qty,
                 unit=s.unit,
                 status=s.status,
+                is_final=s.is_final,
                 vessel_name=s.vessel_name,
                 imo_number=s.imo_number,
                 container_no=s.container_no,
@@ -110,6 +112,17 @@ def apply_order(order: Order, body: OrderIn, db: Session) -> None:
     if body.ordered_qty < 0:
         raise bad_request("The ordered quantity cannot be negative.")
 
+    # An order's status is worked out from its shipments, so whether it has
+    # been cancelled is the only part of it left to set here. Taking it back
+    # out of Cancelled counts as a correction, as it did when the status was
+    # a dropdown -- and it means a form that forgets the box cannot undo a
+    # cancellation by accident.
+    if order.cancelled and not body.cancelled and not body.allow_backwards:
+        raise bad_request(
+            f"{sales_order_no} is cancelled, so taking it out of Cancelled "
+            "counts as a correction. Confirm it and it will be saved."
+        )
+
     order.customer_id = customer.id
     order.sales_order_no = sales_order_no
     order.customer_po = tidy(body.customer_po)
@@ -117,7 +130,7 @@ def apply_order(order: Order, body: OrderIn, db: Session) -> None:
     order.description = tidy(body.description)
     order.ordered_qty = body.ordered_qty
     order.unit = tidy(body.unit) or "MT"
-    order.status = checked_status(order.status, body.status, body.allow_backwards)
+    order.cancelled = body.cancelled
 
 
 def apply_shipment(shipment: Shipment, body: ShipmentIn, db: Session) -> None:
@@ -165,6 +178,7 @@ def apply_shipment(shipment: Shipment, body: ShipmentIn, db: Session) -> None:
     shipment.status = checked_status(
         shipment.status, body.status, body.allow_backwards
     )
+    shipment.is_final = body.is_final
     shipment.vessel_name = tidy(body.vessel_name)
     shipment.imo_number = imo_number
     shipment.container_no = container_no
@@ -249,11 +263,12 @@ def staff_update_order(
     # Saving a form nobody changed is not a change, and recording it would
     # only bury the ones that were.
     if changes:
+        uncancelled = before["cancelled"] == audit.shown(True) and not order.cancelled
         audit.record(
             db,
             "order.updated",
             f"Changed order {order.sales_order_no}"
-            + audit.correction_note(before["status"], order.status),
+            + (", taking it back out of Cancelled" if uncancelled else ""),
             actor=staff,
             changes=changes,
         )

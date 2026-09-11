@@ -250,6 +250,9 @@ export default function OrderDetailScreen({ orderId, onBack, onSignOut, session 
                   <span className="shipment-no">Shipment {shipment.shipment_no}</span>
                   <span className="shipment-qty">
                     {shipment.dispatched_qty} {shipment.unit}
+                    {/* Explains an order that says Delivered with a few
+                        tonnes of balance left: this was the last lot. */}
+                    {shipment.is_final && ' · final shipment'}
                   </span>
                 </div>
                 <StatusPill status={shipment.status} emptyLabel="Awaiting update" />

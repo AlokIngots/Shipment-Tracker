@@ -5,7 +5,10 @@ and the CSV importer call, so a change that breaks one breaks both, and this
 is where that shows up first and most cheaply.
 """
 
+import importlib.util
 import time
+from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -130,6 +133,53 @@ def test_the_steps_are_numbered_in_order():
     assert numbers == list(range(1, len(statuses.SEQUENCE) + 1))
     assert statuses.step(statuses.CANCELLED) is None, "Cancelled is not a step"
     assert statuses.step(None) is None
+
+
+# --------------------------------------------------------- an order's status
+
+
+def lot(status, final=False):
+    """A shipment, as far as its order's status is concerned."""
+    return SimpleNamespace(status=status, is_final=final)
+
+
+ORDER_CASES = [
+    (False, [], "In production", "nothing against it yet"),
+    (False, [lot(None)], "In production", "a shipment with no status has not started"),
+    (False, [lot("Packed")], "In production", "a lot packed, and more of the order still to make"),
+    (False, [lot("Packed", final=True)], "Packed", "the only lot, packed and not yet gone"),
+    (False, [lot("Shipped")], "Part shipped", "one lot gone, none ticked as the last"),
+    (False, [lot("Delivered"), lot("Delivered")], "Part shipped", "all arrived, but nobody said it was the last"),
+    (False, [lot("Delivered"), lot("Packed", final=True)], "Part shipped", "the last lot is still at the factory"),
+    (False, [lot("Delivered"), lot("In transit", final=True)], "In transit", "finished: the lot furthest behind"),
+    (False, [lot("Delivered"), lot("Delivered", final=True)], "Delivered", "finished, and all of it arrived"),
+    (False, [lot("Shipped", final=True), lot("Cancelled")], "Shipped", "a cancelled lot is left out"),
+    (False, [lot("Cancelled")], "In production", "only a cancelled lot: as though there were none"),
+    (False, [lot("Nearly there", final=True)], "In production", "a status the sequence does not know has not started"),
+    (True, [lot("Delivered", final=True)], "Cancelled", "a cancelled order says so, whatever shipped"),
+]
+
+
+@pytest.mark.parametrize("cancelled, shipments, expected, why", ORDER_CASES)
+def test_an_orders_status_is_worked_out_from_its_shipments(cancelled, shipments, expected, why):
+    assert statuses.order_status(cancelled, shipments) == expected, why
+
+
+def test_the_0009_downgrade_works_it_out_the_same_way():
+    """Migration 0009 carries its own copy of the rule, as a migration must.
+
+    The copy writes Shipped where the rule says Part shipped, because the
+    older code does not know that word. Otherwise they must agree, or taking
+    the database back would give orders a status they never showed.
+    """
+    path = Path(__file__).parents[1] / "migrations" / "versions" / "0009_order_status_from_shipments.py"
+    spec = importlib.util.spec_from_file_location("migration_0009", path)
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+
+    for cancelled, shipments, expected, why in ORDER_CASES:
+        older = migration._older_status(cancelled, [(s.status, s.is_final) for s in shipments])
+        assert older == ("Shipped" if expected == statuses.PART_SHIPPED else expected), why
 
 
 # ----------------------------------------------------------- rate limiting

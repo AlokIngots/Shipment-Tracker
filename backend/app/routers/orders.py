@@ -35,6 +35,9 @@ def list_orders(current_user: SettledUser, db: DbSession) -> list[Order]:
         db.scalars(
             select(Order)
             .where(Order.customer_id == current_user.customer_id)
+            # The status is worked out from the shipments, so fetch them in
+            # one query rather than one query per order.
+            .options(selectinload(Order.shipments))
             .order_by(Order.id)
         )
     )

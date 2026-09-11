@@ -13,11 +13,13 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    false,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.services import statuses
 
 
 
@@ -36,15 +38,28 @@ class Order(Base):
     description: Mapped[str | None] = mapped_column(Text)
     ordered_qty: Mapped[Decimal | None] = mapped_column(Numeric(14, 3))
     unit: Mapped[str | None] = mapped_column(String(20))
-    status: Mapped[str | None] = mapped_column(String(50))
+    # The one part of an order's status set by hand. The rest is worked out
+    # from the shipments; see `status`.
+    cancelled: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=false()
+    )
 
     customer: Mapped["Customer"] = relationship(back_populates="orders")
     shipments: Mapped[list["Shipment"]] = relationship(
         back_populates="order", cascade="all, delete-orphan"
     )
 
+    @property
+    def status(self) -> str:
+        """What the order says, worked out from its shipments on every read.
+
+        Never stored, so it cannot go out of step with them. Reading it loads
+        the shipments, so a query for many orders should load them up front.
+        """
+        return statuses.order_status(self.cancelled, self.shipments)
+
     def __repr__(self) -> str:
-        return f"<Order {self.sales_order_no} ({self.status})>"
+        return f"<Order {self.sales_order_no}>"
 
 
 class Shipment(Base):
@@ -60,6 +75,11 @@ class Shipment(Base):
     dispatched_qty: Mapped[Decimal | None] = mapped_column(Numeric(14, 3))
     unit: Mapped[str | None] = mapped_column(String(20))
     status: Mapped[str | None] = mapped_column(String(50))
+    # Ticked by staff on the last lot of an order. Until one is, an order
+    # that has started shipping says Part shipped, however much has gone.
+    is_final: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=false()
+    )
     vessel_name: Mapped[str | None] = mapped_column(String(140))
     imo_number: Mapped[str | None] = mapped_column(String(20))
     # ISO 6346: four letters and seven digits, e.g. MSCU1234566. Stored

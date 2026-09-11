@@ -122,3 +122,62 @@ def check_move(current: str | None, new: str | None, *, allow_backwards: bool) -
             f"(step {there}). If the earlier status was wrong, confirm the "
             "correction and it will be saved."
         )
+
+
+# ------------------------------------------------------------------ an order
+#
+# Nobody types an order's status. It is worked out from the order's shipments
+# every time it is read, so it cannot go out of step with them -- which a
+# typed one did: "In production" on an order whose every shipment said
+# Delivered. Two things are still decided by hand, because only a person
+# knows them: which shipment is the last one, and whether the order has been
+# cancelled.
+
+# Only an order ever says this. Some of it has left the factory, and either
+# the rest has not or nobody has ticked a shipment as the last one yet.
+PART_SHIPPED = "Part shipped"
+
+# A shipment at this step or beyond has left the factory.
+_LEFT_THE_FACTORY = SEQUENCE.index("Shipped") + 1
+
+
+def order_status(cancelled: bool, shipments) -> str:
+    """What an order says, worked out from its shipments.
+
+    ``shipments`` is anything carrying ``status`` and ``is_final``. The rules,
+    in the order they are tried:
+
+    - an order marked cancelled says Cancelled, whatever has shipped
+    - a cancelled shipment is left out, as though it were never there
+    - no shipments: In production
+    - the last shipment is ticked and every shipment has left the factory:
+      the step of the one furthest behind (Shipped, In transit, Delivered)
+    - anything has left the factory: Part shipped
+    - the last shipment is ticked but nothing has left: the step of the one
+      furthest behind (In production, Packed)
+    - otherwise In production, because more of the order is still to make
+
+    The last shipment is ticked by staff rather than worked out from the
+    quantities, because steel orders finish a few tonnes over or under and
+    only staff know which lot is the last.
+    """
+    if cancelled:
+        return CANCELLED
+
+    live = [s for s in shipments if s.status != CANCELLED]
+    if not live:
+        return SEQUENCE[0]
+
+    # A shipment with no status yet -- or one written before step 18 that
+    # the sequence does not know -- has not started.
+    steps = [step(s.status) or 1 for s in live]
+    behind, ahead = min(steps), max(steps)
+    finished = any(s.is_final for s in live)
+
+    if finished and behind >= _LEFT_THE_FACTORY:
+        return SEQUENCE[behind - 1]
+    if ahead >= _LEFT_THE_FACTORY:
+        return PART_SHIPPED
+    if finished:
+        return SEQUENCE[behind - 1]
+    return SEQUENCE[0]

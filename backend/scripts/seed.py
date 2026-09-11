@@ -57,7 +57,6 @@ DEMO_DATA = [
                 "description": "Bright bar rounds 20-40 mm, h9",
                 "ordered_qty": Decimal("583.00"),
                 "unit": "MT",
-                "status": "In transit",
                 "shipments": [
                     {
                         "shipment_no": "AIMPL/SHP/163-1",
@@ -109,7 +108,6 @@ DEMO_DATA = [
                 "description": "Bright bar rounds 10-25 mm, h9",
                 "ordered_qty": Decimal("120.500"),
                 "unit": "MT",
-                "status": "In production",
                 "shipments": [
                     {
                         "shipment_no": "AIMPL/SHP/164-1",
