@@ -486,8 +486,11 @@
   background: var(--navy);
 }
 
+/* Above the lines. Each step's line is drawn after the step before it, so
+   without this the line cut a bite out of the previous dot. */
 .step-dot {
   position: absolute;
+  z-index: 1;
   top: 0;
   left: 50%;
   width: 12px;
