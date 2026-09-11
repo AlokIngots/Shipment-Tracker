@@ -96,6 +96,35 @@ def test_a_short_password_is_refused_by_the_server(client, db, customer):
     assert refused.status_code == 400
 
 
+def test_eight_characters_is_exactly_enough(client, db, customer):
+    """Seven is refused and eight is accepted, so the line is where we say."""
+    from app.core.security import PASSWORD_MIN_LENGTH
+
+    assert PASSWORD_MIN_LENGTH == 8
+    _, temporary = accounts.create_login(db, customer, "edge@testco.example", None)
+    headers = {
+        "Authorization": "Bearer "
+        + client.post(
+            "/api/login", json={"email": "edge@testco.example", "password": temporary}
+        ).json()["token"]
+    }
+
+    seven = client.post(
+        "/api/change-password",
+        headers=headers,
+        json={"current_password": temporary, "new_password": "abcdefg"},
+    )
+    assert seven.status_code == 400
+    assert "at least 8 characters" in seven.json()["detail"]
+
+    eight = client.post(
+        "/api/change-password",
+        headers=headers,
+        json={"current_password": temporary, "new_password": "abcdefgh"},
+    )
+    assert eight.status_code == 200
+
+
 # ------------------------------------------------------------ rate limiting
 
 

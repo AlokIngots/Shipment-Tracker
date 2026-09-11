@@ -160,7 +160,7 @@ cd backend
 .venv/Scripts/python.exe -m pytest
 ```
 
-123 tests, about a minute, with the dev database up. They build their own
+131 tests, about a minute, with the dev database up. They build their own
 database beside the development one and drop it afterwards, so the
 development data is untouched — the row counts are identical before and
 after. They also run on GitHub for every push.
@@ -477,6 +477,8 @@ Update after every step: what was done, and the commit.
 | 2026-09-10 | **Step 22 — Prepared to share srv1427359 with AlokCRM.** Three approved changes, and three more the work uncovered. `docker-compose.server.yml` moves the portal to `127.0.0.1:8090` (8080 turned out to be alok-crm-frontend) so nginx keeps 80 and 443 — with `!override`, because Compose **merges** sequences and a plain list left 80 and 443 published anyway. `COMPOSE_FILES` is overridable in `safe-deploy.sh`. Caddy's `trusted_proxies` fixes a **live bug**: Caddy replaces `X-Forwarded-For` with the peer address, so behind it every visitor looked like Docker's gateway and the whole rate limiter was one shared budget. Also found: the website health check was hardcoded to port 80 and would have rolled back a working server deploy, and `docker compose port` can answer `0` mid-start. New staff-only `GET /api/staff/whoami` reports what the server thinks your address is, because the hop count cannot be guessed. Nothing was done on the server | _this commit_ |
 
 | 2026-09-10 | **Step 23 — Port 8090, and the nginx site committed.** srv1427359 reported 8080 already taken by `alok-crm-frontend`, so the override moves to `127.0.0.1:8090`. The nginx site had only ever existed as text in a chat message; it is now `deploy/nginx/portal.alokindia.co.in.conf`, version-controlled, with the reasoning for `client_max_body_size 25m` and for `X-Forwarded-For $remote_addr` rather than `$proxy_add_x_forwarded_for` in it. Proved by running real nginx in front of the deployed stack: the whole chain answers, the address nginx writes is the one the API uses (`hops_seen` 2), a forged `X-Forwarded-For` is overwritten at the door, and a 5 MB upload passes where nginx's 1 MB default would have refused it | _this commit_ |
+
+| 2026-09-11 | **Password minimum lowered from 12 to 8 characters**, on the Choose your password screen and on the server together; the other two rules (no leading or trailing space, at least five different characters) are unchanged. The suite passed untouched after the change, which proved only that nothing broke — no test sat on the line. One now does: seven characters refused with a message saying 8, eight accepted. 131 tests pass, and the frontend builds | `74d063d` + _this commit_ |
 
 ### Design decisions worth remembering
 
@@ -829,7 +831,7 @@ Update after every step: what was done, and the commit.
   drills, against the reorganised backend. What it has still never met is a
   real machine, a real domain, or Caddy actually obtaining an HTTPS
   certificate — that cannot be tested until DNS points somewhere.
-- **The frontend has no tests.** The 123 committed tests are all backend.
+- **The frontend has no tests.** The 131 committed tests are all backend.
   Nothing checks that the progress track draws, that the photo gallery
   revokes its blob URLs, or that a backwards status change asks before it
   saves. `npm run build` passing only means it compiles.
