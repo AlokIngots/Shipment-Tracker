@@ -143,7 +143,13 @@ def test_the_customer_half_of_the_api_has_no_writes():
     """
     import main
 
-    allowed_writes = {"/api/login", "/api/change-password"}
+    allowed_writes = {
+        "/api/login",
+        "/api/change-password",
+        # Sign-in bookkeeping, not customer data: a link issued, a link spent.
+        "/api/magic-link",
+        "/api/magic-link/redeem",
+    }
     offenders = [
         f"{method} {path}"
         for path, operations in main.app.openapi()["paths"].items()

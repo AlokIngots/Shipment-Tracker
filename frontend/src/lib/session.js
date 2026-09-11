@@ -38,6 +38,26 @@ export function forgetToken() {
   }
 }
 
+// A sign-in link arrives as https://portal.alokindia.co.in/#sign-in=<token>.
+// The token sits after the #, which a browser never sends to a server, so it
+// cannot end up in an access log. It is read once and wiped from the address
+// bar straight away: left there, it would sit in the browser's history for
+// the next person at a shared computer to find.
+const LINK_PREFIX = '#sign-in='
+
+export function takeSignInLinkToken() {
+  const { hash, pathname, search } = window.location
+  if (!hash.startsWith(LINK_PREFIX)) return null
+
+  const token = decodeURIComponent(hash.slice(LINK_PREFIX.length))
+  try {
+    window.history.replaceState(null, '', pathname + search)
+  } catch {
+    // Nothing to do: signing in still works, the address bar just keeps it.
+  }
+  return token || null
+}
+
 // Start using a token: send it with every later request, and remember it for
 // this tab. Not a React hook, despite what the old name (useToken) suggested.
 export function applyToken(token) {

@@ -96,6 +96,26 @@ TRUSTED_PROXY_HOPS = max(1, int(os.getenv("TRUSTED_PROXY_HOPS", "1")))
 TRUST_PROXY_HEADER = _flag("TRUST_PROXY_HEADER", "true")
 
 
+# ----------------------------------------------------- sign-in by email link
+
+# How long an emailed sign-in link works. Short on purpose: for as long as it
+# lives the link is as good as a password, and it sits in an inbox.
+MAGIC_LINK_TTL_SECONDS = int(os.getenv("MAGIC_LINK_TTL_SECONDS", "900"))  # 15 min
+
+# Asking for a link sends an email, so EVERY request is counted, not only
+# failed ones -- otherwise anybody could fill a customer's inbox.
+#
+# Per inbox: past this many in the window, the same "check your email"
+# answer comes back and nothing is sent. Deliberately not a 429, so the limit
+# can never be used to ask whether an address has an account.
+MAGIC_LINK_MAX_PER_EMAIL = int(os.getenv("MAGIC_LINK_MAX_PER_EMAIL", "3"))
+
+# Per network address, across every inbox it asks for: past this, a 429.
+MAGIC_LINK_MAX_PER_ADDRESS = int(os.getenv("MAGIC_LINK_MAX_PER_ADDRESS", "10"))
+
+MAGIC_LINK_WINDOW_SECONDS = int(os.getenv("MAGIC_LINK_WINDOW_SECONDS", "900"))  # 15 min
+
+
 # ------------------------------------------------------------------- storage
 
 # Customer documents live outside the repository. Every stored file gets a

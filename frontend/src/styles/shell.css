@@ -205,6 +205,46 @@ code {
   font-weight: 500;
 }
 
+/* The second way in: the same button shape, outlined rather than filled,
+   so the password stays the obvious default. */
+.button--outline {
+  background: #fff;
+  color: var(--navy);
+}
+
+.button--outline:hover:not(:disabled) {
+  background: #eef0f6;
+}
+
+.login-or {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 18px 0 14px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.login-or::before,
+.login-or::after {
+  content: "";
+  flex: 1;
+  border-top: 1px solid var(--line);
+}
+
+.login-hint {
+  margin: 10px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+  text-align: center;
+}
+
+.login-hint--left {
+  margin: -8px 0 4px;
+  text-align: left;
+}
+
 .demo-note {
   margin: 18px 0 0;
   padding-top: 16px;

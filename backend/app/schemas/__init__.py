@@ -36,6 +36,8 @@ from app.schemas.auth import (
     CustomerOut,
     LoginRequest,
     LoginResponse,
+    MagicLinkRedeem,
+    MagicLinkRequest,
 )
 from app.schemas.orders import (
     DocumentOut,
@@ -62,6 +64,8 @@ __all__ = [
     "DocumentOut",
     "LoginRequest",
     "LoginResponse",
+    "MagicLinkRedeem",
+    "MagicLinkRequest",
     "OrderDetailOut",
     "OrderIn",
     "OrderOut",

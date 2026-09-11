@@ -38,6 +38,18 @@ class LoginResponse(BaseModel):
     is_staff: bool = False
 
 
+class MagicLinkRequest(BaseModel):
+    """Asking for a sign-in link: an email address and nothing else."""
+
+    email: str
+
+
+class MagicLinkRedeem(BaseModel):
+    """The token from a sign-in link, sent back to be spent."""
+
+    token: str
+
+
 class ChangePasswordRequest(BaseModel):
     """A user setting their own password."""
 

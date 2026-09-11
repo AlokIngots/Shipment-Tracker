@@ -6,6 +6,7 @@
     photo.py         Photo
     notification.py  Notification
     audit.py         AuditEvent
+    magic_link.py    MagicLink
 
 Everything is re-exported here, so the rest of the app writes
 ``from app.models import Order`` and never has to know which file it is in.
@@ -16,10 +17,12 @@ which is what lets Alembic see them all.
 from app.models.audit import AuditEvent
 from app.models.customer import Customer, User
 from app.models.document import Document
+from app.models.magic_link import MagicLink
 from app.models.notification import Notification
 from app.models.order import Order, Shipment
 from app.models.photo import Photo
 
 __all__ = [
-    "AuditEvent", "Customer", "Document", "Notification", "Order", "Photo", "Shipment",
+    "AuditEvent", "Customer", "Document", "MagicLink", "Notification", "Order",
+    "Photo", "Shipment",
 ]

@@ -5,16 +5,25 @@ import ChangePasswordScreen from './screens/ChangePasswordScreen'
 import LoginScreen from './screens/LoginScreen'
 import OrderDetailScreen from './screens/OrderDetailScreen'
 import OrdersScreen from './screens/OrdersScreen'
+import SignInLinkScreen from './screens/SignInLinkScreen'
 import StaffScreen from './screens/staff/StaffScreen'
-import { dropToken, recallToken } from './lib/session'
+import { dropToken, recallToken, takeSignInLinkToken } from './lib/session'
+
+// A token from a sign-in link, read once when the portal first loads and
+// wiped from the address bar in the same moment. Read out here rather than
+// inside the component, so React's development double-render cannot read it
+// a second time and find it already gone.
+const LINK_TOKEN = takeSignInLinkToken()
 
 // Who is signed in, and therefore which screen they get. Nothing else. Each
 // screen fetches its own data and owns its own state, so this file stays
 // short enough to hold the whole of the portal's navigation in one view.
 export default function App() {
+  const [linkToken, setLinkToken] = useState(LINK_TOKEN)
   // 'restoring' while a remembered token is being checked, so the login
-  // screen does not flash up for somebody who is already signed in.
-  const [restoring, setRestoring] = useState(true)
+  // screen does not flash up for somebody who is already signed in. Not when
+  // arriving from a sign-in link: that person is signing in afresh.
+  const [restoring, setRestoring] = useState(!LINK_TOKEN)
   const [session, setSession] = useState(null)
   const [openOrderId, setOpenOrderId] = useState(null)
   const [changingPassword, setChangingPassword] = useState(false)
@@ -25,6 +34,7 @@ export default function App() {
   // expired, password changed elsewhere, account deactivated — and all of
   // them mean the same thing here: show the login screen.
   useEffect(() => {
+    if (LINK_TOKEN) return
     const token = recallToken()
     if (!token) {
       setRestoring(false)
@@ -53,6 +63,11 @@ export default function App() {
     }
   }, [])
 
+  function signedInByLink(data) {
+    setLinkToken(null)
+    setSession(data)
+  }
+
   function signOut() {
     dropToken()
     setOpenOrderId(null)
@@ -75,7 +90,9 @@ export default function App() {
   // them getting out of step would put two screens on the page at the same
   // time.
   const showing = !session
-    ? 'login'
+    ? linkToken
+      ? 'link'
+      : 'login'
     : mustChangePassword || changingPassword
       ? 'password'
       : session.is_staff
@@ -91,6 +108,14 @@ export default function App() {
         {restoring && <p className="message">Signing you in…</p>}
 
         {!restoring && showing === 'login' && <LoginScreen onSignedIn={setSession} />}
+
+        {!restoring && showing === 'link' && (
+          <SignInLinkScreen
+            token={linkToken}
+            onSignedIn={signedInByLink}
+            onStartOver={() => setLinkToken(null)}
+          />
+        )}
 
         {showing === 'password' && (
           <ChangePasswordScreen

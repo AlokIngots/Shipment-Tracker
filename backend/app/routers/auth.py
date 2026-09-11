@@ -1,16 +1,49 @@
-"""Signing in, checking a remembered token, and changing a password."""
+"""Signing in, checking a remembered token, and changing a password.
+
+There are two ways to sign in, and both end in the same place:
+
+  * an email and a password, POST /api/login
+  * a link sent by email, POST /api/magic-link to ask for one and
+    POST /api/magic-link/redeem to spend it
+
+None of these change a customer's data. What they write is sign-in
+bookkeeping -- a link issued, a link spent -- which is why they may sit
+outside /api/staff without breaking the read-only rule.
+"""
 
 from datetime import datetime, timezone
 
 from app.core import security
 from app.core.deps import ClientAddress, CurrentUser, DbSession
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, HTTPException, status
 from app.models import Customer, User
-from app.schemas import ChangePasswordRequest, CustomerOut, LoginRequest, LoginResponse
-from app.services import audit, ratelimit
+from app.schemas import (
+    ChangePasswordRequest,
+    CustomerOut,
+    LoginRequest,
+    LoginResponse,
+    MagicLinkRedeem,
+    MagicLinkRequest,
+)
+from app.services import audit, magic_links, ratelimit
 from sqlalchemy import select
 
 router = APIRouter()
+
+LINK_EXPIRED = "This link has expired, please request a new one."
+
+
+def signed_in(user: User, db) -> LoginResponse:
+    """What a successful sign-in returns, however the person proved who they are."""
+    customer = db.get(Customer, user.customer_id) if user.customer_id else None
+    return LoginResponse(
+        token=security.create_token(user.id),
+        email=user.email,
+        full_name=user.full_name,
+        customer=CustomerOut.model_validate(customer) if customer else None,
+        must_change_password=user.must_change_password,
+        is_staff=user.is_staff,
+    )
 
 
 @router.get("/api/health")
@@ -65,15 +98,99 @@ def login(
     # count: one good password does not excuse nineteen bad ones.
     ratelimit.by_email_and_address.clear(f"{email}|{address}")
 
-    customer = db.get(Customer, user.customer_id) if user.customer_id else None
-    return LoginResponse(
-        token=security.create_token(user.id),
-        email=user.email,
-        full_name=user.full_name,
-        customer=CustomerOut.model_validate(customer) if customer else None,
-        must_change_password=user.must_change_password,
-        is_staff=user.is_staff,
-    )
+    return signed_in(user, db)
+
+
+@router.post("/api/magic-link", status_code=status.HTTP_202_ACCEPTED)
+def request_magic_link(
+    body: MagicLinkRequest,
+    db: DbSession,
+    address: ClientAddress,
+    background: BackgroundTasks,
+) -> dict[str, str]:
+    """Email a sign-in link, if the address has an account.
+
+    The answer is identical whether it does or not, word for word and status
+    for status. Every request is counted twice -- per address and per inbox,
+    see MAGIC_LINK_* in app/core/config.py.
+    """
+    email = (body.email or "").strip().lower()
+    if "@" not in email:
+        # Says nothing about any account: it is not an address at all.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Please enter your email address.",
+        )
+
+    # One network asking for links to many inboxes: refused outright.
+    try:
+        ratelimit.magic_link_by_address.check(address)
+    except ratelimit.TooManyAttempts as blocked:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=(
+                "Too many sign-in links have been asked for from your network. "
+                "Please wait a few minutes and try again, or sign in with your "
+                "password."
+            ),
+            headers={"Retry-After": str(blocked.retry_after)},
+        ) from blocked
+    ratelimit.magic_link_by_address.record_attempt(address)
+
+    answer = {
+        "detail": (
+            "Check your email. If that address has an account with the portal, "
+            "a sign-in link is on its way. It works once, within "
+            f"{magic_links.minutes_valid()} minutes."
+        )
+    }
+
+    # One inbox already sent as many links as it is allowed: the same
+    # answer, and nothing sent. A 429 here would tell a stranger that this
+    # address is being asked about -- and the links already sent still work.
+    try:
+        ratelimit.magic_link_by_email.check(email)
+    except ratelimit.TooManyAttempts:
+        return answer
+    ratelimit.magic_link_by_email.record_attempt(email)
+
+    user = magic_links.find_account(db, email)
+    if user is not None:
+        token = magic_links.issue(db, user)
+        # Sent after the answer has gone, so an address with an account does
+        # not take visibly longer to answer than one without.
+        background.add_task(
+            magic_links.send, user.email, user.full_name, magic_links.link_for(token)
+        )
+
+    return answer
+
+
+@router.post("/api/magic-link/redeem", response_model=LoginResponse)
+def redeem_magic_link(
+    body: MagicLinkRedeem, db: DbSession, address: ClientAddress
+) -> LoginResponse:
+    """Spend a sign-in link and sign its owner in. It never works a second time.
+
+    Bad links count against the same per-address budget as bad passwords, so
+    trying tokens at random is slowed to a stop -- not that 256 random bits
+    leave anything to find.
+    """
+    try:
+        ratelimit.by_address.check(address)
+    except ratelimit.TooManyAttempts as blocked:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many sign-in attempts. Please wait a few minutes and try again.",
+            headers={"Retry-After": str(blocked.retry_after)},
+        ) from blocked
+
+    user = magic_links.redeem(db, body.token)
+    if user is None:
+        ratelimit.by_address.record_failure(address)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=LINK_EXPIRED)
+
+    return signed_in(user, db)
 
 
 @router.get("/api/me", response_model=LoginResponse | dict)

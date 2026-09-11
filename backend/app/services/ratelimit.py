@@ -22,6 +22,16 @@ distributed attack on one account therefore still gets through, and that is
 a considered trade, not an oversight — the alternative hands every passer-by
 a way to shut a real customer out.
 
+Sign-in links
+-------------
+
+Asking for a sign-in link sends an email, so there every request counts,
+not only failures: at most MAGIC_LINK_MAX_PER_EMAIL links per inbox and
+MAGIC_LINK_MAX_PER_ADDRESS requests per address, per window. The per-inbox
+counter does not become the trap described above, because reaching it locks
+nobody out of anything -- the password still works, and so do the links
+already sent.
+
 Where the counts live
 ---------------------
 
@@ -42,6 +52,9 @@ from app.core.config import (
     LOGIN_LOCKOUT_SECONDS,
     LOGIN_MAX_ATTEMPTS,
     LOGIN_WINDOW_SECONDS,
+    MAGIC_LINK_MAX_PER_ADDRESS,
+    MAGIC_LINK_MAX_PER_EMAIL,
+    MAGIC_LINK_WINDOW_SECONDS,
     RATE_LIMIT_MAX_KEYS,
 )
 
@@ -141,6 +154,15 @@ class AttemptLimiter:
             ):
                 self._prune(now)
 
+    def record_attempt(self, key: str) -> None:
+        """Count an attempt that is limited whether it worked or not.
+
+        The same bookkeeping as a failure. Used where every request costs
+        something -- a sign-in link is an email -- so a successful one must
+        count too.
+        """
+        self.record_failure(key)
+
     def clear(self, key: str) -> None:
         """Forget a key's failures. Called when it finally signs in."""
         with self._lock:
@@ -167,8 +189,25 @@ by_address = AttemptLimiter(
 )
 
 
+# Sign-in links asked for one inbox, from anywhere.
+magic_link_by_email = AttemptLimiter(
+    max_attempts=MAGIC_LINK_MAX_PER_EMAIL,
+    window_seconds=MAGIC_LINK_WINDOW_SECONDS,
+    lockout_seconds=MAGIC_LINK_WINDOW_SECONDS,
+)
+
+# Sign-in links asked for from one address, for any inboxes.
+magic_link_by_address = AttemptLimiter(
+    max_attempts=MAGIC_LINK_MAX_PER_ADDRESS,
+    window_seconds=MAGIC_LINK_WINDOW_SECONDS,
+    lockout_seconds=MAGIC_LINK_WINDOW_SECONDS,
+)
+
+
 def reset_all() -> None:
     """Forget everything. Only for tests."""
-    for limiter in (by_email_and_address, by_address):
+    for limiter in (
+        by_email_and_address, by_address, magic_link_by_email, magic_link_by_address
+    ):
         with limiter._lock:  # noqa: SLF001 - the module owns these objects
             limiter._failures.clear()
