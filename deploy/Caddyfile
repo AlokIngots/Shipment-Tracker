@@ -1,0 +1,49 @@
+# The portal's front door.
+#
+# PORTAL_DOMAIN decides how this behaves:
+#   portal.alokindia.co.in  -> Caddy obtains a real HTTPS certificate itself
+#                              and renews it, with nothing to remember
+#   :80                     -> plain HTTP, used when testing locally
+#
+# Caddy REPLACES X-Forwarded-For with the address it is talking to, unless
+# that address is a trusted proxy -- in which case it keeps what arrived.
+# Without this block the API sees the same address for every visitor:
+#
+#   * exposed directly, that address is Docker's gateway, so all customers
+#     share one rate-limit budget and one attacker locks everybody out
+#   * behind nginx, the client's real address is discarded at the door and
+#     replaced with nginx's own
+#
+# Trusting private ranges is the right rule for both. A real customer
+# arrives from a public address, is not trusted, and Caddy correctly records
+# the address it sees. nginx on the same host arrives from a private one, is
+# trusted, and the client address it wrote is preserved.
+{
+	servers {
+		trusted_proxies static private_ranges
+	}
+}
+
+{$PORTAL_DOMAIN::80} {
+	encode zstd gzip
+
+	# Anything under /api is the FastAPI backend. The browser only ever
+	# talks to this one origin, so there are no CORS problems.
+	handle /api/* {
+		reverse_proxy api:8000
+	}
+
+	# Everything else is the React app. Unknown paths fall back to
+	# index.html so the app can handle them itself.
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+	}
+}
