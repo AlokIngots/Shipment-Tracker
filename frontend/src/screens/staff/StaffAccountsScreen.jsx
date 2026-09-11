@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import axios from 'axios'
-import { TextField } from '../../components/Field'
-import { describeError } from '../../lib/format'
+import StartHere from '../../components/StartHere'
+import { Field, TextField } from '../../components/Field'
+import { describeError, plural } from '../../lib/format'
 
 // A temporary password, shown once and never again. It is deliberately
 // awkward to lose: it stays on screen until dismissed, and says plainly that
@@ -24,18 +25,18 @@ function TemporaryPassword({ result, onDone }) {
       <h3 className="form-title">Temporary password for {result.email}</h3>
       <p className="password-value">{result.temporary_password}</p>
       <p className="lead">
-        <strong>This is the only time it can be read.</strong> It is stored as
-        a hash, so nobody — not even the server — can look it up again. If it
-        is lost, use Reset password and send a new one.
+        <strong>Copy it now. It is shown only this once.</strong> The portal
+        keeps no readable copy, so it cannot be looked up later. If it gets
+        lost, press Reset password to make a new one.
       </p>
       <p className="lead">
-        Send it the way you would send anything else confidential, and not in
-        the same message as the portal address. {result.email} will have to
-        choose their own password before the portal shows them a single order.
+        Send it to {result.email} privately, in a separate message from the
+        portal address. The first time they sign in, the portal asks them to
+        choose their own password before it shows any orders.
       </p>
       <div className="form-actions">
         <button type="button" className="button" onClick={onDone}>
-          I have copied it — close
+          I have copied it, close
         </button>
         <button type="button" className="button button--ghost" onClick={copy}>
           {copied ? 'Copied' : 'Copy to clipboard'}
@@ -60,12 +61,12 @@ function CustomerForm({ customer, onSaved, onCancel }) {
 
   async function submit(event) {
     event.preventDefault()
-    if (!form.name.trim()) {
-      setError('A customer name is required.')
+    if (!customer && !form.code.trim()) {
+      setError('Enter a short customer code, such as HANSA.')
       return
     }
-    if (!customer && !form.code.trim()) {
-      setError('A customer code is required.')
+    if (!form.name.trim()) {
+      setError('Enter the company name.')
       return
     }
 
@@ -85,7 +86,7 @@ function CustomerForm({ customer, onSaved, onCancel }) {
 
   return (
     <form className="card card--form" onSubmit={submit} noValidate>
-      <h3 className="form-title">{customer ? 'Edit customer' : 'New customer'}</h3>
+      <h3 className="form-title">{customer ? 'Edit customer' : 'Add a customer'}</h3>
 
       <div className="formgrid">
         {customer ? (
@@ -94,7 +95,7 @@ function CustomerForm({ customer, onSaved, onCancel }) {
             value={form.code}
             onChange={() => {}}
             disabled
-            hint="Cannot be changed: the CSV importer matches on it."
+            hint="Cannot be changed, because imported orders are matched to it."
           />
         ) : (
           <TextField
@@ -102,7 +103,8 @@ function CustomerForm({ customer, onSaved, onCancel }) {
             value={form.code}
             onChange={set('code')}
             placeholder="HANSA"
-            hint="Must match what SAP/PMS exports. Cannot be changed later."
+            autoFocus
+            hint="A short code for the company. Use the same one as in SAP/PMS. It cannot be changed later."
           />
         )}
 
@@ -111,6 +113,7 @@ function CustomerForm({ customer, onSaved, onCancel }) {
           value={form.name}
           onChange={set('name')}
           placeholder="Hansa Stahl GmbH"
+          autoFocus={Boolean(customer)}
         />
 
         <TextField
@@ -144,6 +147,41 @@ function CustomerForm({ customer, onSaved, onCancel }) {
   )
 }
 
+// Asked first when the Add customer login quick action brought us here and
+// there is more than one customer it could be for.
+function LoginPicker({ customers, onPick, onCancel }) {
+  const [chosen, setChosen] = useState(String(customers[0]?.id ?? ''))
+
+  return (
+    <div className="card card--form">
+      <h3 className="form-title">Add a customer login</h3>
+      <div className="formgrid">
+        <Field label="Which customer is the login for?">
+          <select autoFocus value={chosen} onChange={(e) => setChosen(e.target.value)}>
+            {customers.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name} ({c.code})
+              </option>
+            ))}
+          </select>
+        </Field>
+      </div>
+      <div className="form-actions">
+        <button
+          type="button"
+          className="button"
+          onClick={() => onPick(customers.find((c) => String(c.id) === chosen))}
+        >
+          Continue
+        </button>
+        <button type="button" className="button button--ghost" onClick={onCancel}>
+          Cancel
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function LoginForm({ customer, onCreated, onCancel }) {
   const [email, setEmail] = useState('')
   const [fullName, setFullName] = useState('')
@@ -153,7 +191,7 @@ function LoginForm({ customer, onCreated, onCancel }) {
   async function submit(event) {
     event.preventDefault()
     if (!email.trim()) {
-      setError('An email address is required.')
+      setError('Enter their email address.')
       return
     }
 
@@ -177,18 +215,20 @@ function LoginForm({ customer, onCreated, onCancel }) {
 
       <div className="formgrid">
         <TextField
-          label="Email address"
+          label="Their email address"
           value={email}
           onChange={setEmail}
           type="email"
           placeholder="einkauf@hansa-stahl.de"
-          hint="Nothing checks that this address is real. A typo makes a login nobody can use."
+          autoFocus
+          hint="Check the spelling. The portal cannot tell if an address is wrong."
         />
         <TextField
           label="Their name"
           value={fullName}
           onChange={setFullName}
           placeholder="Petra Baumann"
+          hint="Optional. Used to greet them."
         />
       </div>
 
@@ -229,10 +269,10 @@ function LoginRow({ login, busy, onReset, onSetActive }) {
         </span>
         <span className="docrow-file">
           {!login.is_active
-            ? 'Deactivated — cannot sign in'
+            ? 'Disabled — cannot sign in'
             : login.must_change_password
-              ? 'Still on the temporary password; sees no orders until it is changed'
-              : 'Active'}
+              ? 'Has not chosen a password yet — sees no orders until they do'
+              : 'Can sign in'}
         </span>
       </div>
       <div className="docrow-actions">
@@ -250,22 +290,27 @@ function LoginRow({ login, busy, onReset, onSetActive }) {
           onClick={onSetActive}
           disabled={busy}
         >
-          {login.is_active ? 'Deactivate' : 'Reactivate'}
+          {login.is_active ? 'Disable login' : 'Enable login'}
         </button>
       </div>
     </div>
   )
 }
 
-// Customers & logins. Everything here used to need somebody with access to
-// the server running scripts/manage_users.py.
-export default function StaffAccountsScreen() {
+// Customers & logins: add a customer, give somebody there a login, reset a
+// password, disable a login. The server decides every one of these in
+// app/services/accounts.py; this screen only asks.
+export default function StaffAccountsScreen({ startWith, onGo }) {
   const [state, setState] = useState('loading')
   const [data, setData] = useState({ customers: [], staff: [] })
   // null, 'new', or the customer being edited.
-  const [customerForm, setCustomerForm] = useState(null)
+  const [customerForm, setCustomerForm] = useState(
+    startWith?.action === 'new-customer' ? 'new' : null,
+  )
   // The customer a login is being created for, or null.
   const [loginFor, setLoginFor] = useState(null)
+  // Asking "which customer?" before a login form can open.
+  const [picking, setPicking] = useState(startWith?.action === 'new-login')
   // A one-time password waiting to be read.
   const [password, setPassword] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -276,13 +321,21 @@ export default function StaffAccountsScreen() {
       const res = await axios.get('/api/staff/accounts')
       setData(res.data)
       setState('ready')
+      return res.data
     } catch (err) {
       setState(err.response?.status === 401 ? 'unauthorised' : 'error')
+      return null
     }
   }
 
   useEffect(() => {
-    load()
+    load().then((loaded) => {
+      // Only one customer: nothing to choose, so go straight to its form.
+      if (loaded && startWith?.action === 'new-login' && loaded.customers.length === 1) {
+        setPicking(false)
+        setLoginFor(loaded.customers[0])
+      }
+    })
   }, [])
 
   async function afterSave() {
@@ -295,8 +348,8 @@ export default function StaffAccountsScreen() {
     if (
       !window.confirm(
         `Give ${login.email} a new temporary password?\n\n` +
-          'Their current password stops working at once, and every session ' +
-          'they have open is signed out.',
+          'Their current password stops working at once, and they are signed ' +
+          'out everywhere.',
       )
     )
       return
@@ -318,8 +371,8 @@ export default function StaffAccountsScreen() {
     const next = !login.is_active
     const question = next
       ? `Let ${login.email} sign in again?`
-      : `Lock ${login.email} out?\n\nThis takes effect immediately, including ` +
-        'for a session they already have open.'
+      : `Disable the login for ${login.email}?\n\nThey are signed out at once and ` +
+        'cannot sign in until you enable it again. Nothing is deleted.'
     if (!window.confirm(question)) return
 
     setBusy(true)
@@ -328,7 +381,7 @@ export default function StaffAccountsScreen() {
       await axios.post(`/api/staff/logins/${login.id}/active`, { active: next })
       await load()
     } catch (err) {
-      setError(describeError(err, 'Could not change that account.'))
+      setError(describeError(err, 'Could not change that login.'))
     } finally {
       setBusy(false)
     }
@@ -347,12 +400,14 @@ export default function StaffAccountsScreen() {
       <div className="card">
         <p className="message message--error" role="alert">
           {state === 'unauthorised'
-            ? 'Your session has expired. Please sign in again.'
-            : "Couldn't load the customers. Please try again."}
+            ? 'You have been signed out. Please sign in again.'
+            : "Couldn't load the customers. Please refresh the page to try again."}
         </p>
       </div>
     )
   }
+
+  const loginCount = data.customers.reduce((total, c) => total + c.logins.length, 0)
 
   return (
     <>
@@ -360,9 +415,12 @@ export default function StaffAccountsScreen() {
         <TemporaryPassword result={password} onDone={() => setPassword(null)} />
       )}
 
+      {(data.customers.length === 0 || loginCount === 0) && <StartHere onGo={onGo} />}
+
       <div className="card card--summary">
         <p className="summary">
-          {data.customers.length} customer(s), {data.staff.length} staff login(s).
+          {plural(data.customers.length, 'customer')} ·{' '}
+          {plural(loginCount, 'customer login')} · {plural(data.staff.length, 'team login')}
         </p>
         <button
           type="button"
@@ -370,7 +428,7 @@ export default function StaffAccountsScreen() {
           onClick={() => setCustomerForm('new')}
           disabled={customerForm === 'new'}
         >
-          New customer
+          Add customer
         </button>
       </div>
 
@@ -384,6 +442,17 @@ export default function StaffAccountsScreen() {
 
       {customerForm === 'new' && (
         <CustomerForm onSaved={afterSave} onCancel={() => setCustomerForm(null)} />
+      )}
+
+      {picking && data.customers.length > 1 && (
+        <LoginPicker
+          customers={data.customers}
+          onPick={(customer) => {
+            setPicking(false)
+            setLoginFor(customer)
+          }}
+          onCancel={() => setPicking(false)}
+        />
       )}
 
       {data.customers.map((customer) =>
@@ -402,15 +471,17 @@ export default function StaffAccountsScreen() {
                   {customer.name} <em className="mono">({customer.code})</em>
                 </h3>
                 <p className="shipment-sub">
-                  {customer.country || 'Country not set'} · {customer.order_count}{' '}
-                  order(s) · {customer.logins.length} login(s)
+                  {customer.country || 'Country not set'} ·{' '}
+                  {plural(customer.order_count, 'order')} ·{' '}
+                  {plural(customer.logins.length, 'login')}
                 </p>
               </div>
             </div>
 
-            {customer.logins.length === 0 && (
+            {customer.logins.length === 0 && loginFor?.id !== customer.id && (
               <p className="message message--quiet">
-                Nobody can sign in for this customer yet.
+                No logins yet. Press Add a login so someone at {customer.name} can
+                see their orders.
               </p>
             )}
 
@@ -430,6 +501,7 @@ export default function StaffAccountsScreen() {
                 onCreated={async (result) => {
                   setLoginFor(null)
                   setPassword(result)
+                  window.scrollTo(0, 0)
                   await load()
                 }}
                 onCancel={() => setLoginFor(null)}
@@ -461,12 +533,11 @@ export default function StaffAccountsScreen() {
       <div className="card">
         <div className="shipment-head">
           <div>
-            <h3 className="shipment-no">Alok Ingots staff</h3>
+            <h3 className="shipment-no">Alok Ingots team</h3>
             <p className="shipment-sub">
-              These accounts see this admin console instead of a customer
-              portal. A staff login can only be created on the server, with{' '}
-              <code>scripts/manage_users.py --add-staff</code> — on purpose,
-              because staff is the flag that unlocks every write in the portal.
+              Team logins see this admin screen instead of the customer portal,
+              and can change anything in it. For that reason a new team login is
+              added by your IT administrator, not from this screen.
             </p>
           </div>
         </div>

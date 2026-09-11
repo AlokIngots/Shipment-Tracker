@@ -45,13 +45,65 @@ function DocumentRow({ doc }) {
           {state === 'busy'
             ? 'Preparing…'
             : state === 'failed'
-              ? 'Try again'
+              ? 'Did not download — try again'
               : 'Download'}
         </button>
       ) : (
-        <span className="doc-state">Not uploaded yet</span>
+        <span className="doc-state">Not ready yet</span>
       )}
     </li>
+  )
+}
+
+// Where the goods are, in the words a buyer uses. Only what is known is
+// shown: a column of dashes before a vessel is booked looks broken, when all
+// it means is "not yet".
+function Tracking({ shipment }) {
+  const facts = [
+    ['Vessel', shipment.vessel_name],
+    ['Vessel IMO number', shipment.imo_number],
+    ['Container number', shipment.container_no],
+    ['Bill of Lading number', shipment.bl_number],
+    ['Departure date', shipment.etd && fmtDate(shipment.etd)],
+    ['Expected arrival', shipment.eta && fmtDate(shipment.eta)],
+  ].filter(([, value]) => value)
+
+  return (
+    <div className="docs">
+      <span className="docs-label">Track your shipment</span>
+
+      {facts.length === 0 && !shipment.tracking_url && (
+        <p className="docs-none">
+          The vessel, container and dates will appear here once this shipment
+          is booked.
+        </p>
+      )}
+
+      {facts.length > 0 && (
+        <dl className="facts facts--tight">
+          {facts.map(([label, value]) => (
+            <div key={label}>
+              <dt>{label}</dt>
+              <dd>{value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+
+      {shipment.tracking_url && (
+        <p className="track-line">
+          <a
+            className="track track--button"
+            href={shipment.tracking_url}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            See where the vessel is now
+          </a>
+          <span className="track-by">Opens {shipment.tracking_provider} in a new tab</span>
+        </p>
+      )}
+    </div>
   )
 }
 
@@ -59,6 +111,7 @@ export default function OrderDetailScreen({ orderId, onBack, onSignOut, session 
   // 'loading' -> 'ready' | 'error' | 'notfound'
   const [state, setState] = useState('loading')
   const [order, setOrder] = useState(null)
+  const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -78,15 +131,20 @@ export default function OrderDetailScreen({ orderId, onBack, onSignOut, session 
     return () => {
       cancelled = true
     }
-  }, [orderId])
+  }, [orderId, attempt])
+
+  function tryAgain() {
+    setState('loading')
+    setAttempt((n) => n + 1)
+  }
 
   return (
     <>
       <Toolbar
-        title={state === 'ready' ? order.sales_order_no : 'Order'}
+        title={state === 'ready' ? `Order ${order.sales_order_no}` : 'Your order'}
         subtitle={session.customer?.name}
         onBack={onBack}
-        backLabel="Back to orders"
+        backLabel="All your orders"
       >
         <button type="button" className="button button--ghost" onClick={onSignOut}>
           Sign out
@@ -95,36 +153,50 @@ export default function OrderDetailScreen({ orderId, onBack, onSignOut, session 
 
       {state === 'loading' && (
         <div className="card">
-          <p className="message">Loading order…</p>
+          <p className="message">Loading your order…</p>
         </div>
       )}
 
       {state === 'notfound' && (
         <div className="card">
-          <p className="message message--error" role="alert">
-            That order could not be found.
-          </p>
+          <div className="empty" role="alert">
+            <p className="empty-title">We couldn&apos;t find that order</p>
+            <p className="empty-text">
+              It may have been changed or removed. Your current orders are on
+              the list.
+            </p>
+            <button type="button" className="button" onClick={onBack}>
+              Back to your orders
+            </button>
+          </div>
         </div>
       )}
 
       {state === 'error' && (
         <div className="card">
-          <p className="message message--error" role="alert">
-            Couldn&apos;t load this order. Please try again.
-          </p>
+          <div className="empty" role="alert">
+            <p className="empty-title">We couldn&apos;t load this order just now</p>
+            <p className="empty-text">This is usually a short connection problem.</p>
+            <button type="button" className="button" onClick={tryAgain}>
+              Try again
+            </button>
+          </div>
         </div>
       )}
 
       {state === 'ready' && (
         <>
           <div className="card">
-            <StatusPill status={order.status} />
-            <p className="detail-desc">{order.description}</p>
+            <div className="status-line">
+              <span className="status-label">Order status</span>
+              <StatusPill status={order.status} emptyLabel="Awaiting update" />
+            </div>
+            {order.description && <p className="detail-desc">{order.description}</p>}
 
             <dl className="facts">
               <div>
-                <dt>Your PO</dt>
-                <dd className="mono">{order.customer_po || DASH}</dd>
+                <dt>Your PO number</dt>
+                <dd>{order.customer_po || DASH}</dd>
               </div>
               <div>
                 <dt>Grade</dt>
@@ -141,13 +213,13 @@ export default function OrderDetailScreen({ orderId, onBack, onSignOut, session 
                 </span>
               </div>
               <div className="total">
-                <span className="total-label">Dispatched</span>
+                <span className="total-label">Shipped so far</span>
                 <span className="total-value">
                   {order.dispatched_qty} <em>{order.unit}</em>
                 </span>
               </div>
               <div className="total total--balance">
-                <span className="total-label">Balance</span>
+                <span className="total-label">Still to ship</span>
                 <span className="total-value">
                   {order.balance_qty} <em>{order.unit}</em>
                 </span>
@@ -155,11 +227,19 @@ export default function OrderDetailScreen({ orderId, onBack, onSignOut, session 
             </div>
           </div>
 
-          <h3 className="section-title">Shipments ({order.shipments.length})</h3>
+          <h3 className="section-title">
+            Your shipments{order.shipments.length > 0 ? ` (${order.shipments.length})` : ''}
+          </h3>
 
           {order.shipments.length === 0 && (
             <div className="card">
-              <p className="message">Nothing has shipped against this order yet.</p>
+              <div className="empty">
+                <p className="empty-title">Nothing has shipped yet</p>
+                <p className="empty-text">
+                  Each shipment will appear here as it leaves, with its
+                  documents and a link to follow the vessel.
+                </p>
+              </div>
             </div>
           )}
 
@@ -167,61 +247,27 @@ export default function OrderDetailScreen({ orderId, onBack, onSignOut, session 
             <div className="card shipment" key={shipment.id}>
               <div className="shipment-head">
                 <div>
-                  <span className="mono shipment-no">{shipment.shipment_no}</span>
+                  <span className="shipment-no">Shipment {shipment.shipment_no}</span>
                   <span className="shipment-qty">
                     {shipment.dispatched_qty} {shipment.unit}
                   </span>
                 </div>
-                <StatusPill status={shipment.status} />
+                <StatusPill status={shipment.status} emptyLabel="Awaiting update" />
               </div>
 
               <StatusTrack status={shipment.status} />
 
-              <dl className="facts">
-                <div>
-                  <dt>Vessel</dt>
-                  <dd>
-                    {shipment.vessel_name || DASH}
-                    {shipment.tracking_url && (
-                      <a
-                        className="track"
-                        href={shipment.tracking_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        View live on {shipment.tracking_provider}
-                      </a>
-                    )}
-                  </dd>
-                </div>
-                <div>
-                  <dt>IMO</dt>
-                  <dd className="mono">{shipment.imo_number || DASH}</dd>
-                </div>
-                <div>
-                  <dt>Container</dt>
-                  <dd className="mono">{shipment.container_no || DASH}</dd>
-                </div>
-                <div>
-                  <dt>B/L number</dt>
-                  <dd className="mono">{shipment.bl_number || DASH}</dd>
-                </div>
-                <div>
-                  <dt>ETD</dt>
-                  <dd>{fmtDate(shipment.etd)}</dd>
-                </div>
-                <div>
-                  <dt>ETA</dt>
-                  <dd>{fmtDate(shipment.eta)}</dd>
-                </div>
-              </dl>
+              <Tracking shipment={shipment} />
 
               <PhotoGallery photos={shipment.photos} />
 
               <div className="docs">
-                <span className="docs-label">Documents</span>
+                <span className="docs-label">Your documents</span>
                 {shipment.documents.length === 0 ? (
-                  <span className="docs-none">None yet</span>
+                  <p className="docs-none">
+                    Your packing list, invoice, Bill of Lading and test
+                    certificates will appear here as soon as they are ready.
+                  </p>
                 ) : (
                   <ul className="doc-list">
                     {shipment.documents.map((doc) => (

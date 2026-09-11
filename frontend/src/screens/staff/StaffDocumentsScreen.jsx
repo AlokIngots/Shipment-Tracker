@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import axios from 'axios'
+import StartHere from '../../components/StartHere'
 import StatusPill from '../../components/StatusPill'
 import StaffPhotoStrip from './StaffPhotoStrip'
-import { describeError } from '../../lib/format'
+import { describeError, plural } from '../../lib/format'
 
 function StaffDocumentRow({ shipment, doc, onChanged }) {
   const [busy, setBusy] = useState(false)
@@ -31,6 +32,7 @@ function StaffDocumentRow({ shipment, doc, onChanged }) {
   }
 
   async function remove() {
+    if (!window.confirm(`Remove the ${doc.doc_type} from ${shipment.shipment_no}?`)) return
     setBusy(true)
     setError(null)
     try {
@@ -49,7 +51,11 @@ function StaffDocumentRow({ shipment, doc, onChanged }) {
       <div className="docrow-main">
         <span className="docrow-type">{doc.doc_type}</span>
         <span className="docrow-file">
-          {busy ? 'Working…' : doc.uploaded ? doc.file_name : 'Not uploaded yet'}
+          {busy
+            ? 'Working…'
+            : doc.uploaded
+              ? doc.file_name
+              : 'Not uploaded yet — the customer cannot see it'}
         </span>
         {error && (
           <span className="docrow-error" role="alert">
@@ -86,10 +92,13 @@ function StaffDocumentRow({ shipment, doc, onChanged }) {
 
 // Which of the four documents each shipment has, and Upload / Replace /
 // Remove on every one of them.
-export default function StaffDocumentsScreen() {
+export default function StaffDocumentsScreen({ startWith, onGo }) {
   const [state, setState] = useState('loading')
   const [shipments, setShipments] = useState([])
-  const [onlyIncomplete, setOnlyIncomplete] = useState(false)
+  // Arriving from the Upload document quick action: show what still needs
+  // something. Arriving from one shipment's button: show only that one.
+  const [onlyIncomplete, setOnlyIncomplete] = useState(startWith?.action === 'upload')
+  const [focus, setFocus] = useState(startWith?.shipmentId ?? null)
 
   async function load() {
     try {
@@ -105,10 +114,13 @@ export default function StaffDocumentsScreen() {
     load()
   }, [])
 
-  const shown = onlyIncomplete
-    ? shipments.filter((s) => s.missing_count > 0)
-    : shipments
   const incomplete = shipments.filter((s) => s.missing_count > 0).length
+  const shown =
+    focus !== null
+      ? shipments.filter((s) => s.id === focus)
+      : onlyIncomplete
+        ? shipments.filter((s) => s.missing_count > 0)
+        : shipments
 
   return (
     <>
@@ -121,7 +133,7 @@ export default function StaffDocumentsScreen() {
       {state === 'error' && (
         <div className="card">
           <p className="message message--error" role="alert">
-            Couldn&apos;t load the shipments. Please try again.
+            Couldn&apos;t load the shipments. Please refresh the page to try again.
           </p>
         </div>
       )}
@@ -129,36 +141,60 @@ export default function StaffDocumentsScreen() {
       {state === 'unauthorised' && (
         <div className="card">
           <p className="message message--error" role="alert">
-            Your session has expired. Please sign in again.
+            You have been signed out. Please sign in again.
           </p>
         </div>
       )}
 
       {state === 'ready' && shipments.length === 0 && (
-        <div className="card">
-          <p className="message">
-            There are no shipments yet. Add one under Orders, or import them.
-          </p>
-        </div>
+        <>
+          <StartHere onGo={onGo} />
+          <div className="card">
+            <div className="empty">
+              <p className="empty-title">No shipments yet</p>
+              <p className="empty-text">
+                Documents and photos are uploaded against a shipment. Open an
+                order and press Add shipment, then come back here.
+              </p>
+              <button type="button" className="button" onClick={() => onGo('orders')}>
+                Go to orders
+              </button>
+            </div>
+          </div>
+        </>
       )}
 
       {state === 'ready' && shipments.length > 0 && (
         <>
           <div className="card card--summary">
             <p className="summary">
-              {incomplete === 0
-                ? `All ${shipments.length} shipments have every document.`
-                : `${incomplete} of ${shipments.length} shipments are missing documents.`}
+              {focus !== null
+                ? `Showing ${shown[0]?.shipment_no ?? 'one shipment'} only.`
+                : incomplete === 0
+                  ? `All ${plural(shipments.length, 'shipment')} have every document.`
+                  : `${incomplete} of ${plural(shipments.length, 'shipment')} are missing documents.`}
             </p>
-            <label className="checkline">
-              <input
-                type="checkbox"
-                checked={onlyIncomplete}
-                onChange={(e) => setOnlyIncomplete(e.target.checked)}
-              />
-              <span>Show only shipments with something missing</span>
-            </label>
+            {focus !== null ? (
+              <button type="button" className="minibutton" onClick={() => setFocus(null)}>
+                Show all shipments
+              </button>
+            ) : (
+              <label className="checkline">
+                <input
+                  type="checkbox"
+                  checked={onlyIncomplete}
+                  onChange={(e) => setOnlyIncomplete(e.target.checked)}
+                />
+                <span>Show only shipments with something missing</span>
+              </label>
+            )}
           </div>
+
+          <p className="guide" role="note">
+            Press <strong>Upload</strong> beside a document and choose the file:
+            PDF, JPG or PNG, up to 20 MB. The customer can download it as soon
+            as it is uploaded.
+          </p>
 
           {shown.map((shipment) => (
             <div className="card" key={shipment.id}>
@@ -166,7 +202,7 @@ export default function StaffDocumentsScreen() {
                 <div>
                   <h3 className="shipment-no">{shipment.shipment_no}</h3>
                   <p className="shipment-sub">
-                    {shipment.customer_name} ({shipment.customer_code}) ·{' '}
+                    {shipment.customer_name} ({shipment.customer_code}) · order{' '}
                     {shipment.sales_order_no}
                     {shipment.vessel_name ? ` · ${shipment.vessel_name}` : ''}
                   </p>
@@ -189,7 +225,11 @@ export default function StaffDocumentsScreen() {
 
           {shown.length === 0 && (
             <div className="card">
-              <p className="message">Nothing missing. Every document is attached.</p>
+              <p className="message">
+                {focus !== null
+                  ? 'That shipment is no longer here. It may have been removed.'
+                  : 'Nothing missing. Every shipment has all its documents.'}
+              </p>
             </div>
           )}
         </>

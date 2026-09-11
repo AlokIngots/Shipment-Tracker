@@ -24,7 +24,7 @@ export default function PhotoGallery({ photos }) {
   return (
     <div className="photos">
       <span className="docs-label">
-        Material photos {photos.length > 1 && <em>({photos.length})</em>}
+        Photos of your material {photos.length > 1 && <em>({photos.length})</em>}
       </span>
 
       <div className="photostrip">

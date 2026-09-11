@@ -1,30 +1,38 @@
 import { useEffect, useState } from 'react'
 import axios from 'axios'
+import StartHere from '../../components/StartHere'
 import StatusPill from '../../components/StatusPill'
-import { DASH, describeError, fmtDate } from '../../lib/format'
+import { describeError, fmtDate, plural } from '../../lib/format'
 import OrderForm from './OrderForm'
 import ShipmentForm from './ShipmentForm'
 
-function ShipmentRow({ shipment, onEdit, onRemove, busy }) {
+function ShipmentRow({ shipment, onEdit, onRemove, onDocuments, busy }) {
+  // Only what is known, joined into one line. A row of dashes before a vessel
+  // is booked reads as broken, when all it means is "not yet".
+  const facts = [
+    `${shipment.dispatched_qty} ${shipment.unit ?? ''}`.trim(),
+    shipment.vessel_name &&
+      `${shipment.vessel_name}${shipment.imo_number ? ` (IMO ${shipment.imo_number})` : ''}`,
+    shipment.etd && `departs ${fmtDate(shipment.etd)}`,
+    shipment.eta && `arrives ${fmtDate(shipment.eta)}`,
+    shipment.container_no && `container ${shipment.container_no}`,
+    shipment.bl_number && `B/L ${shipment.bl_number}`,
+    plural(shipment.document_count, 'document'),
+  ].filter(Boolean)
+
   return (
     <div className="shiprow">
       <div className="shiprow-main">
         <span className="mono shiprow-no">{shipment.shipment_no}</span>
-        <span className="shiprow-facts">
-          {shipment.dispatched_qty} {shipment.unit} · {shipment.vessel_name || DASH}
-          {shipment.imo_number ? ` (IMO ${shipment.imo_number})` : ''} ·{' '}
-          {fmtDate(shipment.etd)} → {fmtDate(shipment.eta)}
-          {shipment.container_no ? ` · ${shipment.container_no}` : ''}
-          {shipment.bl_number ? ` · B/L ${shipment.bl_number}` : ''}
-          {shipment.document_count > 0
-            ? ` · ${shipment.document_count} document(s)`
-            : ''}
-        </span>
+        <span className="shiprow-facts">{facts.join(' · ')}</span>
       </div>
       <StatusPill status={shipment.status} />
       <div className="docrow-actions">
         <button type="button" className="minibutton" onClick={onEdit} disabled={busy}>
           Edit
+        </button>
+        <button type="button" className="minibutton" onClick={onDocuments} disabled={busy}>
+          Documents & photos
         </button>
         <button
           type="button"
@@ -39,7 +47,7 @@ function ShipmentRow({ shipment, onEdit, onRemove, busy }) {
   )
 }
 
-function OrderCard({ order, onEdit, onRemoveOrder, onRemoveShipment, onSaved, busy }) {
+function OrderCard({ order, onEdit, onRemoveOrder, onRemoveShipment, onSaved, onGo, busy }) {
   // Which form, if any, is open under this order: null, 'new', or a shipment.
   const [shipmentForm, setShipmentForm] = useState(null)
 
@@ -76,7 +84,7 @@ function OrderCard({ order, onEdit, onRemoveOrder, onRemoveShipment, onSaved, bu
           </span>
         </div>
         <div className="total total--balance">
-          <span className="total-label">Balance</span>
+          <span className="total-label">Still to dispatch</span>
           <span className="total-value">
             {order.balance_qty} <em>{order.unit}</em>
           </span>
@@ -84,7 +92,9 @@ function OrderCard({ order, onEdit, onRemoveOrder, onRemoveShipment, onSaved, bu
       </div>
 
       {order.shipments.length === 0 && !shipmentForm && (
-        <p className="message message--quiet">Nothing has shipped against this yet.</p>
+        <p className="message message--quiet">
+          No shipments yet. Press Add shipment when part of this order is dispatched.
+        </p>
       )}
 
       {order.shipments.map((shipment) =>
@@ -101,6 +111,7 @@ function OrderCard({ order, onEdit, onRemoveOrder, onRemoveShipment, onSaved, bu
             shipment={shipment}
             busy={busy}
             onEdit={() => setShipmentForm(shipment)}
+            onDocuments={() => onGo('documents', { shipmentId: shipment.id })}
             onRemove={() => onRemoveShipment(shipment)}
           />
         ),
@@ -140,14 +151,14 @@ function OrderCard({ order, onEdit, onRemoveOrder, onRemoveShipment, onSaved, bu
 }
 
 // The Alok Ingots orders page: every order in the portal, and the forms that
-// create and change them. Before this existed an order could only arrive by
-// running import_data.py on the server.
-export default function StaffOrdersScreen() {
+// create and change them.
+export default function StaffOrdersScreen({ startWith, onGo }) {
   const [state, setState] = useState('loading')
   const [orders, setOrders] = useState([])
   const [customers, setCustomers] = useState([])
-  // null, 'new', or the order being edited.
-  const [orderForm, setOrderForm] = useState(null)
+  // null, 'new', or the order being edited. Opens straight away when the
+  // New order quick action brought us here.
+  const [orderForm, setOrderForm] = useState(startWith?.action === 'new-order' ? 'new' : null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
   const [notice, setNotice] = useState(null)
@@ -180,7 +191,7 @@ export default function StaffOrdersScreen() {
   // off it, and says so in a sentence. Showing that sentence is the whole
   // handling this needs.
   async function removeOrder(order) {
-    if (!window.confirm(`Remove ${order.sales_order_no}?`)) return
+    if (!window.confirm(`Remove order ${order.sales_order_no}?\n\nThis cannot be undone.`)) return
     setBusy(true)
     setError(null)
     try {
@@ -195,7 +206,9 @@ export default function StaffOrdersScreen() {
   }
 
   async function removeShipment(shipment) {
-    if (!window.confirm(`Remove shipment ${shipment.shipment_no}?`)) return
+    if (!window.confirm(`Remove shipment ${shipment.shipment_no}?\n\nThis cannot be undone.`)) {
+      return
+    }
     setBusy(true)
     setError(null)
     try {
@@ -222,39 +235,48 @@ export default function StaffOrdersScreen() {
       <div className="card">
         <p className="message message--error" role="alert">
           {state === 'unauthorised'
-            ? 'Your session has expired. Please sign in again.'
-            : "Couldn't load the orders. Please try again."}
+            ? 'You have been signed out. Please sign in again.'
+            : "Couldn't load the orders. Please refresh the page to try again."}
         </p>
       </div>
     )
   }
 
+  const noCustomers = customers.length === 0
+
   return (
     <>
+      {orders.length === 0 && <StartHere onGo={onGo} />}
+
       <div className="card card--summary">
         <p className="summary">
-          {orders.length === 0
-            ? 'No orders yet.'
-            : `${orders.length} order(s) in the portal.`}
+          {orders.length === 0 ? 'No orders yet.' : `${plural(orders.length, 'order')} in the portal.`}
         </p>
-        <button
-          type="button"
-          className="button"
-          onClick={() => setOrderForm('new')}
-          disabled={orderForm === 'new' || customers.length === 0}
-        >
-          New order
-        </button>
+        {noCustomers ? (
+          <button
+            type="button"
+            className="button"
+            onClick={() => onGo('accounts', { action: 'new-customer' })}
+          >
+            Add a customer first
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="button"
+            onClick={() => setOrderForm('new')}
+            disabled={orderForm === 'new'}
+          >
+            New order
+          </button>
+        )}
       </div>
 
-      {customers.length === 0 && (
-        <div className="card">
-          <p className="message message--error" role="alert">
-            There are no customers yet, so an order has nobody to belong to. Add
-            one on the server with{' '}
-            <code>manage_users.py --add-customer</code>.
-          </p>
-        </div>
+      {noCustomers && (
+        <p className="guide" role="status">
+          Every order belongs to a customer, and there are none yet. Add the
+          customer first, then come back here to enter their order.
+        </p>
       )}
 
       {notice && (
@@ -271,7 +293,7 @@ export default function StaffOrdersScreen() {
         </div>
       )}
 
-      {orderForm === 'new' && (
+      {orderForm === 'new' && !noCustomers && (
         <OrderForm
           customers={customers}
           onSaved={afterSave}
@@ -293,6 +315,7 @@ export default function StaffOrdersScreen() {
             key={order.id}
             order={order}
             busy={busy}
+            onGo={onGo}
             onEdit={() => setOrderForm(order)}
             onSaved={load}
             onRemoveOrder={() => removeOrder(order)}

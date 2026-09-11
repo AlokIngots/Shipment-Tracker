@@ -12,6 +12,8 @@ export default function OrdersScreen({
   // 'loading' -> 'ready' | 'error' | 'unauthorised'
   const [state, setState] = useState('loading')
   const [orders, setOrders] = useState([])
+  // Bumped by Try again, which runs the request below once more.
+  const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -31,13 +33,20 @@ export default function OrdersScreen({
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [attempt])
+
+  function tryAgain() {
+    setState('loading')
+    setAttempt((n) => n + 1)
+  }
+
+  const company = session.customer?.name
 
   return (
     <>
       <Toolbar
         title="Your orders"
-        subtitle={`${session.customer?.name} · signed in as ${session.email}`}
+        subtitle={company ? `${company} · signed in as ${session.email}` : `Signed in as ${session.email}`}
       >
         <button type="button" className="button button--ghost" onClick={onChangePassword}>
           Change password
@@ -47,23 +56,49 @@ export default function OrdersScreen({
         </button>
       </Toolbar>
 
+      {state === 'ready' && orders.length > 0 && (
+        <p className="intro">
+          Choose an order to see its shipments, your documents and where your
+          goods are now.
+        </p>
+      )}
+
       <div className="card">
         {state === 'loading' && <p className="message">Loading your orders…</p>}
 
         {state === 'error' && (
-          <p className="message message--error" role="alert">
-            Couldn&apos;t load your orders. Please try again.
-          </p>
+          <div className="empty" role="alert">
+            <p className="empty-title">We couldn&apos;t load your orders just now</p>
+            <p className="empty-text">This is usually a short connection problem.</p>
+            <button type="button" className="button" onClick={tryAgain}>
+              Try again
+            </button>
+          </div>
         )}
 
         {state === 'unauthorised' && (
-          <p className="message message--error" role="alert">
-            Your session has expired. Please sign in again.
-          </p>
+          <div className="empty" role="alert">
+            <p className="empty-title">You have been signed out</p>
+            <p className="empty-text">
+              For your security, the portal signs you out after a while. Please
+              sign in again.
+            </p>
+            <button type="button" className="button" onClick={onSignOut}>
+              Sign in again
+            </button>
+          </div>
         )}
 
         {state === 'ready' && orders.length === 0 && (
-          <p className="message">No orders to show yet.</p>
+          <div className="empty">
+            <p className="empty-title">No orders here yet</p>
+            <p className="empty-text">
+              When Alok Ingots adds an order for {company || 'your company'}, it
+              will appear here with its status, shipments and documents. If you
+              are expecting one already, please contact your Alok Ingots sales
+              contact.
+            </p>
+          </div>
         )}
 
         {state === 'ready' && orders.length > 0 && (
@@ -76,11 +111,11 @@ export default function OrdersScreen({
             <table className="table" role="table">
               <thead role="rowgroup">
                 <tr role="row">
-                  <th role="columnheader">Sales Order</th>
+                  <th role="columnheader">Order number</th>
                   <th role="columnheader">Grade</th>
-                  <th role="columnheader">Description</th>
-                  <th role="columnheader" className="num">Ordered quantity</th>
-                  <th role="columnheader">Status</th>
+                  <th role="columnheader">Product</th>
+                  <th role="columnheader" className="num">Quantity</th>
+                  <th role="columnheader">Order status</th>
                   <th role="columnheader" />
                 </tr>
               </thead>
@@ -102,11 +137,11 @@ export default function OrdersScreen({
                       {order.description}
                     </td>
                     {/* Quantity is rendered exactly as the API sends it. */}
-                    <td role="cell" className="num mono cell-qty" data-label="Ordered">
+                    <td role="cell" className="num mono cell-qty" data-label="Quantity">
                       {order.ordered_qty} {order.unit}
                     </td>
                     <td role="cell" className="cell-status">
-                      <StatusPill status={order.status} />
+                      <StatusPill status={order.status} emptyLabel="Awaiting update" />
                     </td>
                     <td role="cell" className="chevron">
                       &#8250;

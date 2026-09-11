@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import axios from 'axios'
-import { DASH, describeError, fmtDate } from '../../lib/format'
+import { DASH, describeError, fmtDate, plural } from '../../lib/format'
 
 const PAGE_SIZE = 100
 
@@ -28,8 +28,8 @@ function fmtValue(value) {
 function who(event) {
   if (event.actor_email) return event.actor_email
   return event.source === 'csv import'
-    ? 'CSV import on the server'
-    : 'Command line on the server'
+    ? 'Imported from a data file'
+    : 'Your IT administrator, on the server'
 }
 
 function matches(event, needle) {
@@ -115,8 +115,10 @@ export default function StaffActivityScreen() {
       <div className="card card--summary">
         <p className="summary">
           {needle
-            ? `${visible.length} of the ${events.length} change(s) loaded match.`
-            : `The ${events.length} most recent change(s)${more ? '' : ', which is everything recorded'}.`}
+            ? `${visible.length} of the ${plural(events.length, 'change')} loaded match.`
+            : more
+              ? `Showing the latest ${plural(events.length, 'change')}.`
+              : `${plural(events.length, 'change')} recorded so far.`}
         </p>
         <input
           type="search"

@@ -4,6 +4,11 @@
 // escape so it cannot be mistaken for a hyphen when reading the source.
 export const DASH = '—'
 
+// "1 order", "3 orders" — not "3 order(s)", which reads like a form to fill in.
+export function plural(count, one, many = `${one}s`) {
+  return `${count} ${count === 1 ? one : many}`
+}
+
 // The API sends dates as YYYY-MM-DD. Customers here read DD/MM/YYYY.
 export function fmtDate(value) {
   if (!value) return DASH

@@ -15,10 +15,8 @@ function confirmBackwards(current, next, what) {
   const there = statusStep(next)
   if (here === null || there === null || there >= here) return true
   return window.confirm(
-    `This moves ${what} back from ${current} to ${next}.
-
-` +
-      'Going backwards is usually a misclick. Is this a correction?',
+    `This moves ${what} back from ${current} to ${next}.\n\n` +
+      'Going backwards is usually a slip. Press OK only if you are correcting a mistake.',
   )
 }
 
@@ -46,11 +44,11 @@ export default function ShipmentForm({ orderId, shipment, onSaved, onCancel }) {
     event.preventDefault()
 
     if (!String(form.shipment_no).trim()) {
-      setError('A shipment number is required.')
+      setError('Enter a shipment number.')
       return
     }
     if (String(form.dispatched_qty).trim() === '') {
-      setError('A dispatched quantity is required.')
+      setError('Enter the quantity in this shipment.')
       return
     }
 
@@ -91,18 +89,23 @@ export default function ShipmentForm({ orderId, shipment, onSaved, onCancel }) {
   return (
     <form className="card--form card--form-inner" onSubmit={submit} noValidate>
       <h4 className="form-title">
-        {shipment ? `Edit ${shipment.shipment_no}` : 'New shipment'}
+        {shipment ? `Edit shipment ${shipment.shipment_no}` : 'New shipment'}
       </h4>
+      <p className="form-note">
+        Only the shipment number and quantity are needed now. Add the vessel,
+        container and dates when you have them.
+      </p>
 
       <div className="formgrid">
         <TextField
           label="Shipment number"
           value={form.shipment_no}
           onChange={set('shipment_no')}
+          autoFocus={!shipment}
         />
 
         <TextField
-          label="Dispatched quantity"
+          label="Quantity in this shipment"
           value={form.dispatched_qty}
           onChange={set('dispatched_qty')}
           type="number"
@@ -113,10 +116,11 @@ export default function ShipmentForm({ orderId, shipment, onSaved, onCancel }) {
         <TextField label="Unit" value={form.unit} onChange={set('unit')} />
 
         <ChoiceField
-          label="Status"
+          label="Shipment status"
           value={form.status}
           options={ALL_STATUSES}
           onChange={set('status')}
+          hint="The customer sees this as a progress bar."
         />
 
         <TextField
@@ -126,12 +130,12 @@ export default function ShipmentForm({ orderId, shipment, onSaved, onCancel }) {
         />
 
         <TextField
-          label="IMO number"
+          label="Vessel IMO number"
           value={form.imo_number}
           onChange={set('imo_number')}
           inputMode="numeric"
           maxLength={7}
-          hint="Seven digits. The last one is a check digit, so a typo is refused."
+          hint="7 digits, from the booking. It gives the customer a live tracking link. A typo is caught for you."
         />
 
         <TextField
@@ -140,19 +144,29 @@ export default function ShipmentForm({ orderId, shipment, onSaved, onCancel }) {
           onChange={set('container_no')}
           maxLength={20}
           placeholder="MSCU1234566"
-          hint="Four letters then seven digits. The last one is a check digit, so a typo is refused."
+          hint="4 letters then 7 digits. A typo is caught for you."
         />
 
         <TextField
-          label="B/L number"
+          label="Bill of Lading number"
           value={form.bl_number}
           onChange={set('bl_number')}
           maxLength={60}
-          hint="As the carrier issued it. No format is enforced."
+          hint="Exactly as the shipping line wrote it."
         />
 
-        <TextField label="ETD" value={form.etd} onChange={set('etd')} type="date" />
-        <TextField label="ETA" value={form.eta} onChange={set('eta')} type="date" />
+        <TextField
+          label="Departure date (ETD)"
+          value={form.etd}
+          onChange={set('etd')}
+          type="date"
+        />
+        <TextField
+          label="Expected arrival (ETA)"
+          value={form.eta}
+          onChange={set('eta')}
+          type="date"
+        />
       </div>
 
       {error && (

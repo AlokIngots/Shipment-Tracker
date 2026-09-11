@@ -15,10 +15,8 @@ function confirmBackwards(current, next, what) {
   const there = statusStep(next)
   if (here === null || there === null || there >= here) return true
   return window.confirm(
-    `This moves ${what} back from ${current} to ${next}.
-
-` +
-      'Going backwards is usually a misclick. Is this a correction?',
+    `This moves ${what} back from ${current} to ${next}.\n\n` +
+      'Going backwards is usually a slip. Press OK only if you are correcting a mistake.',
   )
 }
 
@@ -48,11 +46,11 @@ export default function OrderForm({ customers, order, onSaved, onCancel }) {
     // sales order number being unique, the quantity not being negative — is
     // the server's to decide, and is not repeated here.
     if (!String(form.sales_order_no).trim()) {
-      setError('A sales order number is required.')
+      setError('Enter the sales order number.')
       return
     }
     if (String(form.ordered_qty).trim() === '') {
-      setError('An ordered quantity is required.')
+      setError('Enter the quantity ordered.')
       return
     }
 
@@ -111,12 +109,14 @@ export default function OrderForm({ customers, order, onSaved, onCancel }) {
           value={form.sales_order_no}
           onChange={set('sales_order_no')}
           placeholder="AIMPL/SO/EXP/163/2025-26"
+          autoFocus={!order}
         />
 
         <TextField
-          label="Customer PO"
+          label="Customer's PO number"
           value={form.customer_po}
           onChange={set('customer_po')}
+          hint="Optional. The customer sees it as “Your PO number”."
         />
 
         <TextField
@@ -127,7 +127,7 @@ export default function OrderForm({ customers, order, onSaved, onCancel }) {
         />
 
         <TextField
-          label="Ordered quantity"
+          label="Quantity ordered"
           value={form.ordered_qty}
           onChange={set('ordered_qty')}
           type="number"
@@ -135,16 +135,25 @@ export default function OrderForm({ customers, order, onSaved, onCancel }) {
           min="0"
         />
 
-        <TextField label="Unit" value={form.unit} onChange={set('unit')} />
+        <TextField
+          label="Unit"
+          value={form.unit}
+          onChange={set('unit')}
+          hint="MT means metric tonnes."
+        />
 
         <ChoiceField
-          label="Status"
+          label="Order status"
           value={form.status}
           options={ALL_STATUSES}
           onChange={set('status')}
         />
 
-        <Field label="Description" wide>
+        <Field
+          label="Product description"
+          hint="What the customer sees in their list of orders."
+          wide
+        >
           <textarea
             rows={2}
             value={form.description}

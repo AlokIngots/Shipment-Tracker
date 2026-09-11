@@ -35,8 +35,10 @@ const STATUS_CLASS = {
   cancelled: 'pill--cancelled',
 }
 
-export default function StatusPill({ status }) {
-  if (!status) return <span className="pill pill--neutral">Not set</span>
+// emptyLabel: what an unset status reads as. Staff see "Not set", which is
+// what it is; a customer is better told "Awaiting update" than shown a gap.
+export default function StatusPill({ status, emptyLabel = 'Not set' }) {
+  if (!status) return <span className="pill pill--neutral">{emptyLabel}</span>
 
   const tone = STATUS_CLASS[status.trim().toLowerCase()] ?? 'pill--neutral'
   return <span className={`pill ${tone}`}>{status}</span>
