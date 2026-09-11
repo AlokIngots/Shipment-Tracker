@@ -55,12 +55,14 @@ backend/
       accounts.py    customers, logins, temporary passwords
       ratelimit.py   slowing down bulk password guessing
       audit.py       recording who changed what; everything that writes calls it
+      photos.py      proving an upload is a picture; making its small preview
 
   scripts/           one-off tools, run by hand on the server
     migrate.py       bring the database schema up to date
     manage_users.py  customers, logins, passwords
     import_data.py   load orders and shipments from CSV
     add_document.py  attach a document from the command line
+    make_thumbnails.py  previews for photos uploaded before previews existed
     notify.py        send the notifications that are owed
     seed.py          demo data (never on a real server)
 ```

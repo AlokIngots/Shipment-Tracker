@@ -160,7 +160,7 @@ cd backend
 .venv/Scripts/python.exe -m pytest
 ```
 
-145 tests, about a minute, with the dev database up. They build their own
+154 tests, about a minute, with the dev database up. They build their own
 database beside the development one and drop it afterwards, so the
 development data is untouched — the row counts are identical before and
 after. They also run on GitHub for every push.
@@ -188,6 +188,8 @@ after. They also run on GitHub for every push.
 | `python -m scripts.notify --preview` | print the full text of one email |
 | `python -m scripts.notify` | send (only if `SEND_EMAILS=true`) |
 | `python -m scripts.seed --schema-only` | migrate the schema only, never demo data |
+| `python -m scripts.make_thumbnails --dry-run` | count the photos that have no preview yet |
+| `python -m scripts.make_thumbnails` | make those previews; safe to run again |
 
 `--dry-run` works on every `manage_users` command that changes something.
 
@@ -283,7 +285,8 @@ in the roadmap below therefore covers both sides.
 
 Uploading is the only way a browser can write a file here: PDF, JPG or PNG,
 checked on both the extension and the type the browser claims, 20 MB limit
-enforced while writing, stored under a random name.
+enforced while writing, stored under a random name. A photo is also opened,
+to prove it really is a picture.
 
 ### Deploying (from the project root)
 
@@ -352,7 +355,8 @@ frontend/src/
 - **Reserved names, so future work lands right:**
   `app/routers/photos.py` for material photos,
   `app/routers/notifications.py` if sending ever becomes an endpoint,
-  `app/services/photos.py` for whatever the Bundle Inspection app needs.
+  `app/services/photos.py` — which now holds photo previews — for
+  whatever the Bundle Inspection app needs too.
 
 ---
 
@@ -390,6 +394,7 @@ the customer side needs, and a step is done when both work.
 | 22 | Ready to share a server | deploy on a host that already runs nginx, without touching it | — | **Done, not yet deployed** |
 | 23 | Port 8090, and the nginx site in the repo | 8080 was taken by alok-crm-frontend | — | **Done, not yet deployed** |
 | 24 | Who changed what | every change recorded with who, when and before → after; an Activity tab to read it; nobody can edit or remove it | (nothing — internal only, and customers cannot reach it) | **Done** |
+| 25 | Photo previews | a small preview made at upload; a file that is not really a picture refused; a command for photos uploaded before | gallery tiles load the preview, clicking opens the original | **Done** |
 
 ### Still to build, both sides
 
@@ -480,6 +485,8 @@ Update after every step: what was done, and the commit.
 | 2026-09-10 | **Step 23 — Port 8090, and the nginx site committed.** srv1427359 reported 8080 already taken by `alok-crm-frontend`, so the override moves to `127.0.0.1:8090`. The nginx site had only ever existed as text in a chat message; it is now `deploy/nginx/portal.alokindia.co.in.conf`, version-controlled, with the reasoning for `client_max_body_size 25m` and for `X-Forwarded-For $remote_addr` rather than `$proxy_add_x_forwarded_for` in it. Proved by running real nginx in front of the deployed stack: the whole chain answers, the address nginx writes is the one the API uses (`hops_seen` 2), a forged `X-Forwarded-For` is overwritten at the door, and a 5 MB upload passes where nginx's 1 MB default would have refused it | _this commit_ |
 
 | 2026-09-11 | **Step 24 — Who changed what.** Staff could create, edit and delete orders, shipments, documents, photos, customers and logins, and none of it left a trace. Now every change writes an event in the same transaction as the change: who, when, how it arrived (screen, command line, CSV import), and each field before and after. A refused change leaves nothing, a save that changed nothing records nothing, and a removal keeps what the row held so it can be typed back in. `app/services/audit.py` is the one place that writes; the screen, `manage_users.py`, `add_document.py` and the importer all go through it. Migration 0006 adds `audit_events` with a trigger that refuses UPDATE, DELETE and TRUNCATE, from SQL as well as from the portal. A fourth staff tab, **Activity**, shows it newest first with a filter; customers cannot reach it. No password or hash is ever recorded — tested by searching the whole record for them. Proved by 15 new tests (145 in all), the frontend build, migration 0006 applied to the development database with models and schema agreeing, and a drill taking it back to 0005 and forward again. **The Activity screen has not been looked at in a browser** | `264310a` + _this commit_ |
+
+| 2026-09-11 | **Step 25 — Photo previews.** The gallery downloaded every photo at full size to draw a tile about a hundred pixels wide. Each photo now gets a small JPEG preview when it is uploaded — at most 400 pixels on its longest side, turned upright if the phone stored it sideways, and carrying none of the photo's hidden details (camera, time, GPS). The tiles on both halves load it; clicking still opens the original. A photo with no preview falls back to the full picture, so a missing one is slow, never broken. Making the preview meant opening the file, which closed a gap: a PDF renamed to `.jpg` used to pass as a photo, and is now refused; a picture is also served as what it really is, not what it is called. Migration 0007 adds `photos.thumb_path`; `scripts/make_thumbnails.py` makes previews for older photos. Removing a photo or its shipment removes the preview file too. Pillow 12.3.0 added. Proved by 9 new tests (154 in all), the frontend build, migration 0007 applied and drilled back to 0006 and forward on the development database, the command making previews for its 5 existing photos and then 0 on a second run, and a throwaway build of the API image making a JPEG preview inside it. **Not looked at in a browser** | `fbc386e` + _this commit_ |
 
 ### Design decisions worth remembering
 
@@ -732,7 +739,42 @@ Update after every step: what was done, and the commit.
   in to name. The event says "command line" or "csv import" instead, which
   still separates it from anything done through the portal.
 
+### Design decisions worth remembering
+
+- **Previews are made at upload, not on first view.** Making one when a
+  customer first opens the gallery would mean a customer's read writing to
+  the database, which the read-only rule exists to prevent. Photos from
+  before previews existed are handled by a command instead, and fall back
+  to the full picture until it runs.
+- **A missing preview falls back; an unreadable upload is refused.** If a
+  real picture cannot be shrunk, the photo is kept and shown full size —
+  losing a photo over a thumbnail would be the wrong trade. But a file that
+  cannot be opened as a picture at all is refused, because it would only
+  ever be a broken tile in front of a customer.
+- **What a file is beats what it is called.** The media type stored is the
+  format found by opening the file. A PNG saved as `.jpg` is served as a
+  PNG.
+- **The preview is stripped; the original is not.** Removing the hidden
+  details from the original would mean altering the photo staff uploaded.
+  That is a decision for the business, not a side effect of a thumbnail.
+
 ### Known issues / risks
+
+- **A full-size photo still carries its hidden details.** Photos from a
+  phone usually include the camera, the time, and the GPS position where
+  they were taken — which for these photos is the factory. A customer who
+  clicks a tile downloads the original, details and all. The previews carry
+  none of it. Stripping the originals too is a one-line change, if wanted.
+- **Run `scripts.make_thumbnails` once after deploying to a server that
+  already holds photos.** Until it runs, older photos show full size, as
+  they always did. The server holds none yet, so on a first deploy there is
+  nothing to do.
+- **iPhone HEIC photos are refused.** Only real JPG and PNG files are
+  accepted. An iPhone set to "Most Compatible" saves JPG; otherwise the
+  photo must be converted before uploading.
+- **Making previews adds time to a large upload.** Each photo in a batch of
+  up to twenty is shrunk before the upload finishes. Not measured on real
+  phone photos yet.
 
 - **Somebody with full access to the database server can still erase the
   activity record**, by dropping the trigger first. Nothing inside a
@@ -847,11 +889,6 @@ Update after every step: what was done, and the commit.
   channel would slot into `app/services/notifications.py` alongside email.
 - **Nothing triggers notifications automatically.** `python -m scripts.notify` must be run
   after each import, by hand or on a schedule.
-- **Photos are served at full size, every time.** There are no thumbnails:
-  the gallery downloads each photo in full to draw a 116-pixel tile. A
-  shipment with twenty 4 MB photos from a phone will be slow on a bad
-  connection, and an export customer is usually on one. Generating
-  thumbnails needs an image library (Pillow), which is not installed.
 - **Nothing stops the same photo being uploaded twice.** Documents are
   deduplicated by type; photos have no equivalent, so a double click on
   Add photos leaves two identical tiles that must be removed one at a time.
@@ -872,7 +909,7 @@ Update after every step: what was done, and the commit.
   drills, against the reorganised backend. What it has still never met is a
   real machine, a real domain, or Caddy actually obtaining an HTTPS
   certificate — that cannot be tested until DNS points somewhere.
-- **The frontend has no tests.** The 145 committed tests are all backend.
+- **The frontend has no tests.** The 154 committed tests are all backend.
   Nothing checks that the progress track draws, that the photo gallery
   revokes its blob URLs, or that a backwards status change asks before it
   saves. `npm run build` passing only means it compiles.
