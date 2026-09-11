@@ -113,6 +113,20 @@ def test_the_email_says_what_it_is(client, outbox, buyer):
     assert "did not ask for this" in text
 
 
+def test_the_link_is_unbroken_in_the_email_as_sent(client, outbox, buyer):
+    """Not split by a quoted-printable soft line break, for whatever reads it."""
+    ask(client, buyer.email)
+    raw = outbox[0].as_string()
+    assert f"#sign-in={token_from(outbox[0])}" in raw
+
+
+def test_a_name_with_accents_still_gets_a_working_link(client, db, outbox, customer):
+    accounts.create_login(db, customer, "mueller@testco.example", "Jürgen Müller")
+    ask(client, "mueller@testco.example")
+    assert "Jürgen Müller" in outbox[0].get_content()
+    assert len(token_from(outbox[0])) == 43
+
+
 def test_with_sending_switched_off_the_answer_is_unchanged(client, db, buyer):
     """No outbox here: the real sender, with SEND_EMAILS off, suppresses it."""
     assert ask(client, buyer.email).status_code == 202

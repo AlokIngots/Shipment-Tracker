@@ -56,8 +56,9 @@ up later).
    explain background concepts unless asked.
 9. **The customer side is strictly read-only.** Only the Admin Console adds
    or changes data, and that is enforced in the backend, not just the UI.
-   No customer-facing router gets a POST, PUT or DELETE — the single
-   exception is changing your own password. See "The two halves".
+   No customer-facing router gets a POST, PUT or DELETE — the exceptions
+   are signing in (password or email link) and changing your own password,
+   none of which touch customer data. See "The two halves".
 10. **Every step covers both halves.** A customer feature needs the admin
     screen that feeds it. "Documents" means the upload page *and* the
     download page, in the same step.
@@ -117,6 +118,12 @@ now. Start the next step with a fresh branch off `dev`.
 14, before the backend was reorganised. Roll back with
 `git checkout pre-reorg-2026-09-10`.
 
+**Restore point:** tag `pre-magic-link-login` is everything through step
+25, before sign-in by email link. Undo it on `dev`, keeping history, with
+`git revert --no-edit pre-magic-link-login..dev`. If it was already
+deployed, first take the database back with
+`docker compose -f docker-compose.prod.yml exec api python -m alembic downgrade 0007`.
+
 **`dev` is the branch to work from.** **`main` is still the empty anchor
 commit, deliberately** — it gets its first real content only when the portal
 has actually been deployed to a real server and proved to work there.
@@ -160,7 +167,7 @@ cd backend
 .venv/Scripts/python.exe -m pytest
 ```
 
-154 tests, about a minute, with the dev database up. They build their own
+175 tests, about a minute, with the dev database up. They build their own
 database beside the development one and drop it afterwards, so the
 development data is untouched — the row counts are identical before and
 after. They also run on GitHub for every push.
@@ -261,7 +268,10 @@ What enforcement means in this repo, concretely:
 - Everything that writes lives under `app/routers/admin/` and every route
   there depends on `StaffUser`. A customer's token cannot satisfy it.
 - The one exception is `POST /api/change-password`, which changes nothing
-  but the caller's own password.
+  but the caller's own password. Signing in is not an exception so much as
+  not data: `POST /api/login`, and `POST /api/magic-link` and
+  `/api/magic-link/redeem` for email links, write only sign-in bookkeeping.
+  `test_the_customer_half_of_the_api_has_no_writes` names all four.
 - Staff is a flag that only `scripts/manage_users.py --add-staff` can set, on the
   server. There is no way to become staff through the portal, and no
   customer-facing page can create an account.
@@ -295,6 +305,7 @@ to prove it really is a picture.
 | `./safe-deploy.sh --dry-run` | show what would happen, change nothing |
 | `./safe-deploy.sh --backup` | back up the database and `storage/`, stop |
 | `./safe-deploy.sh` | back up, build, start, verify — roll back if it fails |
+| `COMPOSE_FILES="docker-compose.prod.yml docker-compose.server.yml" ./safe-deploy.sh` | the same, on srv1427359 beside AlokCRM — **the only way to deploy there** |
 
 Set `PORTAL_DOMAIN` in `.env`: a real domain makes Caddy obtain HTTPS
 automatically; `:80` serves plain HTTP for testing on your own machine.
@@ -395,6 +406,7 @@ the customer side needs, and a step is done when both work.
 | 23 | Port 8090, and the nginx site in the repo | 8080 was taken by alok-crm-frontend | — | **Done, not yet deployed** |
 | 24 | Who changed what | every change recorded with who, when and before → after; an Activity tab to read it; nobody can edit or remove it | (nothing — internal only, and customers cannot reach it) | **Done** |
 | 25 | Photo previews | a small preview made at upload; a file that is not really a picture refused; a command for photos uploaded before | gallery tiles load the preview, clicking opens the original | **Done** |
+| 26 | Sign in with an email link | staff can sign in by link too | "Sign in with email link" beside the password; single-use 15-minute link; same answer for any address; rate limited | **Done, no real email yet** |
 
 ### Still to build, both sides
 
@@ -487,6 +499,8 @@ Update after every step: what was done, and the commit.
 | 2026-09-11 | **Step 24 — Who changed what.** Staff could create, edit and delete orders, shipments, documents, photos, customers and logins, and none of it left a trace. Now every change writes an event in the same transaction as the change: who, when, how it arrived (screen, command line, CSV import), and each field before and after. A refused change leaves nothing, a save that changed nothing records nothing, and a removal keeps what the row held so it can be typed back in. `app/services/audit.py` is the one place that writes; the screen, `manage_users.py`, `add_document.py` and the importer all go through it. Migration 0006 adds `audit_events` with a trigger that refuses UPDATE, DELETE and TRUNCATE, from SQL as well as from the portal. A fourth staff tab, **Activity**, shows it newest first with a filter; customers cannot reach it. No password or hash is ever recorded — tested by searching the whole record for them. Proved by 15 new tests (145 in all), the frontend build, migration 0006 applied to the development database with models and schema agreeing, and a drill taking it back to 0005 and forward again. **The Activity screen has not been looked at in a browser** | `264310a` + _this commit_ |
 
 | 2026-09-11 | **Step 25 — Photo previews.** The gallery downloaded every photo at full size to draw a tile about a hundred pixels wide. Each photo now gets a small JPEG preview when it is uploaded — at most 400 pixels on its longest side, turned upright if the phone stored it sideways, and carrying none of the photo's hidden details (camera, time, GPS). The tiles on both halves load it; clicking still opens the original. A photo with no preview falls back to the full picture, so a missing one is slow, never broken. Making the preview meant opening the file, which closed a gap: a PDF renamed to `.jpg` used to pass as a photo, and is now refused; a picture is also served as what it really is, not what it is called. Migration 0007 adds `photos.thumb_path`; `scripts/make_thumbnails.py` makes previews for older photos. Removing a photo or its shipment removes the preview file too. Pillow 12.3.0 added. Proved by 9 new tests (154 in all), the frontend build, migration 0007 applied and drilled back to 0006 and forward on the development database, the command making previews for its 5 existing photos and then 0 on a second run, and a throwaway build of the API image making a JPEG preview inside it. **Not looked at in a browser** | `fbc386e` + _this commit_ |
+
+| 2026-09-11 | **Step 26 — Sign in with an email link**, for customers and staff, beside the password sign-in, which is unchanged. The login screen gains *Sign in with email link*: type an email, and the answer is the same *Check your email* whether or not it has an account. For an active account a 32-byte random token is issued, stored only as a SHA-256 hash, valid 15 minutes, and emailed as `https://portal.alokindia.co.in/#sign-in=<token>` through the notification sender. Redeeming it is one conditional UPDATE, so it works exactly once even if clicked twice at the same moment; a newer link, a password change or reset, or deactivation also retires it; any refusal shows *This link has expired, please request a new one*. The landing page asks for one press, so a company mail scanner that opens links cannot spend it. Limits: 3 links per inbox per 15 minutes (more requests get the same answer and send nothing), 10 requests per network address per 15 minutes (then 429), and bad links count against the existing 20-failure sign-in budget per address. Migration 0008 adds `magic_links`. Found while testing: Python sent the email quoted-printable, which splits the link with a soft line break; it now goes 7bit whenever the text allows. Proved by 21 new tests (175 in all), migration 0008 applied and drilled on the development database, and a real headless-browser run on the dev site with email going to a local mail catcher: link requested, email caught carrying the real portal address, link opened and wiped from the address bar, signed in, and the same link refused a second time. **No real email has been sent** — SMTP is still not set up | `34045b2` + _this commit_ |
 
 ### Design decisions worth remembering
 
@@ -758,7 +772,49 @@ Update after every step: what was done, and the commit.
   details from the original would mean altering the photo staff uploaded.
   That is a decision for the business, not a side effect of a thumbnail.
 
+### Design decisions worth remembering
+
+- **The token travels after the `#`.** A browser never sends the part of
+  an address after `#` to a server, so the token cannot land in a web
+  server's access log or a Referer header. The page reads it once and wipes
+  it from the address bar before doing anything else.
+- **The link page waits for a press.** Company mail systems — Outlook's
+  Safe Links, for one — open every link in an email to scan it. A page that
+  signed in on opening would have its one use spent by the scanner, and the
+  customer would click a dead link. A scanner does not press buttons.
+- **The same answer for every address, including under the rate limit.**
+  Past three links, an inbox gets the same *Check your email* and nothing
+  is sent, rather than a 429 — a 429 would tell a stranger the address is
+  being asked about. Only the per-network limit answers 429, and it says
+  nothing about any address. The email goes out after the answer, so an
+  address with an account does not answer noticeably slower either.
+- **A plain hash, not a slow one.** Passwords get PBKDF2 because people
+  choose guessable ones. A token is 256 random bits; there is nothing to
+  guess, and a slow hash would only slow the portal down.
+- **Spent by one UPDATE, not a read then a write.** "Mark used where
+  unused and unexpired, returning whose it was" lets the database guarantee
+  one winner when the same link is opened twice at once.
+- **A link does not skip the temporary-password rule.** It proves the
+  inbox, not that the person chose a password; the portal still asks for
+  one before showing any order.
+
 ### Known issues / risks
+
+- **No sign-in link reaches anybody yet.** Links go through the same sender
+  as order notifications, so while `SEND_EMAILS=false` and there are no SMTP
+  credentials, the button says *Check your email* and nothing arrives. And
+  during a pilot `NOTIFY_ONLY_EMAILS` limits links as well: an address not on
+  that list gets no link. Both must be right on the server before anybody is
+  told this option exists.
+- **Email sign-in makes a staff inbox a key to the admin console.**
+  Whoever can read a staff member's email can now sign in as them. Worth a
+  second factor for staff if more than a few people hold staff logins.
+- **Signing in by link does not let somebody set a new password.** Changing
+  a password still asks for the current one, so a person who has forgotten
+  theirs can get in by link but still needs a staff reset to choose a new
+  one.
+- **Link-request counts live in memory**, like the sign-in counts, and are
+  lost on every restart and deploy.
 
 - **A full-size photo still carries its hidden details.** Photos from a
   phone usually include the camera, the time, and the GPS position where
@@ -909,7 +965,7 @@ Update after every step: what was done, and the commit.
   drills, against the reorganised backend. What it has still never met is a
   real machine, a real domain, or Caddy actually obtaining an HTTPS
   certificate — that cannot be tested until DNS points somewhere.
-- **The frontend has no tests.** The 154 committed tests are all backend.
+- **The frontend has no tests.** The 175 committed tests are all backend.
   Nothing checks that the progress track draws, that the photo gallery
   revokes its blob URLs, or that a backwards status change asks before it
   saves. `npm run build` passing only means it compiles.

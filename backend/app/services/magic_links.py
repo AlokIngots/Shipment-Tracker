@@ -128,7 +128,19 @@ def build_message(email: str, full_name: str | None, url: str) -> EmailMessage:
     message["Subject"] = SUBJECT
     message["From"] = SMTP_FROM
     message["To"] = email
-    message.set_content("\n".join(lines))
+    text = "\n".join(lines)
+    try:
+        # 7bit keeps the link on one unbroken line in the email as sent. Left
+        # to choose, Python picks quoted-printable for any line over 78
+        # characters -- which the link line always is -- and splits it with
+        # a soft line break. Every real mail client joins it back together,
+        # but the link is the one thing in this email that must survive
+        # whatever reads it.
+        message.set_content(text, cte="7bit")
+    except (UnicodeError, ValueError):
+        # A name with accents cannot travel as 7bit. Quoted-printable, then,
+        # which mail clients decode correctly.
+        message.set_content(text)
     return message
 
 

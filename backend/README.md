@@ -28,6 +28,7 @@ backend/
       photo.py       Photo
       notification.py  Notification
       audit.py       AuditEvent — the activity record, append-only
+      magic_link.py  MagicLink — one emailed sign-in link, stored as a hash
 
     schemas/         the shapes that cross the wire
       auth.py        signing in, and saying who you are
@@ -35,7 +36,7 @@ backend/
       admin.py       what the admin console is sent, and submits back
 
     routers/         the endpoints, grouped by feature
-      auth.py        sign in, /api/me, change your own password
+      auth.py        sign in (password or email link), /api/me, change your own password
       orders.py      a customer reading their own orders      (read-only)
       documents.py   a customer downloading their documents   (read-only)
       photos.py      a customer viewing their material photos (read-only)
@@ -56,6 +57,7 @@ backend/
       ratelimit.py   slowing down bulk password guessing
       audit.py       recording who changed what; everything that writes calls it
       photos.py      proving an upload is a picture; making its small preview
+      magic_links.py sign-in links: issue one, email it, spend it once
 
   scripts/           one-off tools, run by hand on the server
     migrate.py       bring the database schema up to date
@@ -79,7 +81,9 @@ is in the routing, not only in the screens:
   depends on `StaffUser`. That dependency is the enforcement — not the UI.
 
 The one exception is `POST /api/change-password`, which a customer must be
-able to call, because it changes nothing but their own password.
+able to call, because it changes nothing but their own password. Signing in
+— `POST /api/login`, `POST /api/magic-link`, `POST /api/magic-link/redeem` —
+writes only sign-in bookkeeping, never customer data.
 
 ## Running the tests
 

@@ -69,7 +69,8 @@ export default function LoginScreen({ onSignedIn }) {
     return (
       <div className="card card--login" role="status">
         <h2>Check your email</h2>
-        <p className="lead">{linkSent.detail}</p>
+        {/* The heading already says it; the server's sentence starts the same way. */}
+        <p className="lead">{linkSent.detail.replace(/^Check your email\.\s*/, '')}</p>
         <p className="login-hint login-hint--left">
           Sent to <strong>{linkSent.email}</strong>. Nothing there after a
           minute or two? Look in your spam folder, or sign in with your
