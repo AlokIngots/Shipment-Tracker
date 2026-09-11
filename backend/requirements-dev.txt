@@ -1,0 +1,14 @@
+# Tools for running the tests. NOT installed into the API image — nothing in
+# here should ever be needed to serve a request, and shipping a test client
+# into production would only widen what is on the server.
+#
+#   .venv/Scripts/python.exe -m pip install -r requirements-dev.txt
+#   .venv/Scripts/python.exe -m pytest
+
+-r requirements.txt
+
+pytest==8.4.2
+# FastAPI's TestClient is httpx underneath. Tests talk to the app in this
+# process rather than over a socket: no server to start, no port to clash,
+# and a failure points at a line of Python instead of a status code.
+httpx==0.28.1
