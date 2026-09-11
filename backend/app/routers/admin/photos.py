@@ -103,9 +103,15 @@ def staff_upload_photos(
                 # check above and would reach a customer as a broken picture.
                 # The type kept is what the file is, not what it is called.
                 media_type = photos.inspect_picture(storage.resolve(stored_name))
+                # The camera, the time and the GPS position go before anybody
+                # can download the photo, staff included.
+                cleaned = photos.remove_hidden_details(storage.resolve(stored_name))
             except storage.UploadRejected:
                 storage.delete(stored_name)
                 raise
+            if cleaned is not None:
+                storage.delete(stored_name)
+                stored_name = cleaned
             stored.append((upload, stored_name, media_type))
     except storage.UploadRejected as rejected:
         for _, stored_name, _ in stored:

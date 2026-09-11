@@ -116,6 +116,8 @@ export default function StaffPhotoStrip({ shipment }) {
       {photos !== null && photos.length === 0 && (
         <span className="docrow-file">
           None yet. The customer sees nothing here until a photo is added.
+          The camera, time and GPS location a phone hides in a photo are
+          removed when it is added.
         </span>
       )}
 

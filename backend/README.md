@@ -56,7 +56,7 @@ backend/
       accounts.py    customers, logins, temporary passwords
       ratelimit.py   slowing down bulk password guessing
       audit.py       recording who changed what; everything that writes calls it
-      photos.py      proving an upload is a picture; making its small preview
+      photos.py      proving an upload is a picture; removing its hidden details; its small preview
       magic_links.py sign-in links: issue one, email it, spend it once
 
   scripts/           one-off tools, run by hand on the server
@@ -65,6 +65,7 @@ backend/
     import_data.py   load orders and shipments from CSV
     add_document.py  attach a document from the command line
     make_thumbnails.py  previews for photos uploaded before previews existed
+    strip_photo_details.py  remove hidden details from photos uploaded before that was done
     notify.py        send the notifications that are owed
     seed.py          demo data (never on a real server)
 ```

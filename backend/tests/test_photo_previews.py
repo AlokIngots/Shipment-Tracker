@@ -24,7 +24,9 @@ def jpeg(width=1600, height=1200, *, orientation=None, camera=None) -> bytes:
     if camera:
         exif[0x010F] = camera  # the camera maker, one of the hidden details
     out = BytesIO()
-    image.save(out, "JPEG", quality=95, exif=exif.tobytes())
+    # No EXIF block at all unless asked for: even an empty one is a hidden
+    # detail, and the upload would rightly save the photo again without it.
+    image.save(out, "JPEG", quality=95, **({"exif": exif.tobytes()} if exif else {}))
     return out.getvalue()
 
 

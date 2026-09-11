@@ -133,6 +133,12 @@ deployed, first take the database back with
 — that refills the old typed status from the shipments, writing Shipped
 where the new code said Part shipped.
 
+**Restore point:** tag `pre-strip-photo-details` is `dev` after step 28,
+before step 29 (hidden details removed from full-size photos). Undo it on
+`dev` with `git revert --no-edit pre-strip-photo-details..dev`. There is no
+migration to take back. A revert does not put removed details back into any
+photo: they are gone from the files for good, which is the point.
+
 **`dev` is the branch to work from.** **`main` is still the empty anchor
 commit, deliberately** — it gets its first real content only when the portal
 has actually been deployed to a real server and proved to work there.
@@ -176,7 +182,7 @@ cd backend
 .venv/Scripts/python.exe -m pytest
 ```
 
-198 tests, about a minute, with the dev database up. They build their own
+205 tests, about a minute, with the dev database up. They build their own
 database beside the development one and drop it afterwards, so the
 development data is untouched — the row counts are identical before and
 after. They also run on GitHub for every push.
@@ -206,6 +212,8 @@ after. They also run on GitHub for every push.
 | `python -m scripts.seed --schema-only` | migrate the schema only, never demo data |
 | `python -m scripts.make_thumbnails --dry-run` | count the photos that have no preview yet |
 | `python -m scripts.make_thumbnails` | make those previews; safe to run again |
+| `python -m scripts.strip_photo_details --dry-run` | count the photos that still carry hidden details (camera, time, GPS) |
+| `python -m scripts.strip_photo_details` | remove them; safe to run again |
 
 `--dry-run` works on every `manage_users` command that changes something.
 
@@ -305,7 +313,8 @@ in the roadmap below therefore covers both sides.
 Uploading is the only way a browser can write a file here: PDF, JPG or PNG,
 checked on both the extension and the type the browser claims, 20 MB limit
 enforced while writing, stored under a random name. A photo is also opened,
-to prove it really is a picture.
+to prove it really is a picture, and saved again without its hidden details
+(camera, time, GPS position) before anybody can download it.
 
 ### Deploying (from the project root)
 
@@ -418,7 +427,8 @@ the customer side needs, and a step is done when both work.
 | 26 | Sign in with an email link | staff can sign in by link too | "Sign in with email link" beside the password; single-use 15-minute link; same answer for any address; rate limited | **Done, no real email yet** |
 | 27 | Screens that fit | on a phone the toolbar, the four tabs and every row fit; no page scrolls sideways | every order-list column visible on any screen, order cards below 880px; the whole progress track and the totals fit a phone | **Done, not seen on a real phone** |
 | — | Easy for real users (`feature/easy-usability`) | quick actions above the tabs (Add customer, Add customer login, New order, Upload document); a "Start here" 1-2-3 checklist on empty screens; plain labels; no screen mentions a server command | plain labels (Order status, Your documents, Track your shipment); friendly empty and error states with Try again | **Built and tested, not yet deployed** |
-| 28 | Order status from shipments | the order form shows the status instead of asking for it; a Cancelled tick on the order; a Last shipment tick on each shipment; a reminder when nearly all of an order has gone and nothing is ticked; `last_shipment` in the CSV importer | the order says Part shipped until the last lot is ticked, then follows the lot furthest behind; "final shipment" on that lot | **Done, not yet merged** |
+| 28 | Order status from shipments | the order form shows the status instead of asking for it; a Cancelled tick on the order; a Last shipment tick on each shipment; a reminder when nearly all of an order has gone and nothing is ticked; `last_shipment` in the CSV importer | the order says Part shipped until the last lot is ticked, then follows the lot furthest behind; "final shipment" on that lot | **Done, not yet deployed** |
+| 29 | Hidden details out of full-size photos | every photo saved without its camera, time and GPS position as it is uploaded; a line on the photo box says so; a command cleans photos uploaded before; phone photos with a second picture inside (MPO) accepted instead of refused; a photo cut short refused | the full-size photo they download carries only the picture | **Done, not yet merged** |
 
 ### Still to build, both sides
 
@@ -518,7 +528,9 @@ Update after every step: what was done, and the commit.
 
 | 2026-09-11 | **Easy for real users, both halves** (`feature/easy-usability`, restore tag `pre-easy-usability`). Every staff action already had a screen, but they were spread over four tabs, an empty orders screen told staff to run `manage_users.py --add-customer`, and empty screens said nothing about what to do first. Staff now get four quick actions above the tabs — Add customer, Add customer login, New order, Upload document — each opening the right tab with its form ready (Add customer login asks which customer first when there is more than one); a "Start here" checklist on an empty screen (add the customer, give someone there a login, add their order) that ticks itself; a Documents & photos button on each shipment row; "Disable login" / "Enable login" instead of Deactivate; plain field labels and hints (Vessel IMO number, Bill of Lading number, Departure date (ETD)); and "Change history" instead of Activity. No screen names a server command any more. Customers get Order number / Product / Quantity / Order status, Shipped so far / Still to ship, a "Track your shipment" section that shows only what is known, "Your documents" with "Not ready yet", and empty and error states that explain themselves with Try again or Sign in again. Two existing glitches fixed on the way: form hints were pulled 8px up across the bottom edge of their input, and each progress-track line cut into the previous dot. **No backend change**: every action still goes through the existing `/api/staff` routes behind `StaffUser`, and the scripts still work. Proved by the 175 backend tests, the frontend build, and a headless Edge pass over 16 screens of both halves (real development data, plus empty data faked inside the browser only): no browser errors, no page scrolling sideways at 390px, no server command on the checklist, only read-only controls on the customer order page, and a customer's token refused with 403 on five staff routes. **Creating a team (staff) login is still server-only, on purpose** | `5d1ed1d`, `f0748a2` + _this commit_ |
 
-| 2026-09-11 | **Step 28 — Order status worked out from the shipments, both halves** (`feature/step28-status-from-shipments`, restore tag `pre-status-from-shipments`). An order's status was typed by hand, so an order could say In production while every shipment said Delivered. Nobody types it now; it is worked out every time it is read. On the user's decision about part-shipped orders, staff tick **Last shipment** on the final lot: until one is ticked, an order that has started to leave says **Part shipped**; once ticked, it says the step of the lot furthest behind. Cancelling stays a decision made by hand — a Cancelled tick on the order — and taking an order back out of Cancelled counts as a correction. Staff see the status on the order form instead of a dropdown, "last shipment" on the shipment row, and a reminder when 90% or more of an order has been dispatched and nothing is ticked (a hint only; the server applies no 90% rule). Customers see the worked-out status on their list and order page, and "final shipment" on that lot. The CSV importer gains `last_shipment` (blank leaves a tick alone, so one made on the screen survives the next import), accepts only blank or Cancelled for `order_status`, and now refuses a file that moves a shipment backwards — promised by the docs since step 18, and done by nothing until now. Migration 0009 adds `orders.cancelled` and `shipments.is_final` and drops `orders.status`; its downgrade refills that column from the shipments. Picked up from the paused work-in-progress commit `c628afb` on `feature/step28-order-status`, re-applied onto `dev` after the usability pass, with the clashes in two staff screens resolved. Proved by 23 new tests (198 in all), the frontend build, migration 0009 applied to the development database and drilled back to 0008 and forward with every row count unchanged, and a headless Edge run over both halves at 1440 and 390px: no browser errors, nothing scrolls sideways, a real tick saved through the shipment form turned the order from Part shipped to In transit on the staff page, the customer list and the customer order page (which has no inputs at all), and unticking put it back. The reminder was shown with the order faked to 400 MT inside the browser only. That round trip left entries in the development database's change history, which by design cannot be removed. **Not deployed, not merged** | _this commit_ |
+| 2026-09-11 | **Step 28 — Order status worked out from the shipments, both halves** (`feature/step28-status-from-shipments`, restore tag `pre-status-from-shipments`). An order's status was typed by hand, so an order could say In production while every shipment said Delivered. Nobody types it now; it is worked out every time it is read. On the user's decision about part-shipped orders, staff tick **Last shipment** on the final lot: until one is ticked, an order that has started to leave says **Part shipped**; once ticked, it says the step of the lot furthest behind. Cancelling stays a decision made by hand — a Cancelled tick on the order — and taking an order back out of Cancelled counts as a correction. Staff see the status on the order form instead of a dropdown, "last shipment" on the shipment row, and a reminder when 90% or more of an order has been dispatched and nothing is ticked (a hint only; the server applies no 90% rule). Customers see the worked-out status on their list and order page, and "final shipment" on that lot. The CSV importer gains `last_shipment` (blank leaves a tick alone, so one made on the screen survives the next import), accepts only blank or Cancelled for `order_status`, and now refuses a file that moves a shipment backwards — promised by the docs since step 18, and done by nothing until now. Migration 0009 adds `orders.cancelled` and `shipments.is_final` and drops `orders.status`; its downgrade refills that column from the shipments. Picked up from the paused work-in-progress commit `c628afb` on `feature/step28-order-status`, re-applied onto `dev` after the usability pass, with the clashes in two staff screens resolved. Proved by 23 new tests (198 in all), the frontend build, migration 0009 applied to the development database and drilled back to 0008 and forward with every row count unchanged, and a headless Edge run over both halves at 1440 and 390px: no browser errors, nothing scrolls sideways, a real tick saved through the shipment form turned the order from Part shipped to In transit on the staff page, the customer list and the customer order page (which has no inputs at all), and unticking put it back. The reminder was shown with the order faked to 400 MT inside the browser only. That round trip left entries in the development database's change history, which by design cannot be removed. **Not deployed** | `d8e64e2` |
+
+| 2026-09-11 | **Step 29 — Hidden details out of full-size photos, both halves** (`feature/step29-strip-photo-details`, restore tag `pre-strip-photo-details`). Since step 25 the preview carried none of a phone photo's hidden details, but a customer who clicked a tile downloaded the original with the camera, the time and often the GPS position of the factory in it. On the user's decision of 11 Sep 2026, every photo is now saved again without them the moment it is uploaded, before anybody, staff included, can download it. What stays is only what says how to draw the picture: its colour profile and, for a PNG, its transparency. A JPEG that is already upright is saved with its own compression settings, so it looks the same (the test allows an average difference under 2 levels out of 255); a sideways one is turned upright first, because the note saying which way is up is itself one of the details, and saved at quality 95. A photo with nothing hidden in it is kept byte for byte. `scripts/strip_photo_details.py` cleans photos uploaded before; each photo is saved as it is done and its old file removed only after, so a run stopped halfway leaves everything showing. Staff see a line on the empty photo box saying details are removed. Found on the way, and fixed: **ordinary iPhone and Samsung photos with a second picture inside (MPO) were refused as "not a picture"**, because Pillow names them MPO and only JPEG and PNG were allowed; they are now accepted, and the second picture goes with the other details. And a photo cut short while copying used to pass the picture check and show as a broken tile; it is now refused with a message saying so. No migration, no new setting. Proved by 7 new tests (205 in all): the camera, the GPS position, XMP and a comment present before and absent from what the customer and staff download, with the picture the same size and look; a sideways photo stored tall; a PNG's notes gone and its transparency kept; an MPO accepted and served as one plain JPEG; a cut-short photo refused with nothing left on disk; and the command cleaning an older photo, a dry run changing nothing, and a second run doing nothing. The frontend build passes, and a dry run of the command on the development database found its 5 photos already clean. **Not looked at in a browser; not tried on a real phone photo** | _this commit_ |
 
 ### Design decisions worth remembering
 
@@ -864,6 +876,26 @@ Update after every step: what was done, and the commit.
   on doing what it did when written, whatever later happens to
   `statuses.py`; a test checks the copy still agrees.
 
+### Design decisions worth remembering
+
+- **Details go at upload, not when a photo is downloaded.** Cleaning on
+  the way out would mean every route that serves a photo has to remember
+  to do it, and one that forgot would hand over the original. Cleaned at
+  the door, the file on disk has nothing left in it to leak.
+- **A list of what may stay, not of what must go.** A JPEG keeps its JFIF
+  header, its colour profile and Adobe's colour note, and nothing else. A
+  kind of detail nobody thought of, such as a maker's own block or a second
+  picture, goes too, instead of slipping past a list of known offenders.
+- **A clean photo is not saved again.** Every JPEG save costs a hair of
+  quality, so a photo with nothing to remove is left byte for byte, and a
+  second run of the command changes nothing.
+- **A photo that cannot be cleaned is refused, not kept with its
+  details.** The only photos that fail are ones cut short, which would
+  only ever have been a broken tile.
+- **The colour profile stays.** It changes how the colours look, which
+  matters for a photo of a bar's surface, and says nothing about where or
+  when the photo was taken.
+
 ### Known issues / risks
 
 - **Screens that fit have been checked in an emulated browser only.**
@@ -890,13 +922,27 @@ Update after every step: what was done, and the commit.
 - **Link-request counts live in memory**, like the sign-in counts, and are
   lost on every restart and deploy.
 
-- **A full-size photo still carries its hidden details.** Photos from a
-  phone usually include the camera, the time, and the GPS position where
-  they were taken — which for these photos is the factory. A customer who
-  clicks a tile downloads the original, details and all. The previews carry
-  none of it. Stripping the originals too is a one-line change. **On 11 Sep
-  2026 the user decided the originals should be stripped too; not built
-  yet.**
+- **Run `scripts.strip_photo_details` once after deploying to a server
+  that already holds photos.** Until it runs, photos uploaded before step
+  29 still carry their details at full size. The server holds none yet, so
+  on a first deploy there is nothing to do.
+- **A photo that had to be turned upright is saved at quality 95**, not
+  with its own settings: a little different from the original, not so a
+  person would notice. Not measured on real phone photos.
+- **The second picture inside an iPhone or Samsung photo is thrown away.**
+  On newer phones it can hold the extra brightness an HDR screen uses, so
+  such a photo may look slightly flatter on an HDR screen than on the
+  phone. Ordinary screens show no difference.
+- **Data after the end of a JPEG is only removed when the photo is saved
+  again.** Some phones add their own block after the picture. Every phone
+  photo carries EXIF, so it is saved again and the block goes; a JPEG with
+  no EXIF, XMP or comment but a block after its end would be kept as it is.
+- **The development and deployed copies on this PC share `storage/`.**
+  Their databases never point at the same file unless one was copied from
+  the other; if one ever is, cleaning photos through one would remove files
+  the other still uses.
+- **Cleaning older photos is not in the activity record**, like making
+  previews: the picture is the same picture.
 - **Run `scripts.make_thumbnails` once after deploying to a server that
   already holds photos.** Until it runs, older photos show full size, as
   they always did. The server holds none yet, so on a first deploy there is
@@ -1048,7 +1094,7 @@ Update after every step: what was done, and the commit.
   drills, against the reorganised backend. What it has still never met is a
   real machine, a real domain, or Caddy actually obtaining an HTTPS
   certificate — that cannot be tested until DNS points somewhere.
-- **The frontend has no tests.** The 198 committed tests are all backend.
+- **The frontend has no tests.** The 205 committed tests are all backend.
   Nothing checks that the progress track draws, that the photo gallery
   revokes its blob URLs, or that a backwards status change asks before it
   saves. `npm run build` passing only means it compiles.
