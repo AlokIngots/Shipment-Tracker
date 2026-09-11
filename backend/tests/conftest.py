@@ -106,6 +106,22 @@ def db(engine):
         connection.close()
 
 
+@pytest.fixture(autouse=True)
+def password_sign_in(monkeypatch):
+    """Password sign-in switched ON for every test, unless a test turns it off.
+
+    The portal ships with it off (PASSWORD_SIGN_IN) and signs people in by
+    email link only. The password code is kept, dormant, so that it can be
+    switched back on -- and the tests written before that decision are what
+    prove it still works if it is. The fixtures below also sign in with a
+    password, as the shortest way to a token. test_link_only.py switches it
+    off and tests the portal as it ships.
+    """
+    from app.core import config
+
+    monkeypatch.setattr(config, "PASSWORD_SIGN_IN", True)
+
+
 @pytest.fixture
 def client(db):
     """The API, talking to the rolled-back session instead of the real one."""

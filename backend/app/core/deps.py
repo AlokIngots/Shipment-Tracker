@@ -5,8 +5,12 @@ this file, and the difference between them is the whole access-control story:
 
     DbSession    — a database session, and nothing about the caller
     CurrentUser  — signed in; may still be on a temporary password
-    SettledUser  — signed in, has chosen their own password, is a customer
-    StaffUser    — signed in, has chosen their own password, is Alok Ingots
+    SettledUser  — signed in, not held back by a temporary password, is a customer
+    StaffUser    — signed in, not held back by a temporary password, is Alok Ingots
+
+A temporary password only holds anybody back while password sign-in is on
+(PASSWORD_SIGN_IN). The portal ships with it off: people sign in by emailed
+link, and have no password to replace.
 
 Keeping them in one small file means the rules can be read in one sitting,
 rather than being inferred from whichever route happens to be on screen.
@@ -14,7 +18,7 @@ rather than being inferred from whichever route happens to be on screen.
 
 from typing import Annotated, Iterator
 
-from app.core import security
+from app.core import config, security
 from app.core.config import TRUST_PROXY_HEADER, TRUSTED_PROXY_HOPS
 from app.core.database import SessionLocal
 from fastapi import Depends, Header, HTTPException, Request, status
@@ -81,6 +85,17 @@ MUST_CHANGE_PASSWORD_ERROR = HTTPException(
 )
 
 
+def must_choose_password(user: User) -> bool:
+    """Whether this person is held back until they replace a temporary password.
+
+    Only while password sign-in is on. With it off, nobody signs in with a
+    password, so a temporary one that staff once saw opens nothing -- and a
+    person who arrived by email link has no password to replace. Asking them
+    for one would lock them out of their own orders.
+    """
+    return config.PASSWORD_SIGN_IN and user.must_change_password
+
+
 def get_current_user(
     db: DbSession,
     authorization: Annotated[str | None, Header()] = None,
@@ -135,7 +150,7 @@ def get_staff_user(current_user: CurrentUser) -> User:
             status_code=status.HTTP_403_FORBIDDEN,
             detail="This is only for Alok Ingots staff.",
         )
-    if current_user.must_change_password:
+    if must_choose_password(current_user):
         raise MUST_CHANGE_PASSWORD_ERROR
     return current_user
 
@@ -150,7 +165,7 @@ def get_settled_user(current_user: CurrentUser) -> User:
     on get_current_user, so the change cannot be skipped by talking to the
     API directly instead of using the website.
     """
-    if current_user.must_change_password:
+    if must_choose_password(current_user):
         raise MUST_CHANGE_PASSWORD_ERROR
     if current_user.is_staff or current_user.customer_id is None:
         # Staff belong to no customer, so there are no orders that are

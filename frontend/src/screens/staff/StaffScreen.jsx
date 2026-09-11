@@ -26,7 +26,7 @@ const QUICK = [
 // what it sees instead of the customer portal. Every write it offers lives
 // under /api/staff on the server, behind the staff check -- a customer who
 // found these screens could not use them.
-export default function StaffScreen({ session, onSignOut, onChangePassword }) {
+export default function StaffScreen({ session, onSignOut }) {
   // `visit` goes up on every move and each screen is keyed on it, so pressing
   // New order while already on the orders tab reopens it with the form open
   // rather than doing nothing.
@@ -43,9 +43,6 @@ export default function StaffScreen({ session, onSignOut, onChangePassword }) {
         title="Alok Ingots"
         subtitle={`Staff · signed in as ${session.email}`}
       >
-        <button type="button" className="button button--ghost" onClick={onChangePassword}>
-          Change password
-        </button>
         <button type="button" className="button button--ghost" onClick={onSignOut}>
           Sign out
         </button>

@@ -3,12 +3,7 @@ import axios from 'axios'
 import StatusPill from '../components/StatusPill'
 import Toolbar from '../components/Toolbar'
 
-export default function OrdersScreen({
-  session,
-  onSignOut,
-  onOpenOrder,
-  onChangePassword,
-}) {
+export default function OrdersScreen({ session, onSignOut, onOpenOrder }) {
   // 'loading' -> 'ready' | 'error' | 'unauthorised'
   const [state, setState] = useState('loading')
   const [orders, setOrders] = useState([])
@@ -48,9 +43,6 @@ export default function OrdersScreen({
         title="Your orders"
         subtitle={company ? `${company} · signed in as ${session.email}` : `Signed in as ${session.email}`}
       >
-        <button type="button" className="button button--ghost" onClick={onChangePassword}>
-          Change password
-        </button>
         <button type="button" className="button button--ghost" onClick={onSignOut}>
           Sign out
         </button>

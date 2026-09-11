@@ -1,10 +1,12 @@
 """Signing in, checking a remembered token, and changing a password.
 
-There are two ways to sign in, and both end in the same place:
+The portal signs people in with a link sent by email: POST /api/magic-link
+to ask for one and POST /api/magic-link/redeem to spend it.
 
-  * an email and a password, POST /api/login
-  * a link sent by email, POST /api/magic-link to ask for one and
-    POST /api/magic-link/redeem to spend it
+An email and a password, POST /api/login, is the older way in. It is kept
+but dormant: while PASSWORD_SIGN_IN is off, which is how the portal ships,
+it refuses everybody before looking anything up. Switched on, it works
+exactly as it did, and both ways end in the same place.
 
 None of these change a customer's data. What they write is sign-in
 bookkeeping -- a link issued, a link spent -- which is why they may sit
@@ -13,8 +15,8 @@ outside /api/staff without breaking the read-only rule.
 
 from datetime import datetime, timezone
 
-from app.core import security
-from app.core.deps import ClientAddress, CurrentUser, DbSession
+from app.core import config, security
+from app.core.deps import ClientAddress, CurrentUser, DbSession, must_choose_password
 from fastapi import APIRouter, BackgroundTasks, HTTPException, status
 from app.models import Customer, User
 from app.schemas import (
@@ -32,6 +34,11 @@ router = APIRouter()
 
 LINK_EXPIRED = "This link has expired, please request a new one."
 
+PASSWORD_SIGN_IN_OFF = (
+    "Signing in with a password is switched off. Enter your email address "
+    "and press Sign in with email link."
+)
+
 
 def signed_in(user: User, db) -> LoginResponse:
     """What a successful sign-in returns, however the person proved who they are."""
@@ -41,7 +48,7 @@ def signed_in(user: User, db) -> LoginResponse:
         email=user.email,
         full_name=user.full_name,
         customer=CustomerOut.model_validate(customer) if customer else None,
-        must_change_password=user.must_change_password,
+        must_change_password=must_choose_password(user),
         is_staff=user.is_staff,
     )
 
@@ -56,7 +63,17 @@ def health() -> dict[str, str]:
 def login(
     credentials: LoginRequest, db: DbSession, address: ClientAddress
 ) -> LoginResponse:
-    """Sign in against the users table and return a signed token."""
+    """Sign in against the users table and return a signed token.
+
+    Dormant while PASSWORD_SIGN_IN is off: refused before the rate limiter,
+    the users table or the password is looked at, so the answer is the same
+    for every email and every password and says nothing about either.
+    """
+    if not config.PASSWORD_SIGN_IN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail=PASSWORD_SIGN_IN_OFF
+        )
+
     email = credentials.email.strip().lower()
 
     # Checked before the password is even looked at, and checked the same
@@ -130,8 +147,7 @@ def request_magic_link(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail=(
                 "Too many sign-in links have been asked for from your network. "
-                "Please wait a few minutes and try again, or sign in with your "
-                "password."
+                "Please wait a few minutes and try again."
             ),
             headers={"Retry-After": str(blocked.retry_after)},
         ) from blocked
@@ -207,7 +223,7 @@ def me(current_user: CurrentUser, db: DbSession) -> dict:
         "customer": (
             CustomerOut.model_validate(customer).model_dump() if customer else None
         ),
-        "must_change_password": current_user.must_change_password,
+        "must_change_password": must_choose_password(current_user),
         "is_staff": current_user.is_staff,
     }
 

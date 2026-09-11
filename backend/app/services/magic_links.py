@@ -116,7 +116,7 @@ def build_message(email: str, full_name: str | None, url: str) -> EmailMessage:
         f"  {url}",
         "",
         f"It works once, and only for the next {minutes_valid()} minutes. After that,",
-        "ask for a new one on the sign-in page, or sign in with your password.",
+        "ask for a new one on the sign-in page.",
         "",
         "If you did not ask for this, you can ignore this email. Nobody can",
         "sign in without the link, and it stops working by itself.",

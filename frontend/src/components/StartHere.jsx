@@ -21,8 +21,8 @@ const STEPS = [
   {
     title: 'Give someone there a login',
     text:
-      'Type the email address of the person who follows the orders. The portal ' +
-      'gives you a temporary password to send them.',
+      'Type the email address of the person who follows the orders. They sign ' +
+      'in with a link the portal emails to that address.',
     count: 'logins',
     action: 'Add customer login',
     tab: 'accounts',

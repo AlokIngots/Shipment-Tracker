@@ -4,42 +4,24 @@ import StartHere from '../../components/StartHere'
 import { Field, TextField } from '../../components/Field'
 import { describeError, plural } from '../../lib/format'
 
-// A temporary password, shown once and never again. It is deliberately
-// awkward to lose: it stays on screen until dismissed, and says plainly that
-// closing it is the end of it.
-function TemporaryPassword({ result, onDone }) {
-  const [copied, setCopied] = useState(false)
-
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(result.temporary_password)
-      setCopied(true)
-    } catch {
-      // Clipboard access can be refused; the password is on screen anyway.
-      setCopied(false)
-    }
-  }
-
+// Said once a login has been made. There is nothing secret to hand over:
+// the person signs in with a link the portal emails them, so all they need
+// is where the portal is. The server still makes a temporary password, as
+// it always did, but with password sign-in off it opens nothing, so it is
+// not shown.
+function LoginCreated({ result, onDone }) {
   return (
-    <div className="card card--password" role="alert">
-      <h3 className="form-title">Temporary password for {result.email}</h3>
-      <p className="password-value">{result.temporary_password}</p>
+    <div className="card card--password" role="status">
+      <h3 className="form-title">Login created for {result.email}</h3>
       <p className="lead">
-        <strong>Copy it now. It is shown only this once.</strong> The portal
-        keeps no readable copy, so it cannot be looked up later. If it gets
-        lost, press Reset password to make a new one.
-      </p>
-      <p className="lead">
-        Send it to {result.email} privately, in a separate message from the
-        portal address. The first time they sign in, the portal asks them to
-        choose their own password before it shows any orders.
+        They can sign in now. Tell them to open{' '}
+        <strong>{window.location.origin}</strong>, type {result.email} and
+        press <strong>Sign in with email link</strong>. The portal emails them
+        a link that signs them in. There is no password to send.
       </p>
       <div className="form-actions">
         <button type="button" className="button" onClick={onDone}>
-          I have copied it, close
-        </button>
-        <button type="button" className="button button--ghost" onClick={copy}>
-          {copied ? 'Copied' : 'Copy to clipboard'}
+          Close
         </button>
       </div>
     </div>
@@ -255,7 +237,7 @@ function LoginForm({ customer, onCreated, onCancel }) {
   )
 }
 
-function LoginRow({ login, busy, onReset, onSetActive }) {
+function LoginRow({ login, busy, onSetActive }) {
   return (
     <div className="docrow">
       <span
@@ -268,22 +250,12 @@ function LoginRow({ login, busy, onReset, onSetActive }) {
           {login.full_name ? ` · ${login.full_name}` : ''}
         </span>
         <span className="docrow-file">
-          {!login.is_active
-            ? 'Disabled — cannot sign in'
-            : login.must_change_password
-              ? 'Has not chosen a password yet — sees no orders until they do'
-              : 'Can sign in'}
+          {login.is_active
+            ? 'Can sign in with an email link'
+            : 'Disabled — cannot sign in'}
         </span>
       </div>
       <div className="docrow-actions">
-        <button
-          type="button"
-          className="minibutton"
-          onClick={onReset}
-          disabled={busy}
-        >
-          Reset password
-        </button>
         <button
           type="button"
           className="minibutton minibutton--quiet"
@@ -297,9 +269,10 @@ function LoginRow({ login, busy, onReset, onSetActive }) {
   )
 }
 
-// Customers & logins: add a customer, give somebody there a login, reset a
-// password, disable a login. The server decides every one of these in
-// app/services/accounts.py; this screen only asks.
+// Customers & logins: add a customer, give somebody there a login, disable a
+// login. The server decides every one of these in app/services/accounts.py;
+// this screen only asks. There is no Reset password button: people sign in
+// by emailed link, so a new temporary password would open nothing.
 export default function StaffAccountsScreen({ startWith, onGo }) {
   const [state, setState] = useState('loading')
   const [data, setData] = useState({ customers: [], staff: [] })
@@ -311,8 +284,8 @@ export default function StaffAccountsScreen({ startWith, onGo }) {
   const [loginFor, setLoginFor] = useState(null)
   // Asking "which customer?" before a login form can open.
   const [picking, setPicking] = useState(startWith?.action === 'new-login')
-  // A one-time password waiting to be read.
-  const [password, setPassword] = useState(null)
+  // The login just created, until the note about it is closed.
+  const [created, setCreated] = useState(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
 
@@ -342,29 +315,6 @@ export default function StaffAccountsScreen({ startWith, onGo }) {
     setCustomerForm(null)
     setError(null)
     await load()
-  }
-
-  async function resetPassword(login) {
-    if (
-      !window.confirm(
-        `Give ${login.email} a new temporary password?\n\n` +
-          'Their current password stops working at once, and they are signed ' +
-          'out everywhere.',
-      )
-    )
-      return
-
-    setBusy(true)
-    setError(null)
-    try {
-      const res = await axios.post(`/api/staff/logins/${login.id}/reset-password`)
-      setPassword(res.data)
-      await load()
-    } catch (err) {
-      setError(describeError(err, 'Could not reset that password.'))
-    } finally {
-      setBusy(false)
-    }
   }
 
   async function setActive(login) {
@@ -411,9 +361,7 @@ export default function StaffAccountsScreen({ startWith, onGo }) {
 
   return (
     <>
-      {password && (
-        <TemporaryPassword result={password} onDone={() => setPassword(null)} />
-      )}
+      {created && <LoginCreated result={created} onDone={() => setCreated(null)} />}
 
       {(data.customers.length === 0 || loginCount === 0) && <StartHere onGo={onGo} />}
 
@@ -490,7 +438,6 @@ export default function StaffAccountsScreen({ startWith, onGo }) {
                 key={login.id}
                 login={login}
                 busy={busy}
-                onReset={() => resetPassword(login)}
                 onSetActive={() => setActive(login)}
               />
             ))}
@@ -500,7 +447,7 @@ export default function StaffAccountsScreen({ startWith, onGo }) {
                 customer={customer}
                 onCreated={async (result) => {
                   setLoginFor(null)
-                  setPassword(result)
+                  setCreated(result)
                   window.scrollTo(0, 0)
                   await load()
                 }}
@@ -547,7 +494,6 @@ export default function StaffAccountsScreen({ startWith, onGo }) {
             key={login.id}
             login={login}
             busy={busy}
-            onReset={() => resetPassword(login)}
             onSetActive={() => setActive(login)}
           />
         ))}

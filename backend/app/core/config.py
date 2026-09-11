@@ -116,6 +116,16 @@ MAGIC_LINK_MAX_PER_ADDRESS = int(os.getenv("MAGIC_LINK_MAX_PER_ADDRESS", "10"))
 MAGIC_LINK_WINDOW_SECONDS = int(os.getenv("MAGIC_LINK_WINDOW_SECONDS", "900"))  # 15 min
 
 
+# --------------------------------------------------- sign-in with a password
+
+# Off by default: the portal signs people in by emailed link only (decided
+# 11 Sep 2026), and the sign-in screen has no password box. The password
+# code is kept, dormant, not deleted -- POST /api/login, temporary passwords
+# and the "choose your own password" rule. True switches them back on for the
+# API without a code change.
+PASSWORD_SIGN_IN = _flag("PASSWORD_SIGN_IN")
+
+
 # ------------------------------------------------------------------- storage
 
 # Customer documents live outside the repository. Every stored file gets a

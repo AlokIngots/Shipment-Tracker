@@ -17,8 +17,8 @@ exporter. Export customers log in and see **their own** orders:
   Certificates)
 - shipment / vessel tracking
 
-It is a web app. It will live at **portal.alokindia.co.in** (address to be set
-up later).
+It is a web app, live at **https://portal.alokindia.co.in** on server
+srv1427359 (beside AlokCRM, behind its nginx).
 
 ### Stack
 
@@ -57,8 +57,9 @@ up later).
 9. **The customer side is strictly read-only.** Only the Admin Console adds
    or changes data, and that is enforced in the backend, not just the UI.
    No customer-facing router gets a POST, PUT or DELETE — the exceptions
-   are signing in (password or email link) and changing your own password,
-   none of which touch customer data. See "The two halves".
+   are signing in (by email link; the password sign-in is kept but dormant)
+   and changing your own password, none of which touch customer data. See
+   "The two halves".
 10. **Every step covers both halves.** A customer feature needs the admin
     screen that feeds it. "Documents" means the upload page *and* the
     download page, in the same step.
@@ -78,13 +79,22 @@ to the next step. Never run ahead through multiple steps at once.
 
 ## Where we are now
 
-**Last worked on: 9 September 2026.** All seven roadmap steps are built, plus
-deployment, database migrations, customer accounts, sessions that survive a
-refresh, and the first staff page. Every feature has been tested end to end,
-and
-the earlier full pass of 70 checks found and fixed two bugs. Nothing is
-deployed on a real server, and no real customer has ever used it or been
-emailed by it.
+**Last worked on: 11 September 2026.** Steps 1–29 are built and merged to
+`dev`. **The portal is live** at https://portal.alokindia.co.in on
+srv1427359, and **email works there**: on 11 Sep 2026 the server's `.env`
+was set to `SEND_EMAILS=true` with AWS SES SMTP (region ap-south-1, sending
+from enquiries@alokindia.com), and a real sign-in link was received and
+used. The user deploys to the server themselves; this PC has no SSH to it.
+The live server runs an **older build** than `dev`: on 11 Sep 2026 its
+sign-in page had the email link but not the usability pass or steps 28–29,
+so deploying `dev` brings all of those at once. No real customer has used
+it yet.
+
+**Step 31, sign-in by email link only**, is built and tested on
+`feature/magic-link-only`, not yet merged. **Step 30, "Forgot your
+password", is held unmerged** on `feature/step30-password-reset`
+(`a37b9b7`) on the user's decision: do not merge or delete it without
+asking.
 
 GitHub: **https://github.com/AlokIngots/Shipment-Tracker** (private). The repo
 is named `Shipment-Tracker`, not `alok-customer-portal` as originally planned.
@@ -139,6 +149,14 @@ before step 29 (hidden details removed from full-size photos). Undo it on
 migration to take back. A revert does not put removed details back into any
 photo: they are gone from the files for good, which is the point.
 
+**Restore point:** tag `pre-magic-link-only` is `dev` after step 29, before
+step 31 (sign-in by email link only). Undo it on `dev` with
+`git revert --no-edit pre-magic-link-only..dev`. There is no migration. On a
+server already running it there is a faster way back that needs no code:
+add `PASSWORD_SIGN_IN=true` to `.env` and restart the API. That reopens
+password sign-in in the API, but the sign-in screen has no password box
+until the revert is deployed too.
+
 **`dev` is the branch to work from.** **`main` is still the empty anchor
 commit, deliberately** — it gets its first real content only when the portal
 has actually been deployed to a real server and proved to work there.
@@ -182,7 +200,7 @@ cd backend
 .venv/Scripts/python.exe -m pytest
 ```
 
-205 tests, about a minute, with the dev database up. They build their own
+211 tests, about a minute, with the dev database up. They build their own
 database beside the development one and drop it afterwards, so the
 development data is untouched — the row counts are identical before and
 after. They also run on GitHub for every push.
@@ -193,9 +211,9 @@ after. They also run on GitHub for every push.
 | ------- | ------------ |
 | `python -m scripts.manage_users --list` | every customer, and who can sign in for them |
 | `python -m scripts.manage_users --add-customer CODE --name N` | add a customer |
-| `python -m scripts.manage_users --add-user EMAIL --customer CODE` | give somebody a login; prints a temporary password once |
+| `python -m scripts.manage_users --add-user EMAIL --customer CODE` | give somebody a login; they sign in with an email link (it still prints a temporary password, which opens nothing while password sign-in is off) |
 | `python -m scripts.manage_users --add-staff EMAIL` | give an Alok Ingots colleague a staff login |
-| `python -m scripts.manage_users --reset-password EMAIL` | issue a new temporary password |
+| `python -m scripts.manage_users --reset-password EMAIL` | issue a new temporary password; while password sign-in is off, what it is good for is signing them out everywhere |
 | `python -m scripts.manage_users --deactivate EMAIL` | stop somebody signing in, at once |
 | `python -m scripts.manage_users --activate EMAIL` | let them back in |
 | `python -m scripts.migrate` | bring the database schema up to date, losing nothing |
@@ -224,12 +242,12 @@ python -m scripts.manage_users --add-customer HANSA --name "Hansa Stahl GmbH" --
 python -m scripts.manage_users --add-user einkauf@hansa-stahl.de --customer HANSA --full-name "Petra Baumann"
 ```
 
-The second command prints a temporary password **once** — it is stored as a
-hash, so nobody, including the server, can read it back. Send it the way you
-would send anything else confidential, and not in the same message as the
-portal address. The portal then makes that person choose their own password
-before it will show them a single order, and the API enforces that, not just
-the screen.
+That person then opens the portal, types their email and presses **Sign in
+with email link**; nothing needs sending but the portal address. The second
+command still prints a temporary password once, as it always did, but while
+`PASSWORD_SIGN_IN` is off (the default) it opens nothing, so do not send it.
+Staff can do both from the portal instead, with the Add customer and Add
+customer login quick actions.
 
 On the server the same commands run inside the API container:
 
@@ -286,8 +304,9 @@ What enforcement means in this repo, concretely:
   there depends on `StaffUser`. A customer's token cannot satisfy it.
 - The one exception is `POST /api/change-password`, which changes nothing
   but the caller's own password. Signing in is not an exception so much as
-  not data: `POST /api/login`, and `POST /api/magic-link` and
-  `/api/magic-link/redeem` for email links, write only sign-in bookkeeping.
+  not data: `POST /api/magic-link` and `/api/magic-link/redeem` for email
+  links write only sign-in bookkeeping, and `POST /api/login` (dormant while
+  `PASSWORD_SIGN_IN` is off) writes nothing.
   `test_the_customer_half_of_the_api_has_no_writes` names all four.
 - Staff is a flag that only `scripts/manage_users.py --add-staff` can set, on the
   server. There is no way to become staff through the portal, and no
@@ -406,8 +425,8 @@ the customer side needs, and a step is done when both work.
 | 4 | Documents | attach a document (command line first) | download PL / CI / BL / MTC | **Done** |
 | 5 | Real data from SAP/PMS | CSV importer built; **mapping blocked** on how SAP/PMS exports | nothing more needed | **Admin blocked** |
 | 6 | Vessel tracking | IMO number on the shipment form | "View live on MarineTraffic" | **Done** |
-| 7 | Notifications — email | statuses that trigger a message | receives the email | **Done, never sent for real** |
-| 9 | Deployment | — | — | **Done, no server yet** |
+| 7 | Notifications — email | statuses that trigger a message | receives the email | **Done; the server sends real email since 11 Sep 2026, no customer emailed yet** |
+| 9 | Deployment | — | — | **Done, live on srv1427359** |
 | 10 | Migrations | — | — | **Done** |
 | 11 | Customer accounts | create a login, reset a password | forced password change | **Done** |
 | 12 | Sessions | — | survives a refresh | **Done** |
@@ -424,11 +443,13 @@ the customer side needs, and a step is done when both work.
 | 23 | Port 8090, and the nginx site in the repo | 8080 was taken by alok-crm-frontend | — | **Done, not yet deployed** |
 | 24 | Who changed what | every change recorded with who, when and before → after; an Activity tab to read it; nobody can edit or remove it | (nothing — internal only, and customers cannot reach it) | **Done** |
 | 25 | Photo previews | a small preview made at upload; a file that is not really a picture refused; a command for photos uploaded before | gallery tiles load the preview, clicking opens the original | **Done** |
-| 26 | Sign in with an email link | staff can sign in by link too | "Sign in with email link" beside the password; single-use 15-minute link; same answer for any address; rate limited | **Done, no real email yet** |
+| 26 | Sign in with an email link | staff can sign in by link too | "Sign in with email link" beside the password; single-use 15-minute link; same answer for any address; rate limited | **Done, live: a real link received and used on 11 Sep 2026** |
 | 27 | Screens that fit | on a phone the toolbar, the four tabs and every row fit; no page scrolls sideways | every order-list column visible on any screen, order cards below 880px; the whole progress track and the totals fit a phone | **Done, not seen on a real phone** |
 | — | Easy for real users (`feature/easy-usability`) | quick actions above the tabs (Add customer, Add customer login, New order, Upload document); a "Start here" 1-2-3 checklist on empty screens; plain labels; no screen mentions a server command | plain labels (Order status, Your documents, Track your shipment); friendly empty and error states with Try again | **Built and tested, not yet deployed** |
 | 28 | Order status from shipments | the order form shows the status instead of asking for it; a Cancelled tick on the order; a Last shipment tick on each shipment; a reminder when nearly all of an order has gone and nothing is ticked; `last_shipment` in the CSV importer | the order says Part shipped until the last lot is ticked, then follows the lot furthest behind; "final shipment" on that lot | **Done, not yet deployed** |
-| 29 | Hidden details out of full-size photos | every photo saved without its camera, time and GPS position as it is uploaded; a line on the photo box says so; a command cleans photos uploaded before; phone photos with a second picture inside (MPO) accepted instead of refused; a photo cut short refused | the full-size photo they download carries only the picture | **Done, not yet merged** |
+| 29 | Hidden details out of full-size photos | every photo saved without its camera, time and GPS position as it is uploaded; a line on the photo box says so; a command cleans photos uploaded before; phone photos with a second picture inside (MPO) accepted instead of refused; a photo cut short refused | the full-size photo they download carries only the picture | **Done** |
+| 30 | Forgot your password (`feature/step30-password-reset`, `a37b9b7`) | Email reset link on each login | "Forgot your password?" on the sign-in card | **Built, held unmerged** on the user's decision, 11 Sep 2026; moot while sign-in is link-only. Do not merge or delete without asking |
+| 31 | Sign in by email link only (`feature/magic-link-only`) | no Change password or Reset password button; Add customer login says "tell them to sign in with email link" instead of showing a temporary password; the four quick actions unchanged | the sign-in card has only the email box and Sign in with email link: no password box, no password Sign in button, no "or"; no Change password button | **Built and tested, not yet merged** |
 
 ### Still to build, both sides
 
@@ -436,23 +457,21 @@ the customer side needs, and a step is done when both work.
 | ---- | ------------------ | -------------------- |
 | **Photos from the Bundle app** | pull photos from the existing Bundle Inspection app instead of uploading them by hand | (gallery already built in step 15) |
 | **Notifications — WhatsApp** | choose which statuses message which channel | receives the WhatsApp message |
-| **Self-service password reset** | — | "forgot password" email; blocked on real SMTP |
 | **SAP/PMS auto-pull** | replace the hand-run CSV import with a scheduled pull | — |
 
 ### What blocks the ones that are blocked
 
-1. **A server.** `safe-deploy.sh` exists and has been proved end to end on a
-   local Docker stack, including five rollback drills. What is missing is a
-   machine to run it on and a DNS record pointing portal.alokindia.co.in at
-   it. Both need the user, or whoever runs alokindia.co.in.
+1. ~~A server.~~ **Done:** the portal is live at https://portal.alokindia.co.in
+   on srv1427359. The user deploys it.
 2. **The SAP/PMS question, still unanswered.** How can order data leave
    SAP/PMS — a spreadsheet export, a readable database, an API, or not at
    all? And does SAP/PMS hold the vessel name, IMO and container number, or
    does that sit with the CHA / freight forwarder and the Bill of Lading?
    The importer is finished and waiting; only the mapping depends on this.
-3. **Real SMTP credentials**, then one careful test email to a colleague,
-   before any customer address goes on the list. This also unblocks
-   self-service password reset.
+3. ~~Real SMTP credentials.~~ **Done 11 Sep 2026:** AWS SES SMTP
+   (ap-south-1), sending from enquiries@alokindia.com, `SEND_EMAILS=true` on
+   the server, and a real sign-in link received and used. Order
+   notifications have still not been sent to a customer.
 4. **The Bundle Inspection app.** Material photos may be better pulled from
    it than uploaded by hand — but that needs to know what it stores and
    whether anything can read it.
@@ -531,6 +550,8 @@ Update after every step: what was done, and the commit.
 | 2026-09-11 | **Step 28 — Order status worked out from the shipments, both halves** (`feature/step28-status-from-shipments`, restore tag `pre-status-from-shipments`). An order's status was typed by hand, so an order could say In production while every shipment said Delivered. Nobody types it now; it is worked out every time it is read. On the user's decision about part-shipped orders, staff tick **Last shipment** on the final lot: until one is ticked, an order that has started to leave says **Part shipped**; once ticked, it says the step of the lot furthest behind. Cancelling stays a decision made by hand — a Cancelled tick on the order — and taking an order back out of Cancelled counts as a correction. Staff see the status on the order form instead of a dropdown, "last shipment" on the shipment row, and a reminder when 90% or more of an order has been dispatched and nothing is ticked (a hint only; the server applies no 90% rule). Customers see the worked-out status on their list and order page, and "final shipment" on that lot. The CSV importer gains `last_shipment` (blank leaves a tick alone, so one made on the screen survives the next import), accepts only blank or Cancelled for `order_status`, and now refuses a file that moves a shipment backwards — promised by the docs since step 18, and done by nothing until now. Migration 0009 adds `orders.cancelled` and `shipments.is_final` and drops `orders.status`; its downgrade refills that column from the shipments. Picked up from the paused work-in-progress commit `c628afb` on `feature/step28-order-status`, re-applied onto `dev` after the usability pass, with the clashes in two staff screens resolved. Proved by 23 new tests (198 in all), the frontend build, migration 0009 applied to the development database and drilled back to 0008 and forward with every row count unchanged, and a headless Edge run over both halves at 1440 and 390px: no browser errors, nothing scrolls sideways, a real tick saved through the shipment form turned the order from Part shipped to In transit on the staff page, the customer list and the customer order page (which has no inputs at all), and unticking put it back. The reminder was shown with the order faked to 400 MT inside the browser only. That round trip left entries in the development database's change history, which by design cannot be removed. **Not deployed** | `d8e64e2` |
 
 | 2026-09-11 | **Step 29 — Hidden details out of full-size photos, both halves** (`feature/step29-strip-photo-details`, restore tag `pre-strip-photo-details`). Since step 25 the preview carried none of a phone photo's hidden details, but a customer who clicked a tile downloaded the original with the camera, the time and often the GPS position of the factory in it. On the user's decision of 11 Sep 2026, every photo is now saved again without them the moment it is uploaded, before anybody, staff included, can download it. What stays is only what says how to draw the picture: its colour profile and, for a PNG, its transparency. A JPEG that is already upright is saved with its own compression settings, so it looks the same (the test allows an average difference under 2 levels out of 255); a sideways one is turned upright first, because the note saying which way is up is itself one of the details, and saved at quality 95. A photo with nothing hidden in it is kept byte for byte. `scripts/strip_photo_details.py` cleans photos uploaded before; each photo is saved as it is done and its old file removed only after, so a run stopped halfway leaves everything showing. Staff see a line on the empty photo box saying details are removed. Found on the way, and fixed: **ordinary iPhone and Samsung photos with a second picture inside (MPO) were refused as "not a picture"**, because Pillow names them MPO and only JPEG and PNG were allowed; they are now accepted, and the second picture goes with the other details. And a photo cut short while copying used to pass the picture check and show as a broken tile; it is now refused with a message saying so. No migration, no new setting. Proved by 7 new tests (205 in all): the camera, the GPS position, XMP and a comment present before and absent from what the customer and staff download, with the picture the same size and look; a sideways photo stored tall; a PNG's notes gone and its transparency kept; an MPO accepted and served as one plain JPEG; a cut-short photo refused with nothing left on disk; and the command cleaning an older photo, a dry run changing nothing, and a second run doing nothing. The frontend build passes, and a dry run of the command on the development database found its 5 photos already clean. **Not looked at in a browser; not tried on a real phone photo** | _this commit_ |
+
+| 2026-09-11 | **Step 31 — Sign in by email link only, both halves** (`feature/magic-link-only`, restore tag `pre-magic-link-only`). On the user's decision, the sign-in card keeps only the email box and **Sign in with email link**: the password box, the password Sign in button and the "or" divider are gone. (`dev` never had a "Forgot your password?" link; step 30, which adds one, is held unmerged.) The password code is **dormant, not deleted**. A new setting, `PASSWORD_SIGN_IN`, off unless `.env` says true, makes `POST /api/login` give everybody the same refusal before anything is looked up, and switches off the rule that keeps a person on a temporary password away from their orders. Without that second part, every new login would have signed in by link and then been asked for a temporary password nobody sent them. Switched back on, both work exactly as before. Staff lose the Change password and Reset password buttons; Add customer login now says "tell them to open the portal and press Sign in with email link" instead of showing a temporary password, and the Start here checklist says the same. Customers lose Change password. The four quick actions, `manage_users.py`, and the change-password and forced-password screens are all kept. The sign-in email and the too-many-links message no longer mention a password. Proved by 6 new tests (211 in all; every older test now runs with password sign-in switched on, as the proof the dormant code still works): a right password, a wrong one and an unknown address all get the same 403; a brand-new login signs in by link and sees its orders; a staff login signs in by link and adds a customer, a customer login, an order, a shipment and a document, and that customer then signs in by link and sees the order and the document; the email says nothing of a password; and switched on, the temporary-password rule is back. The frontend build passes, `manage_users --list` runs, and a headless Edge run on the development site passed 22 checks: one button on the sign-in card at desktop and phone width, no password box, no divider, no Forgot link, `/api/login` refused from the browser, no Change password or Reset password button on either half, all four quick actions open (Upload document onto Documents & photos with its Upload buttons), Add customer login shows the new note and no password, and no browser errors. The two runs left two development-only logins (`link-only-check-…@demo-customer.example`) and their change-history entries. A fresh sign-in link requested from the live server for mis@alokindia.com has **not arrived**; see Known issues. **Not merged, not deployed** | _this commit_ |
 
 ### Design decisions worth remembering
 
@@ -824,9 +845,11 @@ Update after every step: what was done, and the commit.
 - **Spent by one UPDATE, not a read then a write.** "Mark used where
   unused and unexpired, returning whose it was" lets the database guarantee
   one winner when the same link is opened twice at once.
-- **A link does not skip the temporary-password rule.** It proves the
-  inbox, not that the person chose a password; the portal still asks for
-  one before showing any order.
+- **A link does not skip the temporary-password rule — while password
+  sign-in is on.** It proves the inbox, not that the person chose a
+  password. Since step 31 the rule only applies with `PASSWORD_SIGN_IN` on;
+  with it off nobody can use a password, so a temporary one opens nothing
+  and there is nothing to replace.
 
 ### Design decisions worth remembering
 
@@ -896,6 +919,28 @@ Update after every step: what was done, and the commit.
   matters for a photo of a bar's surface, and says nothing about where or
   when the photo was taken.
 
+### Design decisions worth remembering
+
+- **Dormant means a switch, not a hidden button.** Taking the password box
+  off the screen alone would have left `POST /api/login` answering anybody
+  who called it directly with a password. `PASSWORD_SIGN_IN` closes the
+  door in the API too, and opening it again is one line in `.env`, not a
+  code change.
+- **The switch also puts the temporary-password rule to sleep.** That rule
+  exists because staff have seen a temporary password. If no password can
+  sign anybody in, it protects nothing, and left on it would have stopped
+  every new login at a screen asking for a password nobody sent them.
+- **Refused before anything is looked up.** With the switch off,
+  `/api/login` gives the same 403 for a right password, a wrong one and an
+  address with no account, before the rate limiter or the users table is
+  touched. It cannot be used to ask whether an account exists.
+- **The server still makes a temporary password for a new login.** Changing
+  `accounts.create_login` would have meant changing `manage_users.py` and
+  code the user asked to keep. The screen simply does not show it.
+- **The older tests run with the switch on.** They are the proof the
+  dormant code still works; `test_link_only.py` runs with it off and tests
+  the portal as it ships.
+
 ### Known issues / risks
 
 - **Screens that fit have been checked in an emulated browser only.**
@@ -906,19 +951,28 @@ Update after every step: what was done, and the commit.
   screens were measured with the two orders in the development database; a
   very long customer name or file name is covered by the wrapping rules but
   was not tried.
-- **No sign-in link reaches anybody yet.** Links go through the same sender
-  as order notifications, so while `SEND_EMAILS=false` and there are no SMTP
-  credentials, the button says *Check your email* and nothing arrives. And
-  during a pilot `NOTIFY_ONLY_EMAILS` limits links as well: an address not on
-  that list gets no link. Both must be right on the server before anybody is
-  told this option exists.
+- **Email is now the only way in.** Since step 31 nobody, staff included,
+  can sign in if the email does not arrive: an AWS SES problem, a link filed
+  as spam or a mistyped address locks that person out until it is fixed.
+  Two server settings decide who can sign in at all: `SEND_EMAILS` must stay
+  true, and **`NOTIFY_ONLY_EMAILS` limits sign-in links as well as
+  notifications**, so while it holds a pilot list an address not on it gets
+  no link and cannot sign in. Check it before deploying step 31. The way
+  back in an emergency is under the `pre-magic-link-only` restore point.
+- **The 11 Sep 2026 re-check has not been confirmed.** A fresh link was
+  requested from the live server for mis@alokindia.com at 11:11 UTC (answer
+  202), and nothing from enquiries@alokindia.com reached that inbox in the
+  next 10 minutes. The answer is the same whether or not an address has an
+  account, so the likeliest reason is that mis@alokindia.com has no login on
+  the live portal, or is not on `NOTIFY_ONLY_EMAILS`, rather than sending
+  having broken, but that is not proven. Confirm with an address that does
+  have a login before deploying step 31.
 - **Email sign-in makes a staff inbox a key to the admin console.**
   Whoever can read a staff member's email can now sign in as them. Worth a
   second factor for staff if more than a few people hold staff logins.
-- **Signing in by link does not let somebody set a new password.** Changing
-  a password still asks for the current one, so a person who has forgotten
-  theirs can get in by link but still needs a staff reset to choose a new
-  one.
+- **The create-login answer still carries a temporary password.** The staff
+  screen no longer shows it, but it still travels to the staff member's
+  browser. With password sign-in off it opens nothing.
 - **Link-request counts live in memory**, like the sign-in counts, and are
   lost on every restart and deploy.
 
@@ -991,10 +1045,9 @@ Update after every step: what was done, and the commit.
   cannot entrench themselves, and a password change or `--deactivate`
   retires every token at once. Rate limiting on `/api/login` (still absent,
   below) matters more now than it did.
-- **A customer who forgets their password must ask staff.** There is no
-  "forgot password" email, because there is no working SMTP yet.
-  `scripts.manage_users --reset-password` is the answer today, and it puts the
-  account back on a temporary password that must be changed on next sign-in.
+- **A forgotten password does not matter any more.** Since step 31 people
+  sign in by email link. Step 30 (an emailed password reset) is built and
+  held unmerged on its branch, in case passwords ever come back.
 - **An account can be deactivated but not deleted.** Deactivating is nearly
   always what is actually wanted — a deleted login takes its history with it —
   but there is no tidy way to remove one created by mistake except SQL.
@@ -1059,9 +1112,10 @@ Update after every step: what was done, and the commit.
 - **Downgrades are only as good as the migration that was written.** Alembic
   writes a `downgrade()` automatically, but a migration that throws data away
   cannot put it back. Read the downgrade of anything that drops a column.
-- **Nobody has received a real email yet.** Sending was proved against a
-  local test mail server only. Real SMTP credentials and one careful test to
-  a colleague are needed before any customer is on the list.
+- **Email works on the server, but no customer has been emailed.** On 11
+  Sep 2026 a real sign-in link was received and used through AWS SES. Order
+  notifications (`scripts.notify`) have still not gone to a customer; one
+  careful test to a colleague first is still the plan.
 - **WhatsApp is not built.** It needs a WhatsApp Business account and a
   pre-approved message template through Twilio or Meta's Cloud API. The
   channel would slot into `app/services/notifications.py` alongside email.
@@ -1094,7 +1148,7 @@ Update after every step: what was done, and the commit.
   drills, against the reorganised backend. What it has still never met is a
   real machine, a real domain, or Caddy actually obtaining an HTTPS
   certificate — that cannot be tested until DNS points somewhere.
-- **The frontend has no tests.** The 205 committed tests are all backend.
+- **The frontend has no tests.** The 211 committed tests are all backend.
   Nothing checks that the progress track draws, that the photo gallery
   revokes its blob URLs, or that a backwards status change asks before it
   saves. `npm run build` passing only means it compiles.

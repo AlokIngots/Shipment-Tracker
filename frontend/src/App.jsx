@@ -26,7 +26,6 @@ export default function App() {
   const [restoring, setRestoring] = useState(!LINK_TOKEN)
   const [session, setSession] = useState(null)
   const [openOrderId, setOpenOrderId] = useState(null)
-  const [changingPassword, setChangingPassword] = useState(false)
   const [passwordChanged, setPasswordChanged] = useState(false)
 
   // On load, see whether this tab already holds a token and whether the
@@ -71,18 +70,18 @@ export default function App() {
   function signOut() {
     dropToken()
     setOpenOrderId(null)
-    setChangingPassword(false)
     setPasswordChanged(false)
     setSession(null)
   }
 
   // Nothing but the password screen is reachable until a temporary password
-  // has been replaced.
+  // has been replaced. Dormant: the server only ever says so while its
+  // password sign-in is switched on (PASSWORD_SIGN_IN), and the portal ships
+  // with it off, signing people in by email link.
   const mustChangePassword = Boolean(session?.must_change_password)
 
   function passwordWasChanged() {
     setSession({ ...session, must_change_password: false })
-    setChangingPassword(false)
     setPasswordChanged(true)
   }
 
@@ -93,7 +92,7 @@ export default function App() {
     ? linkToken
       ? 'link'
       : 'login'
-    : mustChangePassword || changingPassword
+    : mustChangePassword
       ? 'password'
       : session.is_staff
         ? 'staff'
@@ -107,7 +106,7 @@ export default function App() {
       <main className="main">
         {restoring && <p className="message">Signing you in…</p>}
 
-        {!restoring && showing === 'login' && <LoginScreen onSignedIn={setSession} />}
+        {!restoring && showing === 'login' && <LoginScreen />}
 
         {!restoring && showing === 'link' && (
           <SignInLinkScreen
@@ -122,7 +121,6 @@ export default function App() {
             session={session}
             forced={mustChangePassword}
             onDone={passwordWasChanged}
-            onCancel={() => setChangingPassword(false)}
             onSignOut={signOut}
           />
         )}
@@ -134,11 +132,7 @@ export default function App() {
         )}
 
         {showing === 'staff' && (
-          <StaffScreen
-            session={session}
-            onSignOut={signOut}
-            onChangePassword={() => setChangingPassword(true)}
-          />
+          <StaffScreen session={session} onSignOut={signOut} />
         )}
 
         {showing === 'orders' && (
@@ -146,7 +140,6 @@ export default function App() {
             session={session}
             onSignOut={signOut}
             onOpenOrder={setOpenOrderId}
-            onChangePassword={() => setChangingPassword(true)}
           />
         )}
 
