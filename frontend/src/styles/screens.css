@@ -1,0 +1,682 @@
+/* What both sides of the portal share: toolbar, tables,
+   pills, order detail, and the password form. */
+
+/* ---- orders screen ---- */
+
+/* When the title and the buttons do not fit side by side, the buttons move
+   under the title, rather than squeezing it into a column a word wide. */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.toolbar-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.toolbar-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--navy);
+}
+
+.toolbar-sub {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.toolbar .button--ghost {
+  margin-top: 0;
+  flex: none;
+  border-color: var(--line);
+}
+
+.message {
+  margin: 0;
+  padding: 28px 4px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.message--error {
+  color: var(--bad);
+  font-weight: 500;
+}
+
+.table-wrap {
+  overflow-x: auto;
+  margin: calc(-1 * var(--card-pad));
+  border-radius: 10px;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+
+.table th,
+.table td {
+  padding: 13px 14px;
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+/* The description and the grade wrap onto more lines; nothing else does. A
+   sales order number or a quantity broken in two is easy to misread. Kept
+   on one line, a real description pushed Ordered quantity and Status out of
+   sight on every screen, a wide one included. */
+.table .cell-desc,
+.table .cell-grade {
+  white-space: normal;
+}
+
+/* Room for an ordinary grade such as "304 / 1.4301" on one line; only a
+   longer one wraps. Without it the table split even that one in two. */
+.table .cell-grade {
+  min-width: 6.5rem;
+}
+
+.table th {
+  background: #f7f8fc;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: normal;
+}
+
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.table tbody tr:hover td {
+  background: #fafbff;
+}
+
+.table .num {
+  text-align: right;
+}
+
+.table .mono {
+  font-family: "Cascadia Mono", Consolas, "SF Mono", monospace;
+  font-size: 12.5px;
+}
+
+/* ---- status pills ---- */
+
+.pill {
+  display: inline-block;
+  padding: 4px 11px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pill--transit {
+  background: #e5eeff;
+  color: #1b4a9c;
+}
+
+.pill--production {
+  background: #fdf0dd;
+  color: #8a5a11;
+}
+
+.pill--delivered {
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+
+.pill--cancelled {
+  background: var(--bad-bg);
+  color: var(--bad);
+}
+
+.pill--neutral {
+  background: #eef0f6;
+  color: var(--muted);
+}
+
+/* ---- clickable order rows ---- */
+
+.row--clickable {
+  cursor: pointer;
+}
+
+.table .link {
+  color: var(--navy);
+  font-weight: 600;
+}
+
+.row--clickable:hover .link {
+  text-decoration: underline;
+}
+
+.table .chevron {
+  width: 1px;
+  color: var(--muted);
+  font-size: 18px;
+  text-align: right;
+}
+
+/* ---- order detail ---- */
+
+.backlink {
+  display: inline-block;
+  margin-bottom: 8px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.backlink:hover {
+  color: var(--navy);
+  text-decoration: underline;
+}
+
+.detail-desc {
+  margin: 12px 0 0;
+  font-size: 15px;
+  color: var(--ink);
+}
+
+.facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 28px;
+  margin: 18px 0 0;
+}
+
+.facts dt {
+  margin: 0 0 3px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.facts dd {
+  margin: 0;
+  font-size: 14px;
+  color: var(--ink);
+}
+
+/* ---- Ordered / Dispatched / Balance ---- */
+
+.totals {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1px;
+  margin: 24px calc(-1 * var(--card-pad)) calc(-1 * var(--card-pad));
+  border-top: 1px solid var(--line);
+  background: var(--line);
+}
+
+.total {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 18px var(--card-pad);
+  background: var(--surface);
+}
+
+.total-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.total-value {
+  font-family: "Cascadia Mono", Consolas, "SF Mono", monospace;
+  font-size: 21px;
+  font-weight: 600;
+  color: var(--navy);
+}
+
+.total-value em {
+  font-style: normal;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.total--balance {
+  background: #f7f9ff;
+}
+
+/* ---- shipments ---- */
+
+.section-title {
+  margin: 30px 0 14px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.shipment {
+  margin-bottom: 14px;
+}
+
+.shipment-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.shipment-no {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--navy);
+}
+
+.shipment-qty {
+  margin-left: 12px;
+  font-size: 13.5px;
+  color: var(--muted);
+}
+
+.docs {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.docs-label {
+  display: block;
+  margin-bottom: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.docs-none {
+  font-size: 13.5px;
+  color: var(--muted);
+}
+
+.doc-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+
+.doc {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 9px 13px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fafbff;
+}
+
+.doc-name {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.doc-state {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.pill--shipped {
+  background: #e5eeff;
+  color: #1b4a9c;
+}
+
+.doc-download {
+  flex: none;
+  padding: 6px 14px;
+  border: 1px solid var(--navy);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--navy);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.doc-download:hover:not(:disabled) {
+  background: var(--navy);
+  color: #fff;
+}
+
+.doc-download:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.track {
+  display: inline-block;
+  margin-left: 10px;
+  padding: 3px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--navy);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.track::after {
+  content: " \2197";
+}
+
+.track:hover {
+  border-color: var(--navy);
+  background: #eef0f6;
+}
+
+/* ---- change password ---- */
+
+.hint {
+  margin: -4px 0 14px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+/* A second button under the first one, rather than beside it: on a phone
+   there is no room beside it. */
+.button--block {
+  width: 100%;
+  margin-top: 10px;
+  border: 1px solid var(--line);
+}
+
+.linkish {
+  border: 0;
+  padding: 0;
+  background: none;
+  font: inherit;
+  color: var(--navy);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.banner {
+  margin: 0 0 18px;
+  padding: 11px 14px;
+  border-radius: 7px;
+  background: var(--ok-bg);
+  color: var(--ok);
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  flex: none;
+}
+
+.hint--met {
+  color: var(--ok);
+}
+
+/* ---- where a shipment has got to ---- */
+
+/* A track rather than a word. "In transit" only means something if you can
+   see what comes before and after it. */
+.steptrack {
+  display: flex;
+  list-style: none;
+  margin: 14px 0 18px;
+  padding: 0;
+  overflow-x: auto;
+}
+
+.step {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 78px;
+  padding-top: 18px;
+  text-align: center;
+}
+
+/* The connecting line, drawn behind the dots. Not on the first step, or it
+   would stick out to the left of the track. */
+.step + .step::before {
+  content: "";
+  position: absolute;
+  top: 5px;
+  right: 50%;
+  left: -50%;
+  height: 2px;
+  background: var(--line);
+}
+
+.step--done::before,
+.step--now::before {
+  background: var(--navy);
+}
+
+.step-dot {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 12px;
+  height: 12px;
+  margin-left: -6px;
+  border: 2px solid var(--line);
+  border-radius: 50%;
+  background: #fff;
+}
+
+.step--done .step-dot {
+  border-color: var(--navy);
+  background: var(--navy);
+}
+
+/* The step it is at now: filled, ringed, and slightly larger, so the eye
+   lands on it before it reads any of the labels. */
+.step--now .step-dot {
+  width: 16px;
+  height: 16px;
+  margin-left: -8px;
+  top: -2px;
+  border-color: var(--navy);
+  background: var(--navy);
+  box-shadow: 0 0 0 4px rgba(0, 12, 46, 0.12);
+}
+
+.step-name {
+  display: block;
+  padding: 0 4px;
+  font-size: 11.5px;
+  line-height: 1.3;
+  color: var(--muted);
+}
+
+.step--done .step-name {
+  color: var(--ink);
+}
+
+.step--now .step-name {
+  color: var(--navy);
+  font-weight: 600;
+}
+
+.track-cancelled {
+  margin: 12px 0 16px;
+  padding: 9px 12px;
+  border-radius: 7px;
+  background: #fdecec;
+  color: var(--bad);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* Packed did not exist before, because nothing offered it. */
+.pill--packed {
+  background: #eef0f6;
+  color: var(--navy);
+}
+
+/* ---- narrow screens ---- */
+
+/* Below this the order table cannot fit its five columns, so each order is
+   drawn as a small card: sales order and status on top, the description
+   under them, then grade and quantity. It is still a table to a screen
+   reader -- OrdersScreen.jsx states the roles, because a table drawn as
+   blocks loses them in some browsers. */
+@media (max-width: 880px) {
+  .table-wrap {
+    overflow-x: visible;
+  }
+
+  .table,
+  .table tbody,
+  .table tr,
+  .table td {
+    display: block;
+  }
+
+  /* Out of sight, not out of reach of a screen reader. */
+  .table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .table tbody tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px 14px;
+    align-items: center;
+    padding: 14px var(--card-pad);
+    border-bottom: 1px solid var(--line);
+  }
+
+  .table tbody tr:last-child {
+    border-bottom: none;
+  }
+
+  .table td {
+    padding: 0;
+    border-bottom: none;
+    white-space: normal;
+  }
+
+  .table tbody tr:hover {
+    background: #fafbff;
+  }
+
+  .table tbody tr:hover td {
+    background: none;
+  }
+
+  .table .cell-so {
+    grid-area: 1 / 1;
+    overflow-wrap: anywhere;
+  }
+
+  /* No chevron on a card, so the sales order is underlined instead, to say
+     the card opens. */
+  .table .link {
+    text-decoration: underline;
+  }
+
+  .table .cell-status {
+    grid-area: 1 / 2;
+    justify-self: end;
+  }
+
+  .table .cell-desc {
+    grid-area: 2 / 1 / 3 / 3;
+  }
+
+  .table .cell-grade {
+    grid-area: 3 / 1;
+  }
+
+  .table .cell-qty {
+    grid-area: 3 / 2;
+  }
+
+  .table td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 2px;
+    font-family: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .table .chevron {
+    display: none;
+  }
+}
+
+/* A phone, or a window dragged narrow. */
+@media (max-width: 700px) {
+  /* Ordered, Dispatched and Balance one under another, label on the left.
+     Three side by side do not fit, and two left an empty grey square. */
+  .totals {
+    grid-template-columns: 1fr;
+  }
+
+  .total {
+    flex-direction: row;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px var(--card-pad);
+  }
+
+  .total-value {
+    font-size: 18px;
+  }
+
+  /* All five steps on the screen at once. Scrolling sideways hid the last
+     of them -- Delivered, the one a customer most wants to see. */
+  .step {
+    min-width: 0;
+  }
+
+  .step-name {
+    padding: 0 2px;
+    font-size: 10.5px;
+  }
+}
