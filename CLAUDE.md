@@ -101,6 +101,11 @@ conditions for deploying `dev` to the live server:
    shipments instead of it being typed. The live portal holds no orders
    yet, so migration 0009 loses nothing there.
 
+**Step 32, the escape hatch** (`feature/password-escape-hatch`), makes
+`PASSWORD_SIGN_IN=true` a real way back in if email fails: while it is on,
+the sign-in screen shows the password box again. It is merged to `dev`
+after step 31, and the same two conditions hold for deploying both.
+
 Do not deploy, or tell the user it is safe to, until both are confirmed.
 
 **Step 30, "Forgot your password", is held unmerged** on
@@ -163,13 +168,14 @@ photo: they are gone from the files for good, which is the point.
 **Restore point:** tag `pre-magic-link-only` is `dev` after step 29, before
 step 31 (sign-in by email link only). Undo it on `dev` with
 `git revert --no-edit pre-magic-link-only..dev`. There is no migration. On a
-server already running it, `PASSWORD_SIGN_IN=true` in `.env` reopens
-password sign-in **in the API only**: the sign-in screen has no password
-box, so nobody can use it from a browser until the old screen is back. It
-takes effect when the API container is recreated,
-`docker compose -f docker-compose.prod.yml -f docker-compose.server.yml up -d --force-recreate --no-build api`
-(a plain `restart` does not re-read `.env`). The way back that works in a
-browser is the rollback under "Deploying".
+server already running it, an email failure does not need a revert: see
+"If email fails" under "Deploying". Since step 32 one setting brings the
+password sign-in back, screen included.
+
+**Restore point:** tag `pre-password-escape-hatch` is `dev` after step 31,
+before step 32 (the password box comes back while `PASSWORD_SIGN_IN` is
+on). Undo it on `dev` with
+`git revert --no-edit pre-password-escape-hatch..dev`. No migration.
 
 **`dev` is the branch to work from.** **`main` is still the empty anchor
 commit, deliberately** — it gets its first real content only when the portal
@@ -214,7 +220,7 @@ cd backend
 .venv/Scripts/python.exe -m pytest
 ```
 
-211 tests, about a minute, with the dev database up. They build their own
+213 tests, about a minute, with the dev database up. They build their own
 database beside the development one and drop it afterwards, so the
 development data is untouched — the row counts are identical before and
 after. They also run on GitHub for every push.
@@ -227,7 +233,7 @@ after. They also run on GitHub for every push.
 | `python -m scripts.manage_users --add-customer CODE --name N` | add a customer |
 | `python -m scripts.manage_users --add-user EMAIL --customer CODE` | give somebody a login; they sign in with an email link (it still prints a temporary password, which opens nothing while password sign-in is off) |
 | `python -m scripts.manage_users --add-staff EMAIL` | give an Alok Ingots colleague a staff login |
-| `python -m scripts.manage_users --reset-password EMAIL` | issue a new temporary password; while password sign-in is off, what it is good for is signing them out everywhere |
+| `python -m scripts.manage_users --reset-password EMAIL` | issue a new temporary password; signs them out everywhere, and is the way back in during an email failure with `PASSWORD_SIGN_IN` on (see "If email fails") |
 | `python -m scripts.manage_users --deactivate EMAIL` | stop somebody signing in, at once |
 | `python -m scripts.manage_users --activate EMAIL` | let them back in |
 | `python -m scripts.migrate` | bring the database schema up to date, losing nothing |
@@ -361,6 +367,20 @@ to prove it really is a picture, and saved again without its hidden details
 Set `PORTAL_DOMAIN` in `.env`: a real domain makes Caddy obtain HTTPS
 automatically; `:80` serves plain HTTP for testing on your own machine.
 
+**If email fails: getting back in with a password** (step 32). In the
+project folder on srv1427359:
+
+1. Add `PASSWORD_SIGN_IN=true` to `.env`, then recreate the API so it reads
+   it (a plain `restart` does not re-read `.env`):
+   `docker compose -f docker-compose.prod.yml -f docker-compose.server.yml up -d --force-recreate --no-build api`
+2. The sign-in screen shows the password box again at its next load, with
+   no rebuild. Anybody who does not know a password gets a temporary one:
+   `docker compose -f docker-compose.prod.yml -f docker-compose.server.yml exec api python -m scripts.manage_users --reset-password EMAIL`
+3. They sign in with it, and the portal makes them choose their own before
+   showing anything else.
+4. Once email works again, set `PASSWORD_SIGN_IN=false` and recreate the API
+   the same way. The password box goes and link-only is back.
+
 **Rolling back a whole deploy on srv1427359**, in one line, run in the
 project folder on the server:
 
@@ -487,6 +507,7 @@ the customer side needs, and a step is done when both work.
 | 29 | Hidden details out of full-size photos | every photo saved without its camera, time and GPS position as it is uploaded; a line on the photo box says so; a command cleans photos uploaded before; phone photos with a second picture inside (MPO) accepted instead of refused; a photo cut short refused | the full-size photo they download carries only the picture | **Done** |
 | 30 | Forgot your password (`feature/step30-password-reset`, `a37b9b7`) | Email reset link on each login | "Forgot your password?" on the sign-in card | **Built, held unmerged** on the user's decision, 11 Sep 2026; moot while sign-in is link-only. Do not merge or delete without asking |
 | 31 | Sign in by email link only (`feature/magic-link-only`) | no Change password or Reset password button; Add customer login says "tell them to sign in with email link" instead of showing a temporary password; the four quick actions unchanged | the sign-in card has only the email box and Sign in with email link: no password box, no password Sign in button, no "or"; no Change password button | **Merged, not deployed**: deploying waits on two confirmations, see "Where we are now" |
+| 32 | The escape hatch (`feature/password-escape-hatch`) | with `PASSWORD_SIGN_IN` on, `manage_users --reset-password` gives a temporary password to sign in with; a written "If email fails" procedure | the password box, the password Sign in button and "or" come back on the sign-in card only while the server switch is on; hidden while it is off | **Merged, not deployed**: same two conditions as step 31 |
 
 ### Still to build, both sides
 
@@ -589,6 +610,8 @@ Update after every step: what was done, and the commit.
 | 2026-09-11 | **Step 29 — Hidden details out of full-size photos, both halves** (`feature/step29-strip-photo-details`, restore tag `pre-strip-photo-details`). Since step 25 the preview carried none of a phone photo's hidden details, but a customer who clicked a tile downloaded the original with the camera, the time and often the GPS position of the factory in it. On the user's decision of 11 Sep 2026, every photo is now saved again without them the moment it is uploaded, before anybody, staff included, can download it. What stays is only what says how to draw the picture: its colour profile and, for a PNG, its transparency. A JPEG that is already upright is saved with its own compression settings, so it looks the same (the test allows an average difference under 2 levels out of 255); a sideways one is turned upright first, because the note saying which way is up is itself one of the details, and saved at quality 95. A photo with nothing hidden in it is kept byte for byte. `scripts/strip_photo_details.py` cleans photos uploaded before; each photo is saved as it is done and its old file removed only after, so a run stopped halfway leaves everything showing. Staff see a line on the empty photo box saying details are removed. Found on the way, and fixed: **ordinary iPhone and Samsung photos with a second picture inside (MPO) were refused as "not a picture"**, because Pillow names them MPO and only JPEG and PNG were allowed; they are now accepted, and the second picture goes with the other details. And a photo cut short while copying used to pass the picture check and show as a broken tile; it is now refused with a message saying so. No migration, no new setting. Proved by 7 new tests (205 in all): the camera, the GPS position, XMP and a comment present before and absent from what the customer and staff download, with the picture the same size and look; a sideways photo stored tall; a PNG's notes gone and its transparency kept; an MPO accepted and served as one plain JPEG; a cut-short photo refused with nothing left on disk; and the command cleaning an older photo, a dry run changing nothing, and a second run doing nothing. The frontend build passes, and a dry run of the command on the development database found its 5 photos already clean. **Not looked at in a browser; not tried on a real phone photo** | _this commit_ |
 
 | 2026-09-11 | **Step 31 — Sign in by email link only, both halves** (`feature/magic-link-only`, restore tag `pre-magic-link-only`). On the user's decision, the sign-in card keeps only the email box and **Sign in with email link**: the password box, the password Sign in button and the "or" divider are gone. (`dev` never had a "Forgot your password?" link; step 30, which adds one, is held unmerged.) The password code is **dormant, not deleted**. A new setting, `PASSWORD_SIGN_IN`, off unless `.env` says true, makes `POST /api/login` give everybody the same refusal before anything is looked up, and switches off the rule that keeps a person on a temporary password away from their orders. Without that second part, every new login would have signed in by link and then been asked for a temporary password nobody sent them. Switched back on, both work exactly as before. Staff lose the Change password and Reset password buttons; Add customer login now says "tell them to open the portal and press Sign in with email link" instead of showing a temporary password, and the Start here checklist says the same. Customers lose Change password. The four quick actions, `manage_users.py`, and the change-password and forced-password screens are all kept. The sign-in email and the too-many-links message no longer mention a password. Proved by 6 new tests (211 in all; every older test now runs with password sign-in switched on, as the proof the dormant code still works): a right password, a wrong one and an unknown address all get the same 403; a brand-new login signs in by link and sees its orders; a staff login signs in by link and adds a customer, a customer login, an order, a shipment and a document, and that customer then signs in by link and sees the order and the document; the email says nothing of a password; and switched on, the temporary-password rule is back. The frontend build passes, `manage_users --list` runs, and a headless Edge run on the development site passed 22 checks: one button on the sign-in card at desktop and phone width, no password box, no divider, no Forgot link, `/api/login` refused from the browser, no Change password or Reset password button on either half, all four quick actions open (Upload document onto Documents & photos with its Upload buttons), Add customer login shows the new note and no password, and no browser errors. The two runs left two development-only logins (`link-only-check-…@demo-customer.example`) and their change-history entries. A fresh sign-in link requested from the live server for mis@alokindia.com has **not arrived**; see Known issues. Merged to `dev` and pushed the same day on the user's OK; **not deployed** | `f1c8ac7` + _this commit_ |
+
+| 2026-09-11 | **Step 32 — The escape hatch, both halves** (`feature/password-escape-hatch`, restore tag `pre-password-escape-hatch`). After step 31, `PASSWORD_SIGN_IN=true` reopened password sign-in in the API only: the sign-in screen had no password box, so if email ever failed nobody could get in from a browser. On the user's request, the sign-in card now asks the server, through a new read-only `GET /api/sign-in-options`, every time it loads, and shows the password box, the password Sign in button and the "or" divider only while the switch is on. Off, the normal state, it is exactly step 31's link-only card, and if the question cannot be answered it stays link-only. Switching needs no rebuild of the website. The recovery procedure is written under "If email fails" in "Deploying": switch on and recreate the API, `manage_users --reset-password` for anyone without a password, sign in, choose a password, switch off again once email works. Proved by 2 new tests (213 in all): the screen is told the switch's current state without signing in; and with the switch on, a staff member reset on the server signs in with the temporary password, is held to choosing a real one, then reaches the staff screens. The frontend build passes. One build of the development site was run in headless Edge against the API started first with the switch off, then with it on. Off, 9 checks: only Sign in with email link at desktop and phone width, no password box or divider, `/api/login` refused from the browser, no browser errors. On, 10 checks: the password box and both buttons back at desktop and phone width, nothing scrolling sideways, a login made by `manage_users --add-user` signed in with its temporary password, was made to choose its own and reached its orders, no browser errors. That run left one development-only login (`recovery-check-…@second-demo.example`). Merged to `dev` on the user's OK; **not deployed**, and deploying waits on the same two conditions as step 31 | _this commit_ |
 
 ### Design decisions worth remembering
 
@@ -977,6 +1000,12 @@ Update after every step: what was done, and the commit.
 - **The older tests run with the switch on.** They are the proof the
   dormant code still works; `test_link_only.py` runs with it off and tests
   the portal as it ships.
+- **The screen asks the server; the switch is not built into the website.**
+  (Step 32.) A switch the website only learned when it was built would need
+  a rebuild and a deploy in the middle of an email failure.
+  `GET /api/sign-in-options` answers on every load of the sign-in screen,
+  and says nothing about any account. If it cannot be reached, the screen
+  stays link-only, the normal state, rather than guessing.
 
 ### Known issues / risks
 
@@ -1005,12 +1034,15 @@ Update after every step: what was done, and the commit.
   having broken, but that is not proven. A second link was requested for
   **exports@alokindia.com**, which has a live staff login, at 11:46 UTC
   (answer 202); Alok is to confirm it arrived. Deploying waits on that.
-- **`PASSWORD_SIGN_IN=true` is not a browser escape hatch.** It reopens
-  password sign-in in the API, but step 31's sign-in screen has no password
-  box, so from a browser nobody can use it. Until that changes, the only
-  way back that works for real users is the whole-deploy rollback under
-  "Deploying". Making the sign-in screen show the password box when the
-  server switch is on would fix this; not built.
+- **While `PASSWORD_SIGN_IN` is on, a password is a way in for everybody.**
+  That is the point during an email failure, but it also brings back
+  password guessing (rate limited as before) and temporary passwords staff
+  have seen. Switch it off again once email works. The sign-in screen asks
+  the server each time it loads, so a page already open keeps what it
+  showed until it is reloaded.
+- **Most people will not know a password.** Logins made since step 31 never
+  chose one, so in an email failure each person needs `--reset-password`
+  first (step 2 of "If email fails").
 - **Email sign-in makes a staff inbox a key to the admin console.**
   Whoever can read a staff member's email can now sign in as them. Worth a
   second factor for staff if more than a few people hold staff logins.
@@ -1192,7 +1224,7 @@ Update after every step: what was done, and the commit.
   drills, against the reorganised backend. What it has still never met is a
   real machine, a real domain, or Caddy actually obtaining an HTTPS
   certificate — that cannot be tested until DNS points somewhere.
-- **The frontend has no tests.** The 211 committed tests are all backend.
+- **The frontend has no tests.** The 213 committed tests are all backend.
   Nothing checks that the progress track draws, that the photo gallery
   revokes its blob URLs, or that a backwards status change asks before it
   saves. `npm run build` passing only means it compiles.

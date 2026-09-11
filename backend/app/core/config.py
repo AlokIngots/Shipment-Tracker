@@ -119,10 +119,11 @@ MAGIC_LINK_WINDOW_SECONDS = int(os.getenv("MAGIC_LINK_WINDOW_SECONDS", "900"))  
 # --------------------------------------------------- sign-in with a password
 
 # Off by default: the portal signs people in by emailed link only (decided
-# 11 Sep 2026), and the sign-in screen has no password box. The password
-# code is kept, dormant, not deleted -- POST /api/login, temporary passwords
-# and the "choose your own password" rule. True switches them back on for the
-# API without a code change.
+# 11 Sep 2026). The password code is kept, dormant, not deleted -- POST
+# /api/login, temporary passwords and the "choose your own password" rule.
+# True switches them back on without a code change, and the sign-in screen,
+# which asks GET /api/sign-in-options each time it loads, shows the password
+# box again. That is the way back in if email ever fails.
 PASSWORD_SIGN_IN = _flag("PASSWORD_SIGN_IN")
 
 

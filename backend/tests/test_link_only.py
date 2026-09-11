@@ -10,10 +10,14 @@ no password.
 
 The password code is dormant, not gone. Every other test file runs with it
 switched on (the password_sign_in fixture in conftest.py), which is the
-proof it still works if it is ever switched back.
+proof it still works if it is ever switched back. The last two tests hold
+the way back in to account: the sign-in screen is told when to show the
+password box, and a staff member locked out by an email failure gets back
+in with a password once the switch is on.
 """
 
 import re
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
@@ -169,3 +173,47 @@ def test_switched_back_on_the_temporary_password_rule_returns(client, db, custom
     body, auth = sign_in_by_link(client, outbox, "back@testco.example")
     assert body["must_change_password"] is True
     assert client.get("/api/orders", headers=auth).status_code == 403
+
+
+# ------------------------------------------------- the way back in
+
+
+def test_the_sign_in_screen_is_told_whether_to_show_the_password_box(client, monkeypatch):
+    """No sign-in needed to ask, and the answer follows the switch as it is now."""
+    monkeypatch.setattr(config, "PASSWORD_SIGN_IN", False)
+    off = client.get("/api/sign-in-options")
+    assert (off.status_code, off.json()) == (200, {"password_sign_in": False})
+
+    monkeypatch.setattr(config, "PASSWORD_SIGN_IN", True)
+    assert client.get("/api/sign-in-options").json() == {"password_sign_in": True}
+
+
+def test_if_email_fails_staff_get_back_in_with_the_switch_on(client, db):
+    """The recovery path, written down in CLAUDE.md: switch on, reset the
+    password on the server, sign in with the temporary one, choose a real one.
+    (conftest has the switch on here.)"""
+    staff, _ = accounts.create_staff_login(db, "rescue@alokindia.test", None)
+    temporary = accounts.reset_password(db, staff, actor=None)
+    # A token issued in the same second as a reset is refused on purpose;
+    # move the reset a few seconds into the past, as other tests do.
+    staff.password_changed_at -= timedelta(seconds=5)
+    db.commit()
+
+    signed = client.post(
+        "/api/login", json={"email": "rescue@alokindia.test", "password": temporary}
+    )
+    assert signed.status_code == 200
+    body = signed.json()
+    assert body["must_change_password"] is True
+    auth = {"Authorization": f"Bearer {body['token']}"}
+    # The temporary password buys only the right to choose a real one.
+    assert client.get("/api/staff/orders", headers=auth).status_code == 403
+
+    changed = client.post(
+        "/api/change-password",
+        headers=auth,
+        json={"current_password": temporary, "new_password": "a-real-password-after-rescue"},
+    )
+    assert changed.status_code == 200
+    settled = {"Authorization": f"Bearer {changed.json()['token']}"}
+    assert client.get("/api/staff/orders", headers=settled).status_code == 200

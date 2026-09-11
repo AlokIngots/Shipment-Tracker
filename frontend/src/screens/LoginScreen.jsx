@@ -1,23 +1,68 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import axios from 'axios'
+import { applyToken } from '../lib/session'
 
-// Pre-fills the email box during development so the demo is easy to try.
-// Read from frontend/.env, which is never committed. Blank when unset, which
-// is what production wants.
+// Pre-fills the form during development so the demo is easy to try. Read
+// from frontend/.env, which is never committed. Blank when unset, which is
+// what production wants.
 const DEMO_EMAIL = import.meta.env.VITE_DEMO_EMAIL ?? ''
+const DEMO_PASSWORD = import.meta.env.VITE_DEMO_PASSWORD ?? ''
 
-// One way in: a link sent to the inbox. There is no password box, on
-// purpose. The server's password sign-in is switched off too
-// (PASSWORD_SIGN_IN in backend/app/core/config.py), kept but dormant.
-export default function LoginScreen() {
+// Normally one way in: a link sent to the inbox.
+//
+// The password box comes back only while the server's PASSWORD_SIGN_IN
+// switch is on -- the way back in if email ever fails. The screen asks the
+// server every time it loads, so turning the switch on or off needs no new
+// build of the website. If the question cannot be answered, the screen stays
+// link-only: the normal state is the safe one to fall back to.
+export default function LoginScreen({ onSignedIn }) {
   const [email, setEmail] = useState(DEMO_EMAIL)
+  const [password, setPassword] = useState(DEMO_PASSWORD)
+  const [passwordSignIn, setPasswordSignIn] = useState(false)
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(false)
   // Once a link has been asked for: what the server said, and to which address.
   const [linkSent, setLinkSent] = useState(null)
 
-  async function requestLink(event) {
+  useEffect(() => {
+    let cancelled = false
+    axios
+      .get('/api/sign-in-options')
+      .then((res) => {
+        if (!cancelled) setPasswordSignIn(res.data?.password_sign_in === true)
+      })
+      .catch(() => {
+        // Stay link-only.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  async function signInWithPassword(event) {
     event.preventDefault()
+    setBusy(true)
+    setError(null)
+
+    try {
+      const res = await axios.post('/api/login', { email, password })
+      // Every later request carries the token, which is how the server knows
+      // who is asking. Kept for the tab, so a refresh does not sign them out.
+      applyToken(res.data.token)
+      onSignedIn(res.data)
+    } catch (err) {
+      const detail = err.response?.data?.detail
+      if ([401, 403, 429].includes(err.response?.status) && typeof detail === 'string') {
+        setError(detail)
+      } else {
+        setError('Could not reach the server. Please try again.')
+      }
+      setBusy(false)
+    }
+  }
+
+  async function requestLink(event) {
+    event?.preventDefault()
     const address = email.trim()
     if (!address.includes('@')) {
       setError('Enter your email address, then press Sign in with email link.')
@@ -63,36 +108,81 @@ export default function LoginScreen() {
     )
   }
 
+  const emailField = (
+    <label className="field">
+      <span>Email</span>
+      <input
+        type="email"
+        value={email}
+        autoComplete={passwordSignIn ? 'username' : 'email'}
+        onChange={(e) => setEmail(e.target.value)}
+      />
+    </label>
+  )
+
+  const errorLine = error && (
+    <p className="error" role="alert">
+      {error}
+    </p>
+  )
+
+  const hint = (
+    <p className="login-hint">
+      We will email you a link that signs you in. No password needed. It works
+      once, for 15 minutes.
+    </p>
+  )
+
   return (
     <div className="card card--login">
       <h2>Sign in</h2>
       <p className="lead">Access your orders, shipments and documents.</p>
 
-      <form onSubmit={requestLink} noValidate>
-        <label className="field">
-          <span>Email</span>
-          <input
-            type="email"
-            value={email}
-            autoComplete="email"
-            onChange={(e) => setEmail(e.target.value)}
-          />
-        </label>
+      {passwordSignIn ? (
+        <>
+          <form onSubmit={signInWithPassword} noValidate>
+            {emailField}
+            <label className="field">
+              <span>Password</span>
+              <input
+                type="password"
+                value={password}
+                autoComplete="current-password"
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </label>
+            {errorLine}
+            <button type="submit" className="button" disabled={busy}>
+              {busy ? 'Please wait…' : 'Sign in'}
+            </button>
+          </form>
 
-        {error && (
-          <p className="error" role="alert">
-            {error}
-          </p>
-        )}
+          <div className="login-or" role="separator">
+            or
+          </div>
 
-        <button type="submit" className="button" disabled={busy}>
-          {busy ? 'Sending…' : 'Sign in with email link'}
-        </button>
-      </form>
-      <p className="login-hint">
-        We will email you a link that signs you in. No password needed. It
-        works once, for 15 minutes.
-      </p>
+          <button
+            type="button"
+            className="button button--outline"
+            onClick={requestLink}
+            disabled={busy}
+          >
+            Sign in with email link
+          </button>
+          {hint}
+        </>
+      ) : (
+        <>
+          <form onSubmit={requestLink} noValidate>
+            {emailField}
+            {errorLine}
+            <button type="submit" className="button" disabled={busy}>
+              {busy ? 'Sending…' : 'Sign in with email link'}
+            </button>
+          </form>
+          {hint}
+        </>
+      )}
 
       {DEMO_EMAIL && <p className="demo-note">Demo account — pre-filled above.</p>}
     </div>

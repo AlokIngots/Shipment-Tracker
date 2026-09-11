@@ -59,6 +59,18 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@router.get("/api/sign-in-options")
+def sign_in_options() -> dict[str, bool]:
+    """Which ways in the sign-in screen should offer. Open to everyone.
+
+    The screen asks every time it loads, so switching PASSWORD_SIGN_IN on
+    the server brings the password box back without rebuilding the website.
+    That is what makes the switch a way back in if email ever fails. It says
+    nothing about any account.
+    """
+    return {"password_sign_in": config.PASSWORD_SIGN_IN}
+
+
 @router.post("/api/login", response_model=LoginResponse)
 def login(
     credentials: LoginRequest, db: DbSession, address: ClientAddress

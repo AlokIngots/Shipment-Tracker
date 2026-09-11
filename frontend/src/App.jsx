@@ -75,9 +75,9 @@ export default function App() {
   }
 
   // Nothing but the password screen is reachable until a temporary password
-  // has been replaced. Dormant: the server only ever says so while its
-  // password sign-in is switched on (PASSWORD_SIGN_IN), and the portal ships
-  // with it off, signing people in by email link.
+  // has been replaced. The server only ever says so while its password
+  // sign-in is switched on (PASSWORD_SIGN_IN) -- in normal running it is off
+  // and people sign in by email link, so this is the recovery path only.
   const mustChangePassword = Boolean(session?.must_change_password)
 
   function passwordWasChanged() {
@@ -106,7 +106,7 @@ export default function App() {
       <main className="main">
         {restoring && <p className="message">Signing you in…</p>}
 
-        {!restoring && showing === 'login' && <LoginScreen />}
+        {!restoring && showing === 'login' && <LoginScreen onSignedIn={setSession} />}
 
         {!restoring && showing === 'link' && (
           <SignInLinkScreen
