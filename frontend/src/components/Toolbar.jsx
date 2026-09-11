@@ -4,7 +4,7 @@
 export default function Toolbar({ title, subtitle, onBack, backLabel, children }) {
   return (
     <div className="toolbar">
-      <div>
+      <div className="toolbar-text">
         {onBack && (
           <button type="button" className="backlink" onClick={onBack}>
             &#8249; {backLabel ?? 'Back'}

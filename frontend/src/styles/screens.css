@@ -3,12 +3,20 @@
 
 /* ---- orders screen ---- */
 
+/* When the title and the buttons do not fit side by side, the buttons move
+   under the title, rather than squeezing it into a column a word wide. */
 .toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 18px;
+}
+
+.toolbar-text {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .toolbar-title {
@@ -22,6 +30,7 @@
   margin: 4px 0 0;
   font-size: 13px;
   color: var(--muted);
+  overflow-wrap: anywhere;
 }
 
 .toolbar .button--ghost {
@@ -45,7 +54,7 @@
 
 .table-wrap {
   overflow-x: auto;
-  margin: -28px;
+  margin: calc(-1 * var(--card-pad));
   border-radius: 10px;
 }
 
@@ -57,11 +66,26 @@
 
 .table th,
 .table td {
-  padding: 13px 18px;
+  padding: 13px 14px;
   text-align: left;
   border-bottom: 1px solid var(--line);
   vertical-align: middle;
   white-space: nowrap;
+}
+
+/* The description and the grade wrap onto more lines; nothing else does. A
+   sales order number or a quantity broken in two is easy to misread. Kept
+   on one line, a real description pushed Ordered quantity and Status out of
+   sight on every screen, a wide one included. */
+.table .cell-desc,
+.table .cell-grade {
+  white-space: normal;
+}
+
+/* Room for an ordinary grade such as "304 / 1.4301" on one line; only a
+   longer one wraps. Without it the table split even that one in two. */
+.table .cell-grade {
+  min-width: 6.5rem;
 }
 
 .table th {
@@ -71,6 +95,7 @@
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+  white-space: normal;
 }
 
 .table tbody tr:last-child td {
@@ -201,7 +226,7 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 1px;
-  margin: 24px -28px -28px;
+  margin: 24px calc(-1 * var(--card-pad)) calc(-1 * var(--card-pad));
   border-top: 1px solid var(--line);
   background: var(--line);
 }
@@ -210,7 +235,7 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 18px 28px;
+  padding: 18px var(--card-pad);
   background: var(--surface);
 }
 
@@ -415,6 +440,7 @@
 
 .toolbar-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   flex: none;
 }
@@ -520,4 +546,137 @@
 .pill--packed {
   background: #eef0f6;
   color: var(--navy);
+}
+
+/* ---- narrow screens ---- */
+
+/* Below this the order table cannot fit its five columns, so each order is
+   drawn as a small card: sales order and status on top, the description
+   under them, then grade and quantity. It is still a table to a screen
+   reader -- OrdersScreen.jsx states the roles, because a table drawn as
+   blocks loses them in some browsers. */
+@media (max-width: 880px) {
+  .table-wrap {
+    overflow-x: visible;
+  }
+
+  .table,
+  .table tbody,
+  .table tr,
+  .table td {
+    display: block;
+  }
+
+  /* Out of sight, not out of reach of a screen reader. */
+  .table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .table tbody tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px 14px;
+    align-items: center;
+    padding: 14px var(--card-pad);
+    border-bottom: 1px solid var(--line);
+  }
+
+  .table tbody tr:last-child {
+    border-bottom: none;
+  }
+
+  .table td {
+    padding: 0;
+    border-bottom: none;
+    white-space: normal;
+  }
+
+  .table tbody tr:hover {
+    background: #fafbff;
+  }
+
+  .table tbody tr:hover td {
+    background: none;
+  }
+
+  .table .cell-so {
+    grid-area: 1 / 1;
+    overflow-wrap: anywhere;
+  }
+
+  /* No chevron on a card, so the sales order is underlined instead, to say
+     the card opens. */
+  .table .link {
+    text-decoration: underline;
+  }
+
+  .table .cell-status {
+    grid-area: 1 / 2;
+    justify-self: end;
+  }
+
+  .table .cell-desc {
+    grid-area: 2 / 1 / 3 / 3;
+  }
+
+  .table .cell-grade {
+    grid-area: 3 / 1;
+  }
+
+  .table .cell-qty {
+    grid-area: 3 / 2;
+  }
+
+  .table td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 2px;
+    font-family: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .table .chevron {
+    display: none;
+  }
+}
+
+/* A phone, or a window dragged narrow. */
+@media (max-width: 700px) {
+  /* Ordered, Dispatched and Balance one under another, label on the left.
+     Three side by side do not fit, and two left an empty grey square. */
+  .totals {
+    grid-template-columns: 1fr;
+  }
+
+  .total {
+    flex-direction: row;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px var(--card-pad);
+  }
+
+  .total-value {
+    font-size: 18px;
+  }
+
+  /* All five steps on the screen at once. Scrolling sideways hid the last
+     of them -- Delivered, the one a customer most wants to see. */
+  .step {
+    min-width: 0;
+  }
+
+  .step-name {
+    padding: 0 2px;
+    font-size: 10.5px;
+  }
 }

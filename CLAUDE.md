@@ -407,6 +407,7 @@ the customer side needs, and a step is done when both work.
 | 24 | Who changed what | every change recorded with who, when and before → after; an Activity tab to read it; nobody can edit or remove it | (nothing — internal only, and customers cannot reach it) | **Done** |
 | 25 | Photo previews | a small preview made at upload; a file that is not really a picture refused; a command for photos uploaded before | gallery tiles load the preview, clicking opens the original | **Done** |
 | 26 | Sign in with an email link | staff can sign in by link too | "Sign in with email link" beside the password; single-use 15-minute link; same answer for any address; rate limited | **Done, no real email yet** |
+| 27 | Screens that fit | on a phone the toolbar, the four tabs and every row fit; no page scrolls sideways | every order-list column visible on any screen, order cards below 880px; the whole progress track and the totals fit a phone | **Done, not seen on a real phone** |
 
 ### Still to build, both sides
 
@@ -500,7 +501,9 @@ Update after every step: what was done, and the commit.
 
 | 2026-09-11 | **Step 25 — Photo previews.** The gallery downloaded every photo at full size to draw a tile about a hundred pixels wide. Each photo now gets a small JPEG preview when it is uploaded — at most 400 pixels on its longest side, turned upright if the phone stored it sideways, and carrying none of the photo's hidden details (camera, time, GPS). The tiles on both halves load it; clicking still opens the original. A photo with no preview falls back to the full picture, so a missing one is slow, never broken. Making the preview meant opening the file, which closed a gap: a PDF renamed to `.jpg` used to pass as a photo, and is now refused; a picture is also served as what it really is, not what it is called. Migration 0007 adds `photos.thumb_path`; `scripts/make_thumbnails.py` makes previews for older photos. Removing a photo or its shipment removes the preview file too. Pillow 12.3.0 added. Proved by 9 new tests (154 in all), the frontend build, migration 0007 applied and drilled back to 0006 and forward on the development database, the command making previews for its 5 existing photos and then 0 on a second run, and a throwaway build of the API image making a JPEG preview inside it. **Not looked at in a browser** | `fbc386e` + _this commit_ |
 
-| 2026-09-11 | **Step 26 — Sign in with an email link**, for customers and staff, beside the password sign-in, which is unchanged. The login screen gains *Sign in with email link*: type an email, and the answer is the same *Check your email* whether or not it has an account. For an active account a 32-byte random token is issued, stored only as a SHA-256 hash, valid 15 minutes, and emailed as `https://portal.alokindia.co.in/#sign-in=<token>` through the notification sender. Redeeming it is one conditional UPDATE, so it works exactly once even if clicked twice at the same moment; a newer link, a password change or reset, or deactivation also retires it; any refusal shows *This link has expired, please request a new one*. The landing page asks for one press, so a company mail scanner that opens links cannot spend it. Limits: 3 links per inbox per 15 minutes (more requests get the same answer and send nothing), 10 requests per network address per 15 minutes (then 429), and bad links count against the existing 20-failure sign-in budget per address. Migration 0008 adds `magic_links`. Found while testing: Python sent the email quoted-printable, which splits the link with a soft line break; it now goes 7bit whenever the text allows. Proved by 21 new tests (175 in all), migration 0008 applied and drilled on the development database, and a real headless-browser run on the dev site with email going to a local mail catcher: link requested, email caught carrying the real portal address, link opened and wiped from the address bar, signed in, and the same link refused a second time. **No real email has been sent** — SMTP is still not set up | `34045b2` + _this commit_ |
+| 2026-09-11 | **Step 26 — Sign in with an email link**, for customers and staff, beside the password sign-in, which is unchanged. The login screen gains *Sign in with email link*: type an email, and the answer is the same *Check your email* whether or not it has an account. For an active account a 32-byte random token is issued, stored only as a SHA-256 hash, valid 15 minutes, and emailed as `https://portal.alokindia.co.in/#sign-in=<token>` through the notification sender. Redeeming it is one conditional UPDATE, so it works exactly once even if clicked twice at the same moment; a newer link, a password change or reset, or deactivation also retires it; any refusal shows *This link has expired, please request a new one*. The landing page asks for one press, so a company mail scanner that opens links cannot spend it. Limits: 3 links per inbox per 15 minutes (more requests get the same answer and send nothing), 10 requests per network address per 15 minutes (then 429), and bad links count against the existing 20-failure sign-in budget per address. Migration 0008 adds `magic_links`. Found while testing: Python sent the email quoted-printable, which splits the link with a soft line break; it now goes 7bit whenever the text allows. Proved by 21 new tests (175 in all), migration 0008 applied and drilled on the development database, and a real headless-browser run on the dev site with email going to a local mail catcher: link requested, email caught carrying the real portal address, link opened and wiped from the address bar, signed in, and the same link refused a second time. **No real email has been sent** — SMTP is still not set up | `34045b2`, `bde43a8` |
+
+| 2026-09-11 | **Step 27 — Screens that fit, both halves.** The customer's order list kept every cell on one line inside a page 880px wide, so one realistic description pushed *Ordered quantity* and *Status* out of sight — on a 1440px monitor as much as on a phone (484px of the table hidden at 1440 and 1024, 974px at 390), with no scrollbar showing to say so. Now the description and grade wrap and every column shows; below 880px each order is drawn as a small card: sales order and status, then description, then grade and quantity. On a phone the staff side scrolled sideways as a whole page, because the Change password / Sign out buttons and the four tabs ran past the edge, and shipment, document and login rows crushed their text into a column a few letters wide. Now the buttons move under the title, the tabs sit two by two, rows put their buttons underneath, and page and card margins shrink. The customer's order detail on a phone hid the end of the progress track — Delivered — and left an empty grey square beside Ordered / Dispatched / Balance; all five steps now fit and the totals stack. Styles, class names and table roles only; no backend change. Proved by a headless Edge run over the six signed-in screens of both halves at 1440, 1024, 768, 390 and 360px, measured before and after, with two long orders added to the list inside the browser only (the database untouched): before, 9 of 24 screens hid content or scrolled sideways; after, none of 30 do, apart from the photo strips, which scroll sideways by design. Frontend build passes. **Not looked at on a real phone** | _this commit_ |
 
 ### Design decisions worth remembering
 
@@ -798,8 +801,40 @@ Update after every step: what was done, and the commit.
   inbox, not that the person chose a password; the portal still asks for
   one before showing any order.
 
+### Design decisions worth remembering
+
+- **Cards on a narrow screen, not a table that scrolls sideways.** A
+  scrolling table hides whatever is on the right — and Status is the last
+  column — while nothing on a touch screen says there is more to see.
+- **880px is the switch because the page never gets wider than that.**
+  From 880px up the table always has the same room, so it only ever has to
+  fit one width; below it, it is cards.
+- **Only the description and the grade wrap.** A sales order number or a
+  quantity broken over two lines is easy to misread; a description over
+  three lines is not. The grade keeps room for an ordinary value like
+  `304 / 1.4301` on one line.
+- **The table's roles are written into the markup.** Drawn as cards, a
+  table stops being a table to a screen reader in some browsers.
+  `role="table"`, `"row"` and `"cell"` keep it one, and the header row is
+  hidden from sight rather than removed.
+- **One padding value for a card and what reaches its edges.** The order
+  table and the Ordered / Dispatched / Balance strip stretch to the card's
+  edges using `--card-pad`, so shrinking it on a phone moves all three
+  together instead of leaving one of them hanging over the edge.
+- **The page is still 880px wide.** Widening it would give the table more
+  room on a monitor, but it changes how every screen looks; not done
+  without asking.
+
 ### Known issues / risks
 
+- **Screens that fit have been checked in an emulated browser only.**
+  Headless Edge at five widths; neither an iPhone nor an Android phone has
+  been looked at. The screenshot script was a scratch tool and is not in the
+  repository, so the check cannot be re-run from here.
+- **Only the customer order list was tried with long values.** The staff
+  screens were measured with the two orders in the development database; a
+  very long customer name or file name is covered by the wrapping rules but
+  was not tried.
 - **No sign-in link reaches anybody yet.** Links go through the same sender
   as order notifications, so while `SEND_EMAILS=false` and there are no SMTP
   credentials, the button says *Check your email* and nothing arrives. And

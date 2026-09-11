@@ -68,35 +68,49 @@ export default function OrdersScreen({
 
         {state === 'ready' && orders.length > 0 && (
           <div className="table-wrap">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Sales Order</th>
-                  <th>Grade</th>
-                  <th>Description</th>
-                  <th className="num">Ordered quantity</th>
-                  <th>Status</th>
-                  <th />
+            {/* The roles repeat what the elements already are. On a narrow
+                screen the CSS draws each row as a card, and a table drawn as
+                blocks stops being a table to a screen reader in some
+                browsers unless the roles are stated. data-label is the
+                caption each card shows above its grade and quantity. */}
+            <table className="table" role="table">
+              <thead role="rowgroup">
+                <tr role="row">
+                  <th role="columnheader">Sales Order</th>
+                  <th role="columnheader">Grade</th>
+                  <th role="columnheader">Description</th>
+                  <th role="columnheader" className="num">Ordered quantity</th>
+                  <th role="columnheader">Status</th>
+                  <th role="columnheader" />
                 </tr>
               </thead>
-              <tbody>
+              <tbody role="rowgroup">
                 {orders.map((order) => (
                   <tr
                     key={order.id}
+                    role="row"
                     className="row--clickable"
                     onClick={() => onOpenOrder(order.id)}
                   >
-                    <td className="mono link">{order.sales_order_no}</td>
-                    <td>{order.grade}</td>
-                    <td>{order.description}</td>
+                    <td role="cell" className="mono link cell-so">
+                      {order.sales_order_no}
+                    </td>
+                    <td role="cell" className="cell-grade" data-label="Grade">
+                      {order.grade}
+                    </td>
+                    <td role="cell" className="cell-desc">
+                      {order.description}
+                    </td>
                     {/* Quantity is rendered exactly as the API sends it. */}
-                    <td className="num mono">
+                    <td role="cell" className="num mono cell-qty" data-label="Ordered">
                       {order.ordered_qty} {order.unit}
                     </td>
-                    <td>
+                    <td role="cell" className="cell-status">
                       <StatusPill status={order.status} />
                     </td>
-                    <td className="chevron">&#8250;</td>
+                    <td role="cell" className="chevron">
+                      &#8250;
+                    </td>
                   </tr>
                 ))}
               </tbody>

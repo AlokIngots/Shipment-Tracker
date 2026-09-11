@@ -54,11 +54,15 @@
   padding: 36px 32px;
 }
 
+/* --card-pad is also used by what reaches out to the card's edges -- the
+   order table and the Ordered / Dispatched / Balance strip -- so it can
+   shrink on a phone without them coming loose from the edge. */
 .card {
+  --card-pad: 28px;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 10px;
-  padding: 28px;
+  padding: var(--card-pad);
 }
 
 .card h2 {
@@ -252,4 +256,26 @@ code {
   font-size: 12.5px;
   color: var(--muted);
   text-align: center;
+}
+
+/* ---- narrow screens ---- */
+
+/* On a phone, 32px of margin either side and 28px inside every card left
+   under 300px for what the portal is actually showing. */
+@media (max-width: 700px) {
+  .header {
+    padding: 16px;
+  }
+
+  .main {
+    padding: 24px 16px;
+  }
+
+  .card {
+    --card-pad: 18px;
+  }
+
+  .footer {
+    padding: 16px;
+  }
 }
