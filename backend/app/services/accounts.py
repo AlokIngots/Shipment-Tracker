@@ -14,6 +14,10 @@ staff account. `create_staff_login` exists and the script calls it; the
 router does not, and must not. Staff is the flag that unlocks every write
 in the portal, and the rule that it can only be granted by somebody with
 access to the server is worth more than the convenience of a button.
+
+Every change is recorded in the activity record. The screen passes the
+staff member doing it as `actor`; the script passes nobody, and the event
+says it came from the command line.
 """
 
 from datetime import datetime, timezone
@@ -23,6 +27,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core import security
 from app.models import Customer, Order, User
+from app.services import audit
 
 
 class AccountProblem(Exception):
@@ -81,7 +86,9 @@ def active_staff_count(session) -> int:
 # ------------------------------------------------------------------ writing
 
 
-def create_customer(session, code: str, name: str, country: str | None) -> Customer:
+def create_customer(
+    session, code: str, name: str, country: str | None, *, actor: User | None = None
+) -> Customer:
     """Add a customer company."""
     code = (code or "").strip()
     name = (name or "").strip()
@@ -96,11 +103,22 @@ def create_customer(session, code: str, name: str, country: str | None) -> Custo
         code=code, name=name, country=(country or "").strip() or None
     )
     session.add(customer)
+    audit.record(
+        session,
+        "customer.created",
+        f"Added customer {code}",
+        actor=actor,
+        changes=audit.diff(
+            {}, audit.snapshot(customer, audit.CUSTOMER_FIELDS), audit.CUSTOMER_FIELDS
+        ),
+    )
     session.commit()
     return customer
 
 
-def update_customer(session, customer: Customer, name: str, country: str | None):
+def update_customer(
+    session, customer: Customer, name: str, country: str | None, *, actor: User | None = None
+):
     """Change a customer's name or country.
 
     The code is deliberately not editable. It is the join between this
@@ -112,19 +130,38 @@ def update_customer(session, customer: Customer, name: str, country: str | None)
     if not name:
         raise AccountProblem("A customer name is required.")
 
+    before = audit.snapshot(customer, audit.CUSTOMER_FIELDS)
     customer.name = name
     customer.country = (country or "").strip() or None
+
+    changes = audit.diff(
+        before, audit.snapshot(customer, audit.CUSTOMER_FIELDS), audit.CUSTOMER_FIELDS
+    )
+    if changes:
+        audit.record(
+            session,
+            "customer.updated",
+            f"Changed customer {customer.code}",
+            actor=actor,
+            changes=changes,
+        )
     session.commit()
     return customer
 
 
 def create_login(
-    session, customer: Customer, email: str, full_name: str | None
+    session,
+    customer: Customer,
+    email: str,
+    full_name: str | None,
+    *,
+    actor: User | None = None,
 ) -> tuple[User, str]:
     """Give somebody a login for a customer. Returns (user, temporary password).
 
     The password is returned once and never again: only its hash is stored,
-    so nobody, including the server, can read it back.
+    so nobody, including the server, can read it back. It is not in the
+    activity record either.
     """
     email = (email or "").strip().lower()
     if not email or "@" not in email:
@@ -145,6 +182,15 @@ def create_login(
         must_change_password=True,
     )
     session.add(user)
+    audit.record(
+        session,
+        "login.created",
+        f"Created a login for {email} at {customer.code}",
+        actor=actor,
+        changes=audit.diff(
+            {}, audit.snapshot(user, audit.LOGIN_FIELDS), audit.LOGIN_FIELDS
+        ),
+    )
     session.commit()
     return user, password
 
@@ -156,7 +202,8 @@ def create_staff_login(
 
     Called by scripts/manage_users.py only, never by a router. See the note
     at the top of this file: staff is the flag that unlocks every write in
-    the portal, and granting it requires access to the server.
+    the portal, and granting it requires access to the server -- which is
+    also why the event it records never names a person.
     """
     email = (email or "").strip().lower()
     if not email or "@" not in email:
@@ -179,11 +226,19 @@ def create_staff_login(
         must_change_password=True,
     )
     session.add(user)
+    audit.record(
+        session,
+        "staff.created",
+        f"Created a staff login for {email}",
+        changes=audit.diff(
+            {}, audit.snapshot(user, audit.LOGIN_FIELDS), audit.LOGIN_FIELDS
+        ),
+    )
     session.commit()
     return user, password
 
 
-def reset_password(session, user: User) -> str:
+def reset_password(session, user: User, *, actor: User | None = None) -> str:
     """Put an account back on a fresh temporary password. Returns it once."""
     password = security.temporary_password()
     user.password_hash = security.hash_password(password)
@@ -192,6 +247,13 @@ def reset_password(session, user: User) -> str:
     # account. A password is usually reset because somebody should not be
     # signed in any more, and leaving them signed in would defeat it.
     user.password_changed_at = datetime.now(timezone.utc).replace(microsecond=0)
+    audit.record(
+        session,
+        "login.password_reset",
+        f"Issued a new temporary password for {user.email}, "
+        "signing out every session they had open",
+        actor=actor,
+    )
     session.commit()
     return password
 
@@ -221,5 +283,11 @@ def set_active(session, user: User, active: bool, *, acting_user: User | None = 
         return False
 
     user.is_active = active
+    audit.record(
+        session,
+        "login.reactivated" if active else "login.deactivated",
+        f"Let {user.email} sign in again" if active else f"Locked {user.email} out",
+        actor=acting_user,
+    )
     session.commit()
     return True

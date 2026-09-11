@@ -85,7 +85,7 @@ def staff_create_customer(
 ) -> StaffAccountsOut:
     """Add a customer company. It has no logins until one is created for it."""
     try:
-        accounts.create_customer(db, body.code, body.name, body.country)
+        accounts.create_customer(db, body.code, body.name, body.country, actor=staff)
     except accounts.AccountProblem as problem:
         raise refuse(problem) from problem
     return accounts_response(db)
@@ -102,7 +102,7 @@ def staff_update_customer(
     """
     customer = load_customer(customer_id, db)
     try:
-        accounts.update_customer(db, customer, body.name, body.country)
+        accounts.update_customer(db, customer, body.name, body.country, actor=staff)
     except accounts.AccountProblem as problem:
         raise refuse(problem) from problem
     return accounts_response(db)
@@ -124,7 +124,9 @@ def staff_create_login(
     """
     customer = load_customer(customer_id, db)
     try:
-        user, password = accounts.create_login(db, customer, body.email, body.full_name)
+        user, password = accounts.create_login(
+            db, customer, body.email, body.full_name, actor=staff
+        )
     except accounts.AccountProblem as problem:
         raise refuse(problem) from problem
 
@@ -141,7 +143,7 @@ def staff_reset_password(
 ) -> TemporaryPasswordOut:
     """Issue a new temporary password, and sign that account out everywhere."""
     user = load_login(user_id, db)
-    password = accounts.reset_password(db, user)
+    password = accounts.reset_password(db, user, actor=staff)
     return TemporaryPasswordOut(
         detail=(
             f"{user.email} has a new temporary password, and every session "

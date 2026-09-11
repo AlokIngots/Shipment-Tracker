@@ -306,6 +306,7 @@ ADMIN_CALLS = [
     ("get", "/api/staff/accounts", {}),
     ("post", "/api/staff/customers", {"json": {"code": "X", "name": "X"}}),
     ("get", "/api/staff/customers", {}),
+    ("get", "/api/staff/activity", {}),
 ]
 
 

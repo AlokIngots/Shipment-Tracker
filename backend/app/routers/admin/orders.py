@@ -8,7 +8,7 @@ disagree about what a valid order looks like.
 
 from decimal import Decimal
 
-from app.services import statuses, tracking
+from app.services import audit, statuses, tracking
 from app.core.deps import DbSession, StaffUser, bad_request, not_found
 from fastapi import APIRouter
 from app.models import Customer, Order, Shipment
@@ -225,6 +225,14 @@ def staff_create_order(body: OrderIn, staff: StaffUser, db: DbSession) -> StaffO
     order = Order()
     apply_order(order, body, db)
     db.add(order)
+    after = audit.order_state(db, order)
+    audit.record(
+        db,
+        "order.created",
+        f"Created order {order.sales_order_no} for {after['customer']}",
+        actor=staff,
+        changes=audit.diff({}, after, audit.ORDER_LABELS),
+    )
     db.commit()
     return order_response(order, db)
 
@@ -235,7 +243,20 @@ def staff_update_order(
 ) -> StaffOrderOut:
     """Edit an order. The form sends every field, so every field is replaced."""
     order = load_order(order_id, db)
+    before = audit.order_state(db, order)
     apply_order(order, body, db)
+    changes = audit.diff(before, audit.order_state(db, order), audit.ORDER_LABELS)
+    # Saving a form nobody changed is not a change, and recording it would
+    # only bury the ones that were.
+    if changes:
+        audit.record(
+            db,
+            "order.updated",
+            f"Changed order {order.sales_order_no}"
+            + audit.correction_note(before["status"], order.status),
+            actor=staff,
+            changes=changes,
+        )
     db.commit()
     return order_response(order, db)
 
@@ -256,6 +277,15 @@ def staff_delete_order(
             f"{order.sales_order_no} still has {len(order.shipments)} "
             "shipment(s). Remove those first."
         )
+
+    before = audit.order_state(db, order)
+    audit.record(
+        db,
+        "order.deleted",
+        f"Removed order {order.sales_order_no} ({before['customer']})",
+        actor=staff,
+        changes=audit.diff(before, {}, audit.ORDER_LABELS),
+    )
 
     sales_order_no = order.sales_order_no
     db.delete(order)

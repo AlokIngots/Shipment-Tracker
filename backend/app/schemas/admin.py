@@ -1,6 +1,6 @@
 """What the admin console is sent, and what it submits back."""
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict
@@ -199,3 +199,34 @@ class TemporaryPasswordOut(BaseModel):
     detail: str
     email: str
     temporary_password: str
+
+
+class StaffActivityChangeOut(BaseModel):
+    """One field of one change: what it was, and what it became."""
+
+    field: str
+    before: str | None
+    after: str | None
+
+
+class StaffActivityEventOut(BaseModel):
+    """One change on the Activity page."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    happened_at: datetime
+    # None when the change came from a command run on the server.
+    actor_email: str | None
+    source: str
+    action: str
+    summary: str
+    changes: list[StaffActivityChangeOut] | None
+
+
+class StaffActivityOut(BaseModel):
+    """A page of the activity record, newest first."""
+
+    events: list[StaffActivityEventOut]
+    # True when there are older events than the last one on this page.
+    more: bool

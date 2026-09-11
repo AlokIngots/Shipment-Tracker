@@ -17,7 +17,7 @@ from sqlalchemy.orm import selectinload
 from app.core.deps import DbSession, StaffUser, bad_request, not_found
 from app.models import Photo, Shipment
 from app.schemas import StaffPhotoOut, StaffShipmentPhotosOut
-from app.services import storage
+from app.services import audit, storage
 
 router = APIRouter(prefix="/api/staff")
 
@@ -116,6 +116,17 @@ def staff_upload_photos(
                 content_type=media_type,
             )
         )
+    audit.record(
+        db,
+        "photo.added",
+        f"Added {len(stored)} photo(s) to shipment {shipment.shipment_no}",
+        actor=staff,
+        changes=[
+            {"field": "Photo", "before": None, "after": (upload.filename or "photo")[:255]}
+            for upload, _, _ in stored
+        ]
+        + ([{"field": "Caption", "before": None, "after": caption}] if caption else []),
+    )
     db.commit()
     db.refresh(shipment)
 
@@ -159,6 +170,20 @@ def staff_delete_photo(
     photo = db.get(Photo, photo_id)
     if photo is None:
         raise not_found("Photo not found.")
+
+    shipment = db.get(Shipment, photo.shipment_id)
+    audit.record(
+        db,
+        "photo.removed",
+        f"Removed a photo from shipment {shipment.shipment_no}",
+        actor=staff,
+        changes=[{"field": "Photo", "before": photo.file_name, "after": None}]
+        + (
+            [{"field": "Caption", "before": photo.caption, "after": None}]
+            if photo.caption
+            else []
+        ),
+    )
 
     storage.delete(photo.stored_path or "")
     db.delete(photo)

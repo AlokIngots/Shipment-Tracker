@@ -7,7 +7,7 @@ from app.core.deps import ClientAddress, CurrentUser, DbSession
 from fastapi import APIRouter, HTTPException, status
 from app.models import Customer, User
 from app.schemas import ChangePasswordRequest, CustomerOut, LoginRequest, LoginResponse
-from app.services import ratelimit
+from app.services import audit, ratelimit
 from sqlalchemy import select
 
 router = APIRouter()
@@ -123,12 +123,22 @@ def change_password(
     if problem:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=problem)
 
+    was_temporary = current_user.must_change_password
     current_user.password_hash = security.hash_password(body.new_password)
     current_user.must_change_password = False
     # Whole seconds, because a token's "iat" is whole seconds too. Keeping
     # the microseconds would make the replacement token below look older
     # than the change that produced it, and sign the user straight out.
     current_user.password_changed_at = datetime.now(timezone.utc).replace(microsecond=0)
+    # That it happened, and never what it was changed to.
+    audit.record(
+        db,
+        "password.changed",
+        f"{current_user.email} replaced their temporary password"
+        if was_temporary
+        else f"{current_user.email} changed their password",
+        actor=current_user,
+    )
     db.commit()
 
     # Every token issued before now has just stopped working, including the

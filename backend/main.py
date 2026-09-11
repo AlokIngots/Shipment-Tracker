@@ -16,6 +16,7 @@ from fastapi import FastAPI
 
 from app.routers import auth, documents, orders, photos
 from app.routers.admin import accounts as admin_accounts
+from app.routers.admin import activity as admin_activity
 from app.routers.admin import documents as admin_documents
 from app.routers.admin import orders as admin_orders
 from app.routers.admin import photos as admin_photos
@@ -39,3 +40,4 @@ app.include_router(admin_orders.router, tags=["admin"])
 app.include_router(admin_shipments.router, tags=["admin"])
 app.include_router(admin_documents.router, tags=["admin"])
 app.include_router(admin_photos.router, tags=["admin"])
+app.include_router(admin_activity.router, tags=["admin"])

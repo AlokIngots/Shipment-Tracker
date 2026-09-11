@@ -9,7 +9,7 @@ from fastapi import APIRouter
 
 from app.core.deps import DbSession, StaffUser, bad_request, not_found
 from app.models import Order, Shipment
-from app.services import storage
+from app.services import audit, storage
 from app.routers.admin.orders import apply_shipment, load_order, order_response
 from app.schemas import ShipmentIn, StaffOrderOut
 
@@ -25,6 +25,15 @@ def staff_create_shipment(
     shipment = Shipment(order_id=order.id)
     apply_shipment(shipment, body, db)
     db.add(shipment)
+    audit.record(
+        db,
+        "shipment.created",
+        f"Added shipment {shipment.shipment_no} to order {order.sales_order_no}",
+        actor=staff,
+        changes=audit.diff(
+            {}, audit.snapshot(shipment, audit.SHIPMENT_FIELDS), audit.SHIPMENT_FIELDS
+        ),
+    )
     db.commit()
     return order_response(order, db)
 
@@ -38,9 +47,25 @@ def staff_update_shipment(
     if shipment is None:
         raise not_found("Shipment not found.")
 
+    before = audit.snapshot(shipment, audit.SHIPMENT_FIELDS)
     apply_shipment(shipment, body, db)
+    changes = audit.diff(
+        before, audit.snapshot(shipment, audit.SHIPMENT_FIELDS), audit.SHIPMENT_FIELDS
+    )
+
+    order = db.get(Order, shipment.order_id)
+    # Same as an order: a save that changed nothing is not recorded.
+    if changes:
+        audit.record(
+            db,
+            "shipment.updated",
+            f"Changed shipment {shipment.shipment_no} on order {order.sales_order_no}"
+            + audit.correction_note(before["status"], shipment.status),
+            actor=staff,
+            changes=changes,
+        )
     db.commit()
-    return order_response(db.get(Order, shipment.order_id), db)
+    return order_response(order, db)
 
 
 @router.delete("/shipments/{shipment_id}")
@@ -71,8 +96,20 @@ def staff_delete_shipment(
 
     shipment_no = shipment.shipment_no
     photo_count = len(shipment.photos)
+    note = f" and {photo_count} photo(s)" if photo_count else ""
+
+    order = db.get(Order, shipment.order_id)
+    audit.record(
+        db,
+        "shipment.deleted",
+        f"Removed shipment {shipment_no}{note} from order {order.sales_order_no}",
+        actor=staff,
+        changes=audit.diff(
+            audit.snapshot(shipment, audit.SHIPMENT_FIELDS), {}, audit.SHIPMENT_FIELDS
+        ),
+    )
+
     db.delete(shipment)
     db.commit()
 
-    note = f" and {photo_count} photo(s)" if photo_count else ""
     return {"detail": f"{shipment_no}{note} removed."}

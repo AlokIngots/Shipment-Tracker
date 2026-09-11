@@ -4,7 +4,7 @@ Uploading is the only way a browser can write a file into the portal, and
 everything it is allowed to write is decided in storage.py, not here.
 """
 
-from app.services import storage
+from app.services import audit, storage
 from app.core.deps import DbSession, StaffUser, bad_request, not_found
 from fastapi import APIRouter, File, Form, UploadFile
 from app.models import Customer, Document, Order, Shipment
@@ -110,13 +110,24 @@ def staff_upload_document(
         document = Document(shipment_id=shipment.id, doc_type=doc_type)
         db.add(document)
         action = "added"
+        old_file_name = None
     else:
         # Only remove the old file once the new one is safely written.
         storage.delete(document.stored_path or "")
         action = "replaced"
+        old_file_name = document.file_name
 
     document.file_name = (file.filename or "document")[:255]
     document.stored_path = stored_name
+    audit.record(
+        db,
+        f"document.{action}",
+        f"Added {doc_type} to shipment {shipment.shipment_no}"
+        if action == "added"
+        else f"Replaced {doc_type} on shipment {shipment.shipment_no}",
+        actor=staff,
+        changes=[{"field": "File", "before": old_file_name, "after": document.file_name}],
+    )
     db.commit()
 
     return {"detail": f"{doc_type} {action} on {shipment.shipment_no}."}
@@ -137,6 +148,15 @@ def staff_delete_document(
         raise not_found("Document not found.")
 
     doc_type = document.doc_type
+    shipment = db.get(Shipment, document.shipment_id)
+    audit.record(
+        db,
+        "document.removed",
+        f"Removed {doc_type} from shipment {shipment.shipment_no}",
+        actor=staff,
+        changes=[{"field": "File", "before": document.file_name, "after": None}],
+    )
+
     storage.delete(document.stored_path or "")
     db.delete(document)
     db.commit()

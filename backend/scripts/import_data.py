@@ -50,7 +50,7 @@ from pathlib import Path
 from app.core.database import SessionLocal
 from app.models import Customer, Order, Shipment
 from sqlalchemy import select
-from app.services import statuses
+from app.services import audit, statuses
 from app.services.tracking import tidy_container_no, valid_container_no, valid_imo
 
 REQUIRED_COLUMNS = [
@@ -157,13 +157,29 @@ def check_row(row: dict, line: int) -> tuple[dict, list[str]]:
 # ------------------------------------------------------------------ loading
 
 
-def apply_rows(rows: list[dict], dry_run: bool) -> dict:
+def apply_rows(rows: list[dict], dry_run: bool, file_name: str = "a CSV file") -> dict:
     counts = {
         "customers_created": 0, "orders_created": 0, "orders_updated": 0,
         "shipments_created": 0, "shipments_updated": 0,
     }
 
     with SessionLocal() as session:
+
+        def record(action: str, summary: str, before: dict, after: dict, labels: dict):
+            # Only what the import actually changed. The same export run
+            # again every morning must not bury the one row that moved under
+            # a hundred that did not. A dry run rolls these back with
+            # everything else.
+            changes = audit.diff(before, after, labels)
+            if changes:
+                audit.record(
+                    session,
+                    action,
+                    f"{summary} (CSV import of {file_name})",
+                    source=audit.CSV_IMPORT,
+                    changes=changes,
+                )
+
         for data in rows:
             customer = session.scalar(
                 select(Customer).where(Customer.code == data["customer_code"])
@@ -182,10 +198,21 @@ def apply_rows(rows: list[dict], dry_run: bool) -> dict:
                 session.add(customer)
                 session.flush()
                 counts["customers_created"] += 1
+                record(
+                    "customer.created", f"Added customer {customer.code}",
+                    {}, audit.snapshot(customer, audit.CUSTOMER_FIELDS),
+                    audit.CUSTOMER_FIELDS,
+                )
             elif data["customer_name"]:
+                before = audit.snapshot(customer, audit.CUSTOMER_FIELDS)
                 customer.name = data["customer_name"]
                 if data["customer_country"]:
                     customer.country = data["customer_country"]
+                record(
+                    "customer.updated", f"Changed customer {customer.code}",
+                    before, audit.snapshot(customer, audit.CUSTOMER_FIELDS),
+                    audit.CUSTOMER_FIELDS,
+                )
 
             order = session.scalar(
                 select(Order).where(Order.sales_order_no == data["sales_order_no"])
@@ -204,10 +231,20 @@ def apply_rows(rows: list[dict], dry_run: bool) -> dict:
                 session.add(order)
                 session.flush()
                 counts["orders_created"] += 1
+                record(
+                    "order.created",
+                    f"Created order {order.sales_order_no} for {customer.code}",
+                    {}, audit.order_state(session, order), audit.ORDER_LABELS,
+                )
             else:
+                before = audit.order_state(session, order)
                 for field, value in order_values.items():
                     setattr(order, field, value)
                 counts["orders_updated"] += 1
+                record(
+                    "order.updated", f"Changed order {order.sales_order_no}",
+                    before, audit.order_state(session, order), audit.ORDER_LABELS,
+                )
 
             if data["shipment_no"]:
                 shipment = session.scalar(
@@ -231,10 +268,25 @@ def apply_rows(rows: list[dict], dry_run: bool) -> dict:
                     )
                     session.add(shipment)
                     counts["shipments_created"] += 1
+                    record(
+                        "shipment.created",
+                        f"Added shipment {shipment.shipment_no} "
+                        f"to order {order.sales_order_no}",
+                        {}, audit.snapshot(shipment, audit.SHIPMENT_FIELDS),
+                        audit.SHIPMENT_FIELDS,
+                    )
                 else:
+                    before = audit.snapshot(shipment, audit.SHIPMENT_FIELDS)
                     for field, value in shipment_values.items():
                         setattr(shipment, field, value)
                     counts["shipments_updated"] += 1
+                    record(
+                        "shipment.updated",
+                        f"Changed shipment {shipment.shipment_no} "
+                        f"on order {order.sales_order_no}",
+                        before, audit.snapshot(shipment, audit.SHIPMENT_FIELDS),
+                        audit.SHIPMENT_FIELDS,
+                    )
 
             session.flush()
 
@@ -283,7 +335,7 @@ def main() -> int:
         return 1
 
     try:
-        counts = apply_rows(rows, args.dry_run)
+        counts = apply_rows(rows, args.dry_run, args.csv_file.name)
     except ValueError as exc:
         print(f"\nError: {exc}")
         print("Nothing was imported.")

@@ -18,7 +18,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from app.services import storage
+from app.services import audit, storage
 from app.core.database import SessionLocal
 from app.models import Document, Order, Shipment
 from sqlalchemy import select
@@ -80,14 +80,26 @@ def add(shipment_no: str, doc_type: str, file_path: Path) -> int:
             document = Document(shipment_id=shipment.id, doc_type=doc_type)
             session.add(document)
             action = "Added"
+            old_file_name = None
         else:
             old = storage.resolve(document.stored_path or "")
             if old:
                 old.unlink()
             action = "Replaced"
+            old_file_name = document.file_name
 
         document.file_name = file_path.name
         document.stored_path = stored_name
+        # Worded exactly as the staff page words it, so the activity record
+        # reads the same whichever way the document arrived.
+        audit.record(
+            session,
+            f"document.{action.lower()}",
+            f"Added {doc_type} to shipment {shipment_no}"
+            if action == "Added"
+            else f"Replaced {doc_type} on shipment {shipment_no}",
+            changes=[{"field": "File", "before": old_file_name, "after": file_path.name}],
+        )
         session.commit()
 
         print(f"{action}: {doc_type} on {shipment_no} ({file_path.name})")
