@@ -1,0 +1,8 @@
+# Files that run on the Linux server must keep Unix line endings, whatever
+# the machine they were edited on. A shell script checked out with Windows
+# line endings fails on Linux with "bad interpreter: /bin/bash^M".
+*.sh            text eol=lf
+Dockerfile      text eol=lf
+Dockerfile.*    text eol=lf
+Caddyfile       text eol=lf
+*.yml           text eol=lf

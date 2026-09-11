@@ -1,0 +1,15 @@
+# Alok Ingots Customer Portal — backend dependencies
+# Pinned to the exact versions installed in backend/.venv (Python 3.14.6).
+# Install with:  pip install -r requirements.txt
+
+fastapi==0.141.1
+uvicorn[standard]==0.52.4
+SQLAlchemy==2.0.52
+psycopg2-binary==2.9.12
+python-dotenv==1.2.3
+alembic==1.19.2
+# Lets FastAPI accept an uploaded file from the staff document page.
+python-multipart==0.0.32
+# Opens each uploaded photo to prove it is a picture, and makes the small
+# preview the gallery tiles load instead of the full photo.
+Pillow==12.3.0
