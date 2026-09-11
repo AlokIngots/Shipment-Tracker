@@ -9,7 +9,7 @@ from fastapi import APIRouter
 
 from app.core.deps import DbSession, StaffUser, bad_request, not_found
 from app.models import Order, Shipment
-from app.services import audit, storage
+from app.services import audit, photos
 from app.routers.admin.orders import apply_shipment, load_order, order_response
 from app.schemas import ShipmentIn, StaffOrderOut
 
@@ -89,10 +89,11 @@ def staff_delete_shipment(
 
     # Photos do not block the delete the way documents do -- a snapshot of
     # a bundle is not filed paperwork -- but their files have to go with
-    # them by hand. The database cascade removes the rows; nothing on disk
-    # knows about it, and orphaned images would pile up silently.
+    # them by hand, previews included. The database cascade removes the
+    # rows; nothing on disk knows about it, and orphaned images would pile
+    # up silently.
     for photo in shipment.photos:
-        storage.delete(photo.stored_path or "")
+        photos.delete_files(photo)
 
     shipment_no = shipment.shipment_no
     photo_count = len(shipment.photos)

@@ -17,7 +17,7 @@ from sqlalchemy.orm import selectinload
 from app.core.deps import DbSession, StaffUser, bad_request, not_found
 from app.models import Photo, Shipment
 from app.schemas import StaffPhotoOut, StaffShipmentPhotosOut
-from app.services import audit, storage
+from app.services import audit, photos, storage
 
 router = APIRouter(prefix="/api/staff")
 
@@ -94,12 +94,19 @@ def staff_upload_photos(
     stored: list[tuple[UploadFile, str, str]] = []
     try:
         for upload in files:
-            suffix, media_type = storage.check_image_upload(
+            suffix, _ = storage.check_image_upload(
                 upload.filename or "", upload.content_type
             )
-            stored.append(
-                (upload, storage.store_upload(upload.file, suffix), media_type)
-            )
+            stored_name = storage.store_upload(upload.file, suffix)
+            try:
+                # Opened, not just named: a PDF renamed to .jpg passes every
+                # check above and would reach a customer as a broken picture.
+                # The type kept is what the file is, not what it is called.
+                media_type = photos.inspect_picture(storage.resolve(stored_name))
+            except storage.UploadRejected:
+                storage.delete(stored_name)
+                raise
+            stored.append((upload, stored_name, media_type))
     except storage.UploadRejected as rejected:
         for _, stored_name, _ in stored:
             storage.delete(stored_name)
@@ -114,6 +121,9 @@ def staff_upload_photos(
                 file_name=(upload.filename or "photo")[:255],
                 stored_path=stored_name,
                 content_type=media_type,
+                # Made only once every file in the batch has been accepted,
+                # so a bad fifth file wastes no time on the first four.
+                thumb_path=photos.make_preview(storage.resolve(stored_name)),
             )
         )
     audit.record(
@@ -157,6 +167,20 @@ def staff_get_photo(photo_id: int, staff: StaffUser, db: DbSession) -> FileRespo
     )
 
 
+@router.get("/photos/{photo_id}/thumbnail")
+def staff_get_preview(photo_id: int, staff: StaffUser, db: DbSession) -> FileResponse:
+    """The small preview, for the photo strip. The full picture if it has none."""
+    photo = db.get(Photo, photo_id)
+    if photo is None:
+        raise not_found("Photo not found.")
+
+    found = photos.file_to_serve(photo, preview=True)
+    if found is None:
+        raise not_found("This photo is no longer available.")
+    path, media_type = found
+    return FileResponse(path, media_type=media_type)
+
+
 @router.delete("/photos/{photo_id}")
 def staff_delete_photo(
     photo_id: int, staff: StaffUser, db: DbSession
@@ -185,7 +209,7 @@ def staff_delete_photo(
         ),
     )
 
-    storage.delete(photo.stored_path or "")
+    photos.delete_files(photo)
     db.delete(photo)
     db.commit()
     return {"detail": "Photo removed."}

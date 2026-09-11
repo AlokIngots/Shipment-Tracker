@@ -34,6 +34,11 @@ class Photo(Base):
     file_name: Mapped[str] = mapped_column(String(255))
     # The random name it was stored under, inside the storage directory.
     stored_path: Mapped[str] = mapped_column(String(500))
+    # The small upright JPEG copy the gallery tiles load, also a random name
+    # in the storage directory. None for a photo uploaded before previews
+    # existed, or one that could not be shrunk; the full picture is served
+    # in its place.
+    thumb_path: Mapped[str | None] = mapped_column(String(500))
     # Kept so the image can be served back with the right type. Documents
     # were always assumed to be PDFs; a photo cannot be.
     content_type: Mapped[str] = mapped_column(String(100), default="image/jpeg")

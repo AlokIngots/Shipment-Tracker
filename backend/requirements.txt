@@ -10,3 +10,6 @@ python-dotenv==1.2.3
 alembic==1.19.2
 # Lets FastAPI accept an uploaded file from the staff document page.
 python-multipart==0.0.32
+# Opens each uploaded photo to prove it is a picture, and makes the small
+# preview the gallery tiles load instead of the full photo.
+Pillow==12.3.0

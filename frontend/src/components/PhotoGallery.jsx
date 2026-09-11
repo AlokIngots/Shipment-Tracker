@@ -36,8 +36,10 @@ export default function PhotoGallery({ photos }) {
             onClick={() => setOpen(photo.id)}
             title={photo.caption || photo.file_name}
           >
+            {/* The small preview, not the photo: twenty full-size phone
+                photos just to draw these tiles would be tens of megabytes. */}
             <AuthImage
-              src={`/api/photos/${photo.id}`}
+              src={`/api/photos/${photo.id}/thumbnail`}
               alt={photo.caption || photo.file_name}
               className="photothumb-img"
             />

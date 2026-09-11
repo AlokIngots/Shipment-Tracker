@@ -124,7 +124,7 @@ export default function StaffPhotoStrip({ shipment }) {
           {photos.map((photo) => (
             <div className="photothumb photothumb--staff" key={photo.id}>
               <AuthImage
-                src={`/api/staff/photos/${photo.id}`}
+                src={`/api/staff/photos/${photo.id}/thumbnail`}
                 alt={photo.caption || photo.file_name}
                 className="photothumb-img"
               />

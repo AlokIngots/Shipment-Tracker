@@ -169,5 +169,6 @@ def test_nothing_is_readable_without_signing_in(client, order):
         "/api/me",
         "/api/documents/1/download",
         "/api/photos/1",
+        "/api/photos/1/thumbnail",
     ):
         assert client.get(path).status_code == 401, path
