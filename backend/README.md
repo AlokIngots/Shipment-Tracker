@@ -27,6 +27,7 @@ backend/
       document.py    Document
       photo.py       Photo
       notification.py  Notification
+      audit.py       AuditEvent — the activity record, append-only
 
     schemas/         the shapes that cross the wire
       auth.py        signing in, and saying who you are
@@ -44,6 +45,7 @@ backend/
         shipments.py create and edit part-shipments
         documents.py attach and remove shipping documents
         photos.py    add and remove material photos
+        activity.py  read the activity record (there is no route that edits it)
 
     services/        the working logic, with no HTTP in it
       storage.py     where document files live on disk
@@ -52,6 +54,7 @@ backend/
       notifications.py  who is owed a message, and sending it
       accounts.py    customers, logins, temporary passwords
       ratelimit.py   slowing down bulk password guessing
+      audit.py       recording who changed what; everything that writes calls it
 
   scripts/           one-off tools, run by hand on the server
     migrate.py       bring the database schema up to date

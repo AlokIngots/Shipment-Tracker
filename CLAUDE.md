@@ -160,7 +160,7 @@ cd backend
 .venv/Scripts/python.exe -m pytest
 ```
 
-123 tests, about a minute, with the dev database up. They build their own
+145 tests, about a minute, with the dev database up. They build their own
 database beside the development one and drop it afterwards, so the
 development data is untouched — the row counts are identical before and
 after. They also run on GitHub for every push.
@@ -389,6 +389,7 @@ the customer side needs, and a step is done when both work.
 | 21 | A test suite that exists | 123 tests committed, run on every push | — | **Done** |
 | 22 | Ready to share a server | deploy on a host that already runs nginx, without touching it | — | **Done, not yet deployed** |
 | 23 | Port 8090, and the nginx site in the repo | 8080 was taken by alok-crm-frontend | — | **Done, not yet deployed** |
+| 24 | Who changed what | every change recorded with who, when and before → after; an Activity tab to read it; nobody can edit or remove it | (nothing — internal only, and customers cannot reach it) | **Done** |
 
 ### Still to build, both sides
 
@@ -477,6 +478,8 @@ Update after every step: what was done, and the commit.
 | 2026-09-10 | **Step 22 — Prepared to share srv1427359 with AlokCRM.** Three approved changes, and three more the work uncovered. `docker-compose.server.yml` moves the portal to `127.0.0.1:8090` (8080 turned out to be alok-crm-frontend) so nginx keeps 80 and 443 — with `!override`, because Compose **merges** sequences and a plain list left 80 and 443 published anyway. `COMPOSE_FILES` is overridable in `safe-deploy.sh`. Caddy's `trusted_proxies` fixes a **live bug**: Caddy replaces `X-Forwarded-For` with the peer address, so behind it every visitor looked like Docker's gateway and the whole rate limiter was one shared budget. Also found: the website health check was hardcoded to port 80 and would have rolled back a working server deploy, and `docker compose port` can answer `0` mid-start. New staff-only `GET /api/staff/whoami` reports what the server thinks your address is, because the hop count cannot be guessed. Nothing was done on the server | _this commit_ |
 
 | 2026-09-10 | **Step 23 — Port 8090, and the nginx site committed.** srv1427359 reported 8080 already taken by `alok-crm-frontend`, so the override moves to `127.0.0.1:8090`. The nginx site had only ever existed as text in a chat message; it is now `deploy/nginx/portal.alokindia.co.in.conf`, version-controlled, with the reasoning for `client_max_body_size 25m` and for `X-Forwarded-For $remote_addr` rather than `$proxy_add_x_forwarded_for` in it. Proved by running real nginx in front of the deployed stack: the whole chain answers, the address nginx writes is the one the API uses (`hops_seen` 2), a forged `X-Forwarded-For` is overwritten at the door, and a 5 MB upload passes where nginx's 1 MB default would have refused it | _this commit_ |
+
+| 2026-09-11 | **Step 24 — Who changed what.** Staff could create, edit and delete orders, shipments, documents, photos, customers and logins, and none of it left a trace. Now every change writes an event in the same transaction as the change: who, when, how it arrived (screen, command line, CSV import), and each field before and after. A refused change leaves nothing, a save that changed nothing records nothing, and a removal keeps what the row held so it can be typed back in. `app/services/audit.py` is the one place that writes; the screen, `manage_users.py`, `add_document.py` and the importer all go through it. Migration 0006 adds `audit_events` with a trigger that refuses UPDATE, DELETE and TRUNCATE, from SQL as well as from the portal. A fourth staff tab, **Activity**, shows it newest first with a filter; customers cannot reach it. No password or hash is ever recorded — tested by searching the whole record for them. Proved by 15 new tests (145 in all), the frontend build, migration 0006 applied to the development database with models and schema agreeing, and a drill taking it back to 0005 and forward again. **The Activity screen has not been looked at in a browser** | `264310a` + _this commit_ |
 
 ### Design decisions worth remembering
 
@@ -701,7 +704,54 @@ Update after every step: what was done, and the commit.
   states what it sees and discards the rest. Verified: a forged header sent
   from outside does not survive the door.
 
+### Design decisions worth remembering
+
+- **An event is written in the same transaction as its change, never
+  before it.** `audit.record` adds to the session and the caller's commit
+  saves both. An event committed first would survive the change failing,
+  and describe something that never happened; one committed after could be
+  lost if the process died in between.
+- **The table guards itself, not just the code.** No route edits or
+  removes an event, but that alone only protects against the portal. The
+  trigger from migration 0006 refuses UPDATE, DELETE and TRUNCATE from
+  anybody, including somebody at a SQL prompt — so a stolen staff session
+  or a bug cannot tidy anything away.
+- **No foreign key to `users`.** The email is copied onto the event at the
+  time. A foreign key's `ON DELETE SET NULL` would be an UPDATE, which the
+  trigger refuses, and the record should read correctly whatever later
+  happens to the account.
+- **Only what changed is recorded.** A form saved untouched, or the same
+  CSV imported every morning, adds nothing. Otherwise the one real change
+  is buried under a hundred that were not. Quantities are compared to three
+  decimal places so "40" and "40.000" count as the same.
+- **The fields recorded are a list, not "everything".** `ORDER_FIELDS`,
+  `SHIPMENT_FIELDS` and the rest name what is kept. That is how a password
+  hash stays out: not by remembering to leave it out, but by never being
+  asked for.
+- **A command run on the server names no person.** There is nobody signed
+  in to name. The event says "command line" or "csv import" instead, which
+  still separates it from anything done through the portal.
+
 ### Known issues / risks
+
+- **Somebody with full access to the database server can still erase the
+  activity record**, by dropping the trigger first. Nothing inside a
+  database can prevent that. The record protects against a stolen staff
+  session, a bug or a slip — not against whoever runs the server. Backups
+  are the answer to that.
+- **Only changes are recorded, not sign-ins.** Who signed in and when, and
+  failed attempts, are not in the activity record.
+- **Nothing before step 24 has any history.** Every row already in the
+  database appears only from its next change onwards.
+- **The activity record is never trimmed.** Each event is small and a
+  handful of staff will take years to make it large, but nothing removes
+  old ones — the trigger would refuse it anyway.
+- **`scripts.seed --reset` wipes the activity record** along with everything
+  else, because it drops the tables. Development only, like the rest of
+  `--reset`.
+- **The Activity filter only searches what is loaded** — the newest 100
+  changes, plus any older pages opened with "Load older changes". The page
+  says so when a filter is on and older changes exist.
 
 - **A token cannot be cancelled one at a time.** Tokens are signed and
   stateless, valid for 12 hours. What *can* be done: changing a password (or
@@ -762,9 +812,6 @@ Update after every step: what was done, and the commit.
   now recorded and shown, but the "View live on..." link still points at
   MarineTraffic by IMO, which shows where the *ship* is. Nothing tracks the
   box itself. Real container-level tracking needs a paid carrier API.
-- **Nothing records who uploaded or removed a document.** The staff page
-  makes both easy, and neither leaves a trace beyond the file itself. Worth
-  an audit trail before more than one or two people have staff logins.
 - **`scripts/add_document.py` still works** and does the same thing as the
   staff page. Keep them in step: both store a random name and replace a
   document of the same type.
@@ -820,16 +867,12 @@ Update after every step: what was done, and the commit.
   database today is valid, but a row written before step 18 by some other
   route would survive; the customer's progress track simply does not draw
   for a status it cannot place.
-- **Nothing records who created or changed an order.** The same gap the
-  document page already had, now wider: staff can create, edit and delete
-  orders and shipments and none of it leaves a trace. Worth an audit trail
-  before more than one or two people have staff logins.
 - **`safe-deploy.sh` has now met the reorganised code, but still not a real
   server.** It has been run end to end locally, including two rollback
   drills, against the reorganised backend. What it has still never met is a
   real machine, a real domain, or Caddy actually obtaining an HTTPS
   certificate — that cannot be tested until DNS points somewhere.
-- **The frontend has no tests.** The 123 committed tests are all backend.
+- **The frontend has no tests.** The 145 committed tests are all backend.
   Nothing checks that the progress track draws, that the photo gallery
   revokes its blob URLs, or that a backwards status change asks before it
   saves. `npm run build` passing only means it compiles.
