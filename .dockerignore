@@ -1,0 +1,19 @@
+.git/
+
+# Secrets. The leading ** matters: a bare ".env" would only exclude the one
+# at the root, and frontend/.env would still be copied into the image - which
+# is exactly how demo credentials once ended up inside a customer-facing
+# build. Match every .env at every depth.
+**/.env
+**/.env.*
+!**/.env.example
+
+# Customer documents and database dumps never belong in an image.
+storage/
+backups/
+
+backend/.venv/
+backend/__pycache__/
+**/__pycache__/
+frontend/node_modules/
+frontend/dist/
