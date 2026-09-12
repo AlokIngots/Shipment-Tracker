@@ -98,9 +98,30 @@ TRUST_PROXY_HEADER = _flag("TRUST_PROXY_HEADER", "true")
 
 # ----------------------------------------------------- sign-in by email link
 
-# How long an emailed sign-in link works. Short on purpose: for as long as it
-# lives the link is as good as a password, and it sits in an inbox.
-MAGIC_LINK_TTL_SECONDS = int(os.getenv("MAGIC_LINK_TTL_SECONDS", "900"))  # 15 min
+# How long an emailed sign-in link works.
+#
+# 24 hours since 12 Sep 2026, on Alok's decision, replacing 15 minutes. The
+# short window was correct on security grounds and wrong on practical ones:
+# a customer who read the email the next morning found a dead link and had
+# to work out for themselves that asking again was the answer.
+#
+# For as long as it lives the link is as good as a password and it is sitting
+# in an inbox, so this is a real trade-off and not a free one. What limits
+# the damage is that asking for a new link retires the old one, a password
+# change or reset kills any link already sent, and only the newest link for
+# an account ever works.
+MAGIC_LINK_TTL_SECONDS = int(os.getenv("MAGIC_LINK_TTL_SECONDS", "86400"))  # 24 h
+
+# Whether a link stops working the moment it is used.
+#
+# False, the default since 12 Sep 2026 on Alok's decision: the link keeps
+# working until it expires, however many times it is opened.
+#
+# Set it true to go back to a link that is spent on first use. That is the
+# safer setting, and it needs no code change and no deploy -- one environment
+# variable and a restart of the api container, the same way PASSWORD_SIGN_IN
+# works.
+MAGIC_LINK_SINGLE_USE = _flag("MAGIC_LINK_SINGLE_USE")
 
 # Asking for a link sends an email, so EVERY request is counted, not only
 # failed ones -- otherwise anybody could fill a customer's inbox.

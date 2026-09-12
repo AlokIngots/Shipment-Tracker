@@ -23,13 +23,26 @@ export default function LoginScreen({ onSignedIn }) {
   const [busy, setBusy] = useState(false)
   // Once a link has been asked for: what the server said, and to which address.
   const [linkSent, setLinkSent] = useState(null)
+  // Null until the server has said. The hint below simply leaves the
+  // details out rather than guessing them.
+  const [linkRules, setLinkRules] = useState(null)
 
   useEffect(() => {
     let cancelled = false
     axios
       .get('/api/sign-in-options')
       .then((res) => {
-        if (!cancelled) setPasswordSignIn(res.data?.password_sign_in === true)
+        if (cancelled) return
+        setPasswordSignIn(res.data?.password_sign_in === true)
+        // How long a link lasts, and whether it may be reused, are decided
+        // on the server. The page used to state them itself and was wrong
+        // the moment either was changed.
+        if (res.data?.link_lasts) {
+          setLinkRules({
+            lasts: res.data.link_lasts,
+            singleUse: res.data.link_single_use !== false,
+          })
+        }
       })
       .catch(() => {
         // Stay link-only.
@@ -128,8 +141,11 @@ export default function LoginScreen({ onSignedIn }) {
 
   const hint = (
     <p className="login-hint">
-      We will email you a link that signs you in. No password needed. It works
-      once, for 15 minutes.
+      We will email you a link that signs you in. No password needed.
+      {linkRules &&
+        (linkRules.singleUse
+          ? ` It works once, for ${linkRules.lasts}.`
+          : ` It works for ${linkRules.lasts}.`)}
     </p>
   )
 

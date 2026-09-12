@@ -4,9 +4,9 @@ The whole life of a link is in this file:
 
   issue    A random token: 32 bytes from the operating system's secure
            generator, far past anything guessable. Only its SHA-256 hash is
-           stored, with an expiry MAGIC_LINK_TTL_SECONDS away (15 minutes).
-           Any link the person still holds unused is retired at the same
-           moment, so only the newest ever works.
+           stored, with an expiry MAGIC_LINK_TTL_SECONDS away (24 hours).
+           Any link the person still holds is retired at the same moment, so
+           only the newest ever works.
 
   email    https://portal.alokindia.co.in/#sign-in=<token>, sent through
            the same sender and the same safety switches as order
@@ -14,11 +14,19 @@ The whole life of a link is in this file:
            never sends to a server, so it cannot turn up in a web server's
            access log or be passed on in a Referer header.
 
-  redeem   One UPDATE that marks the link used ONLY IF it is still unused
-           and unexpired, and hands back whose it was. Two clicks racing
-           each other cannot both win: the database lets exactly one of them
-           change the row. The link is spent even if the account then turns
-           out to be refused.
+  redeem   Two behaviours, chosen by MAGIC_LINK_SINGLE_USE.
+
+           Reusable, the default since 12 Sep 2026: a plain lookup. The link
+           keeps working until it expires, however many times it is opened.
+           Alok asked for this so a link cannot be used up before the
+           customer gets to it, and accepted that it means a 24-hour
+           reusable credential sitting in an inbox.
+
+           Single use, MAGIC_LINK_SINGLE_USE=true: one UPDATE that marks the
+           link used ONLY IF it is still unused and unexpired. Two clicks
+           racing each other cannot both win, because the database lets
+           exactly one of them change the row, and the link is spent even if
+           the account then turns out to be refused.
 
 A link is also refused if the account has been deactivated since, or its
 password changed or reset since. A reset usually means "somebody should not
@@ -37,7 +45,8 @@ from email.message import EmailMessage
 
 from sqlalchemy import select, update
 
-from app.core.config import MAGIC_LINK_TTL_SECONDS, PORTAL_URL, SMTP_FROM
+from app.core import config
+from app.core.config import PORTAL_URL, SMTP_FROM
 from app.models import MagicLink, User
 from app.services import notifications
 
@@ -59,8 +68,26 @@ def hash_token(token: str) -> str:
 
 
 def minutes_valid() -> int:
-    """How long a link works, in the minutes the email and the page quote."""
-    return max(1, MAGIC_LINK_TTL_SECONDS // 60)
+    """How long a link works, in whole minutes."""
+    return max(1, config.MAGIC_LINK_TTL_SECONDS // 60)
+
+
+def validity_in_words() -> str:
+    """How long a link works, written the way the email should say it.
+
+    "1440 minutes" is a true answer and a useless one. Hours once there are
+    hours of it, a day once there is a day.
+    """
+    minutes = minutes_valid()
+    if minutes < 60:
+        return "1 minute" if minutes == 1 else f"{minutes} minutes"
+    hours, spare_minutes = divmod(minutes, 60)
+    if hours < 24 or spare_minutes:
+        return "1 hour" if hours == 1 else f"{hours} hours"
+    days, spare_hours = divmod(hours, 24)
+    if days == 1 and not spare_hours:
+        return "24 hours"
+    return f"{days} days"
 
 
 def find_account(session, email: str) -> User | None:
@@ -92,7 +119,7 @@ def issue(session, user: User) -> str:
             user_id=user.id,
             token_hash=hash_token(token),
             created_at=now,
-            expires_at=now + timedelta(seconds=MAGIC_LINK_TTL_SECONDS),
+            expires_at=now + timedelta(seconds=config.MAGIC_LINK_TTL_SECONDS),
         )
     )
     session.commit()
@@ -102,6 +129,28 @@ def issue(session, user: User) -> str:
 def link_for(token: str) -> str:
     """The address that goes in the email."""
     return f"{PORTAL_URL.rstrip('/')}/#sign-in={token}"
+
+
+def _how_long_it_lasts() -> list[str]:
+    """The lines of the email that say how long the link works, and how often.
+
+    Two settings, two honest descriptions. Telling somebody a link "works
+    once" when it no longer does would train them to ask for a new one they
+    do not need; the reverse would be worse.
+    """
+    lasts = validity_in_words()
+    if config.MAGIC_LINK_SINGLE_USE:
+        return [
+            f"It works once, and only for the next {lasts}. After that,",
+            "ask for a new one on the sign-in page.",
+        ]
+    return [
+        f"It works for the next {lasts}, and you can use it more than once in",
+        "that time. After that, ask for a new one on the sign-in page.",
+        "",
+        "Until then, please keep this email to yourself: anybody who can read",
+        "it can sign in as you. Asking for a new link stops this one working.",
+    ]
 
 
 def build_message(email: str, full_name: str | None, url: str) -> EmailMessage:
@@ -115,8 +164,7 @@ def build_message(email: str, full_name: str | None, url: str) -> EmailMessage:
         "",
         f"  {url}",
         "",
-        f"It works once, and only for the next {minutes_valid()} minutes. After that,",
-        "ask for a new one on the sign-in page.",
+        *_how_long_it_lasts(),
         "",
         "If you did not ask for this, you can ignore this email. Nobody can",
         "sign in without the link, and it stops working by itself.",
@@ -174,20 +222,34 @@ def redeem(session, token: str) -> User | None:
         return None
 
     now = datetime.now(timezone.utc)
-    spent = session.execute(
-        update(MagicLink)
-        .where(
-            MagicLink.token_hash == hash_token(token),
-            MagicLink.used_at.is_(None),
-            MagicLink.expires_at > now,
-        )
-        .values(used_at=now)
-        .returning(MagicLink.user_id, MagicLink.created_at)
-        .execution_options(synchronize_session=False)
-    ).first()
-    # Committed before anything else is checked, so the link is spent even
-    # if the account is refused below.
-    session.commit()
+
+    if config.MAGIC_LINK_SINGLE_USE:
+        spent = session.execute(
+            update(MagicLink)
+            .where(
+                MagicLink.token_hash == hash_token(token),
+                MagicLink.used_at.is_(None),
+                MagicLink.expires_at > now,
+            )
+            .values(used_at=now)
+            .returning(MagicLink.user_id, MagicLink.created_at)
+            .execution_options(synchronize_session=False)
+        ).first()
+        # Committed before anything else is checked, so the link is spent
+        # even if the account is refused below.
+        session.commit()
+    else:
+        # Reusable: look, do not spend. `used_at` still means "this link is
+        # finished", and issue() still sets it on every older link, so asking
+        # for a new link retires the one before it exactly as it always did.
+        # The only thing that has changed is that redeeming no longer sets it.
+        spent = session.execute(
+            select(MagicLink.user_id, MagicLink.created_at).where(
+                MagicLink.token_hash == hash_token(token),
+                MagicLink.used_at.is_(None),
+                MagicLink.expires_at > now,
+            )
+        ).first()
 
     if spent is None:
         return None

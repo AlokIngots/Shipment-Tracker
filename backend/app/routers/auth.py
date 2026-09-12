@@ -60,15 +60,25 @@ def health() -> dict[str, str]:
 
 
 @router.get("/api/sign-in-options")
-def sign_in_options() -> dict[str, bool]:
+def sign_in_options() -> dict:
     """Which ways in the sign-in screen should offer. Open to everyone.
 
     The screen asks every time it loads, so switching PASSWORD_SIGN_IN on
     the server brings the password box back without rebuilding the website.
     That is what makes the switch a way back in if email ever fails. It says
     nothing about any account.
+
+    It also carries how long a sign-in link lasts and whether it may be used
+    more than once, because the screens used to write "15 minutes" into the
+    page by hand. The moment MAGIC_LINK_TTL_SECONDS changed, the website was
+    telling customers something untrue and nothing anywhere said so. Now the
+    server is asked, so the two cannot drift apart again.
     """
-    return {"password_sign_in": config.PASSWORD_SIGN_IN}
+    return {
+        "password_sign_in": config.PASSWORD_SIGN_IN,
+        "link_lasts": magic_links.validity_in_words(),
+        "link_single_use": config.MAGIC_LINK_SINGLE_USE,
+    }
 
 
 @router.post("/api/login", response_model=LoginResponse)
@@ -168,8 +178,12 @@ def request_magic_link(
     answer = {
         "detail": (
             "Check your email. If that address has an account with the portal, "
-            "a sign-in link is on its way. It works once, within "
-            f"{magic_links.minutes_valid()} minutes."
+            "a sign-in link is on its way. "
+            + (
+                f"It works once, within {magic_links.validity_in_words()}."
+                if config.MAGIC_LINK_SINGLE_USE
+                else f"It works for the next {magic_links.validity_in_words()}."
+            )
         )
     }
 
@@ -198,7 +212,10 @@ def request_magic_link(
 def redeem_magic_link(
     body: MagicLinkRedeem, db: DbSession, address: ClientAddress
 ) -> LoginResponse:
-    """Spend a sign-in link and sign its owner in. It never works a second time.
+    """Spend a sign-in link and sign its owner in.
+
+    Whether it works a second time is MAGIC_LINK_SINGLE_USE, and the default
+    since 12 Sep 2026 is that it does, until it expires.
 
     Bad links count against the same per-address budget as bad passwords, so
     trying tokens at random is slowed to a stop -- not that 256 random bits
