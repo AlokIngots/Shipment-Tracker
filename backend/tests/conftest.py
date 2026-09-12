@@ -122,6 +122,26 @@ def password_sign_in(monkeypatch):
     monkeypatch.setattr(config, "PASSWORD_SIGN_IN", True)
 
 
+@pytest.fixture(autouse=True)
+def no_automatic_sender(monkeypatch):
+    """The automatic notification sender is OFF for every test.
+
+    The `client` fixture starts the app properly, lifespan and all, which is
+    what makes it worth having. The timer started in that lifespan opens its
+    own database session -- the real one, not the rolled-back test session --
+    and would send real email on a machine with SEND_EMAILS on. Nothing in
+    the test suite should be able to mail a customer, so the timer is
+    switched off before the app is built. Tests that want a run call
+    scheduler.send_with(db) directly, on the session that gets rolled back.
+
+    Autouse, and therefore set up before `client`, which is what makes this
+    reliable rather than a hope.
+    """
+    from app.core import config
+
+    monkeypatch.setattr(config, "NOTIFY_EVERY_MINUTES", 0)
+
+
 @pytest.fixture
 def client(db):
     """The API, talking to the rolled-back session instead of the real one."""

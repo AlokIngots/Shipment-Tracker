@@ -241,3 +241,79 @@ class StaffActivityOut(BaseModel):
     events: list[StaffActivityEventOut]
     # True when there are older events than the last one on this page.
     more: bool
+
+
+# ------------------------------------------------------- messages to customers
+
+
+class StaffMessageOut(BaseModel):
+    """One message the portal has tried to send a customer."""
+
+    id: int
+    # When it was last tried. Older rows, written before the portal recorded
+    # attempts, fall back to when the row was made.
+    attempted_at: datetime
+    attempts: int
+    # "sent", "suppressed" or "failed".
+    outcome: str
+    detail: str | None
+    # The shipment status that triggered it, e.g. "Shipped".
+    event: str
+    channel: str
+    to_email: str
+    to_name: str | None
+    customer_name: str
+    sales_order_no: str
+    shipment_no: str
+
+
+class StaffMessageWaitingOut(BaseModel):
+    """A message that has not gone out yet, and who it is for."""
+
+    to_email: str
+    customer_name: str
+    sales_order_no: str
+    shipment_no: str
+    event: str
+    # False when SEND_EMAILS is off or this address is not on the pilot list:
+    # the next run will record it as suppressed rather than send it.
+    would_send: bool
+
+
+class StaffSenderOut(BaseModel):
+    """How the automatic sender is configured, and what it last did."""
+
+    # 0 means the automatic sender is off and only the button and the
+    # command-line tool send anything.
+    every_minutes: int
+    running: bool
+    last_run_at: datetime | None
+    last_counts: dict[str, int] | None
+    last_error: str | None
+    runs: int
+    # Whether any real email can leave the building at all (SEND_EMAILS).
+    sending_enabled: bool
+    # Non-empty means a pilot: only these addresses receive real mail.
+    pilot_addresses: list[str]
+    # The shipment statuses that cause a message.
+    notify_on: list[str]
+
+
+class StaffMessagesOut(BaseModel):
+    """The Messages screen, in one reply."""
+
+    sender: StaffSenderOut
+    waiting: list[StaffMessageWaitingOut]
+    messages: list[StaffMessageOut]
+    # True when there are older messages than the last one on this page.
+    more: bool
+
+
+class StaffSendNowOut(BaseModel):
+    """What one press of Send now actually did."""
+
+    sent: int
+    suppressed: int
+    failed: int
+    # 1 when another sender held the lock and this press did nothing.
+    skipped: int

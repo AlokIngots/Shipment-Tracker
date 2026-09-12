@@ -82,3 +82,6 @@ storage/
 
 # Deployment backups: databases and customer documents, never committed
 backups/
+
+# Claude Code working state (worktrees, local settings). Not project code.
+.claude/

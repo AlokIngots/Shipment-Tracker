@@ -173,6 +173,28 @@ SMTP_FROM = os.getenv("SMTP_FROM", "").strip() or "portal@alokindia.co.in"
 
 PORTAL_URL = os.getenv("PORTAL_URL", "https://portal.alokindia.co.in").strip()
 
+# How often the API sends whatever is waiting, by itself, in minutes.
+#
+# Before this existed nothing sent anything unless somebody remembered to run
+# `python -m scripts.notify` on the server, which meant a customer heard about
+# their shipment when a person got round to it and not when it moved.
+#
+# 0 turns the automatic sender off and leaves the command and the Send now
+# button as the only ways. Turning it off does not lose anything: what is
+# waiting stays waiting.
+#
+# This is only about WHEN sending is attempted. Whether a real email leaves
+# the building is still SEND_EMAILS and NOTIFY_ONLY_EMAILS below, so an
+# automatic sender on a machine with SEND_EMAILS off mails nobody.
+NOTIFY_EVERY_MINUTES = max(0, int(os.getenv("NOTIFY_EVERY_MINUTES", "15")))
+
+# How long after the API starts before the first automatic run, in seconds.
+# Not zero: a deploy restarts the container, and sending should not race the
+# database coming back up.
+NOTIFY_FIRST_RUN_DELAY_SECONDS = max(
+    0, int(os.getenv("NOTIFY_FIRST_RUN_DELAY_SECONDS", "60"))
+)
+
 # Shipment statuses worth telling a customer about.
 NOTIFIABLE_STATUSES = [
     status.strip()

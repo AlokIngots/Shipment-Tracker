@@ -3,12 +3,14 @@ import Toolbar from '../../components/Toolbar'
 import StaffAccountsScreen from './StaffAccountsScreen'
 import StaffActivityScreen from './StaffActivityScreen'
 import StaffDocumentsScreen from './StaffDocumentsScreen'
+import StaffMessagesScreen from './StaffMessagesScreen'
 import StaffOrdersScreen from './StaffOrdersScreen'
 
 const TABS = [
   { key: 'orders', label: 'Orders & shipments' },
   { key: 'documents', label: 'Documents & photos' },
   { key: 'accounts', label: 'Customers & logins' },
+  { key: 'messages', label: 'Messages to customers' },
   { key: 'activity', label: 'Change history' },
 ]
 
@@ -83,6 +85,7 @@ export default function StaffScreen({ session, onSignOut }) {
       {view.tab === 'accounts' && (
         <StaffAccountsScreen key={view.visit} startWith={view.intent} onGo={go} />
       )}
+      {view.tab === 'messages' && <StaffMessagesScreen key={view.visit} />}
       {view.tab === 'activity' && <StaffActivityScreen key={view.visit} />}
     </>
   )

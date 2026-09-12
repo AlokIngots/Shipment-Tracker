@@ -18,9 +18,11 @@ real customer something wrong:
 """
 
 import smtplib
+from datetime import datetime, timezone
 from email.message import EmailMessage
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from app.core.config import (
     NOTIFIABLE_STATUSES,
@@ -40,7 +42,9 @@ __all__ = [
     "NOTIFIABLE_STATUSES",
     "build_message",
     "pending",
+    "recent",
     "record_outcome",
+    "run",
     "send",
     "subject_for",
     "would_send_to",
@@ -209,8 +213,75 @@ def record_outcome(session, shipment, user, outcome: str, detail: str | None):
             user_id=user.id,
             event=shipment.status,
             channel="email",
+            attempts=0,
         )
         session.add(record)
     record.outcome = outcome
     record.detail = detail
+    record.attempts = (record.attempts or 0) + 1
+    record.last_attempt_at = datetime.now(timezone.utc)
     return record
+
+
+def run(session, on_result=None) -> dict[str, int]:
+    """Send everything that is waiting. Returns how many of each outcome.
+
+    This is the whole job, and it lives here rather than in the script
+    because three different things need it now: `python -m scripts.notify`,
+    the Send now button on the Messages screen, and the automatic sender in
+    app/services/scheduler.py. Before this existed the loop was written out
+    in the script, so the only way to send was for a person to run it.
+
+    Nothing raises. One bad address records a failure and the run carries on,
+    because the alternative is that one customer with a typo in their email
+    stops every other customer being told anything.
+
+    `on_result`, if given, is called with
+    (shipment, order, customer, user, outcome, detail) after each message is
+    recorded, so the command line can print a line per message without this
+    function knowing anything about printing.
+    """
+    counts = {"sent": 0, "suppressed": 0, "failed": 0}
+
+    for shipment, order, customer, user in pending(session):
+        message = build_message(user, customer, order, shipment)
+        outcome, detail = send(message)
+        counts[outcome] += 1
+        record_outcome(session, shipment, user, outcome, detail)
+
+        try:
+            session.commit()
+        except IntegrityError:
+            # Another run inserted the same row a moment ago; that is exactly
+            # what the unique constraint is for.
+            session.rollback()
+            continue
+
+        if on_result is not None:
+            on_result(shipment, order, customer, user, outcome, detail)
+
+    return counts
+
+
+def recent(session, limit: int = 100, before_id: int | None = None):
+    """The newest messages first, with enough around each one to read it.
+
+    Returns (rows, more), where each row is
+    (notification, shipment, order, customer, user) and `more` says whether
+    there are older ones. `before_id` takes the next page.
+    """
+    query = (
+        select(Notification, Shipment, Order, Customer, User)
+        .join(Shipment, Notification.shipment_id == Shipment.id)
+        .join(Order, Shipment.order_id == Order.id)
+        .join(Customer, Order.customer_id == Customer.id)
+        .join(User, Notification.user_id == User.id)
+        .order_by(Notification.id.desc())
+    )
+    if before_id is not None:
+        query = query.where(Notification.id < before_id)
+
+    # One more than asked for, purely to find out whether there are older
+    # ones without counting the whole table.
+    rows = session.execute(query.limit(limit + 1)).all()
+    return rows[:limit], len(rows) > limit
