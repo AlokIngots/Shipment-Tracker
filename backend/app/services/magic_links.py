@@ -16,17 +16,18 @@ The whole life of a link is in this file:
 
   redeem   Two behaviours, chosen by MAGIC_LINK_SINGLE_USE.
 
-           Reusable, the default since 12 Sep 2026: a plain lookup. The link
-           keeps working until it expires, however many times it is opened.
-           Alok asked for this so a link cannot be used up before the
-           customer gets to it, and accepted that it means a 24-hour
-           reusable credential sitting in an inbox.
+           Single use, the default: one UPDATE that marks the link used ONLY
+           IF it is still unused and unexpired. Two clicks racing each other
+           cannot both win, because the database lets exactly one of them
+           change the row, and the link is spent even if the account then
+           turns out to be refused.
 
-           Single use, MAGIC_LINK_SINGLE_USE=true: one UPDATE that marks the
-           link used ONLY IF it is still unused and unexpired. Two clicks
-           racing each other cannot both win, because the database lets
-           exactly one of them change the row, and the link is spent even if
-           the account then turns out to be refused.
+           Reusable, MAGIC_LINK_SINGLE_USE=false: a plain lookup, so the
+           link keeps working until it expires however often it is opened.
+           There to switch on if email scanners ever do start spending links
+           before customers reach them. They cannot today -- the token is in
+           the URL fragment, which never reaches a server, and redeeming
+           waits for a button press.
 
 A link is also refused if the account has been deactivated since, or its
 password changed or reset since. A reset usually means "somebody should not

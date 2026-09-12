@@ -212,10 +212,10 @@ def request_magic_link(
 def redeem_magic_link(
     body: MagicLinkRedeem, db: DbSession, address: ClientAddress
 ) -> LoginResponse:
-    """Spend a sign-in link and sign its owner in.
+    """Spend a sign-in link and sign its owner in. It never works a second time.
 
-    Whether it works a second time is MAGIC_LINK_SINGLE_USE, and the default
-    since 12 Sep 2026 is that it does, until it expires.
+    Unless MAGIC_LINK_SINGLE_USE is off, which it is not by default: see
+    app/core/config.py for when that would be worth turning on.
 
     Bad links count against the same per-address budget as bad passwords, so
     trying tokens at random is slowed to a stop -- not that 256 random bits
