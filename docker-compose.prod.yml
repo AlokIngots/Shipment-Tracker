@@ -1,0 +1,74 @@
+# The portal as it runs on a real server.
+#
+# Never start this by hand — use ./safe-deploy.sh, which backs up the
+# database and the documents first and can roll back if the new version
+# does not come up.
+
+# Its own project name, so this stack can never be confused with, or
+# recreate, the development database started by docker-compose.yml.
+name: alok-portal
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    # Deliberately no published port: the database is reachable only from
+    # the other containers, never from the internet.
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  api:
+    build:
+      context: ./backend
+    image: alok-portal-api:latest
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Inside the stack the database is called "db", not localhost, so this
+      # overrides whatever DATABASE_URL says in .env.
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      DOCUMENT_STORAGE_DIR: /app/storage/documents
+    volumes:
+      # A plain folder on the server, not a hidden Docker volume, so that
+      # backing up customer documents is just copying a directory.
+      - ./storage:/app/storage
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.web
+    image: alok-portal-web:latest
+    restart: unless-stopped
+    environment:
+      PORTAL_DOMAIN: ${PORTAL_DOMAIN:-:80}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      # Caddy keeps the HTTPS certificates it obtains in here, so a redeploy
+      # does not request new ones and hit the certificate authority's limits.
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+
+volumes:
+  db_data:
+  caddy_data:
+  caddy_config:

@@ -1,0 +1,212 @@
+import { useState } from 'react'
+import axios from 'axios'
+import { ChoiceField, TextField } from '../../components/Field'
+import { ALL_STATUSES, statusStep } from '../../components/StatusPill'
+import { blankToNull, describeError } from '../../lib/format'
+
+// Same form for adding a part-shipment and editing one. `shipment` being
+// null means "new", and then `orderId` says which order it belongs to.
+// The server refuses a move back down the sequence unless the request says
+// it is deliberate. Rather than let it refuse and then explain, ask first:
+// the person knows whether they are correcting a mistake, and the server
+// cannot.
+function confirmBackwards(current, next, what) {
+  const here = statusStep(current)
+  const there = statusStep(next)
+  if (here === null || there === null || there >= here) return true
+  return window.confirm(
+    `This moves ${what} back from ${current} to ${next}.\n\n` +
+      'Going backwards is usually a slip. Press OK only if you are correcting a mistake.',
+  )
+}
+
+export default function ShipmentForm({ orderId, shipment, onSaved, onCancel }) {
+  const [form, setForm] = useState(() => ({
+    shipment_no: shipment?.shipment_no ?? '',
+    dispatched_qty: shipment?.dispatched_qty ?? '',
+    unit: shipment?.unit ?? 'MT',
+    status: shipment?.status ?? '',
+    is_final: shipment?.is_final ?? false,
+    vessel_name: shipment?.vessel_name ?? '',
+    imo_number: shipment?.imo_number ?? '',
+    container_no: shipment?.container_no ?? '',
+    bl_number: shipment?.bl_number ?? '',
+    etd: shipment?.etd ?? '',
+    eta: shipment?.eta ?? '',
+  }))
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(null)
+
+  function set(field) {
+    return (value) => setForm((f) => ({ ...f, [field]: value }))
+  }
+
+  async function submit(event) {
+    event.preventDefault()
+
+    if (!String(form.shipment_no).trim()) {
+      setError('Enter a shipment number.')
+      return
+    }
+    if (String(form.dispatched_qty).trim() === '') {
+      setError('Enter the quantity in this shipment.')
+      return
+    }
+
+    const backwards =
+      statusStep(blankToNull(form.status)) !== null &&
+      statusStep(shipment?.status) !== null &&
+      statusStep(blankToNull(form.status)) < statusStep(shipment?.status)
+
+    if (backwards && !confirmBackwards(shipment?.status, form.status, 'this shipment')) return
+
+    setBusy(true)
+    setError(null)
+
+    const payload = {
+      shipment_no: String(form.shipment_no).trim(),
+      dispatched_qty: String(form.dispatched_qty).trim(),
+      unit: blankToNull(form.unit),
+      status: blankToNull(form.status),
+      allow_backwards: backwards,
+      is_final: form.is_final,
+      vessel_name: blankToNull(form.vessel_name),
+      imo_number: blankToNull(form.imo_number),
+      container_no: blankToNull(form.container_no),
+      bl_number: blankToNull(form.bl_number),
+      etd: blankToNull(form.etd),
+      eta: blankToNull(form.eta),
+    }
+
+    try {
+      if (shipment) await axios.put(`/api/staff/shipments/${shipment.id}`, payload)
+      else await axios.post(`/api/staff/orders/${orderId}/shipments`, payload)
+      await onSaved()
+    } catch (err) {
+      setError(describeError(err, 'Could not save that shipment. Please try again.'))
+      setBusy(false)
+    }
+  }
+
+  return (
+    <form className="card--form card--form-inner" onSubmit={submit} noValidate>
+      <h4 className="form-title">
+        {shipment ? `Edit shipment ${shipment.shipment_no}` : 'New shipment'}
+      </h4>
+      <p className="form-note">
+        Only the shipment number and quantity are needed now. Add the vessel,
+        container and dates when you have them.
+      </p>
+
+      <div className="formgrid">
+        <TextField
+          label="Shipment number"
+          value={form.shipment_no}
+          onChange={set('shipment_no')}
+          autoFocus={!shipment}
+        />
+
+        <TextField
+          label="Quantity in this shipment"
+          value={form.dispatched_qty}
+          onChange={set('dispatched_qty')}
+          type="number"
+          step="0.001"
+          min="0"
+        />
+
+        <TextField label="Unit" value={form.unit} onChange={set('unit')} />
+
+        <ChoiceField
+          label="Shipment status"
+          value={form.status}
+          options={ALL_STATUSES}
+          onChange={set('status')}
+          hint="The customer sees this as a progress bar."
+        />
+
+        {/* The only way the portal knows an order is finished. Steel orders
+            end a few tonnes over or under, so the quantities cannot say. */}
+        <div className="formnote">
+          <span className="formnote-label">Last shipment</span>
+          <label className="checkline checkline--form">
+            <input
+              type="checkbox"
+              checked={form.is_final}
+              onChange={(e) => set('is_final')(e.target.checked)}
+            />
+            <span>This is the last shipment for this order</span>
+          </label>
+          <small className="field-hint">
+            Tick it on the final lot. Until then the order shows “Part shipped”.
+          </small>
+        </div>
+
+        <TextField
+          label="Vessel name"
+          value={form.vessel_name}
+          onChange={set('vessel_name')}
+        />
+
+        <TextField
+          label="Vessel IMO number"
+          value={form.imo_number}
+          onChange={set('imo_number')}
+          inputMode="numeric"
+          maxLength={7}
+          hint="7 digits, from the booking. It gives the customer a live tracking link. A typo is caught for you."
+        />
+
+        <TextField
+          label="Container number"
+          value={form.container_no}
+          onChange={set('container_no')}
+          maxLength={20}
+          placeholder="MSCU1234566"
+          hint="4 letters then 7 digits. A typo is caught for you."
+        />
+
+        <TextField
+          label="Bill of Lading number"
+          value={form.bl_number}
+          onChange={set('bl_number')}
+          maxLength={60}
+          hint="Exactly as the shipping line wrote it."
+        />
+
+        <TextField
+          label="Departure date (ETD)"
+          value={form.etd}
+          onChange={set('etd')}
+          type="date"
+        />
+        <TextField
+          label="Expected arrival (ETA)"
+          value={form.eta}
+          onChange={set('eta')}
+          type="date"
+        />
+      </div>
+
+      {error && (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      )}
+
+      <div className="form-actions">
+        <button type="submit" className="button" disabled={busy}>
+          {busy ? 'Saving…' : shipment ? 'Save changes' : 'Add shipment'}
+        </button>
+        <button
+          type="button"
+          className="button button--ghost"
+          onClick={onCancel}
+          disabled={busy}
+        >
+          Cancel
+        </button>
+      </div>
+    </form>
+  )
+}
