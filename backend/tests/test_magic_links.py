@@ -109,7 +109,7 @@ def test_the_email_says_what_it_is(client, outbox, buyer):
     text = message.get_content()
     assert message["Subject"] == "Your sign-in link for the Alok Ingots portal"
     assert "Petra Baumann" in text
-    assert "15 minutes" in text
+    assert "24 hours" in text
     assert "did not ask for this" in text
 
 
@@ -166,13 +166,41 @@ def test_only_a_hash_of_the_token_is_stored(client, db, outbox, buyer):
     assert len(token) == 43, "32 random bytes"
 
 
-def test_a_link_expires_fifteen_minutes_after_it_is_sent(client, db, outbox, buyer):
+def test_a_link_lasts_twenty_four_hours(client, db, outbox, buyer):
     ask(client, buyer.email)
     row = db.scalar(select(MagicLink))
-    assert row.expires_at - row.created_at == timedelta(minutes=15)
+    assert row.expires_at - row.created_at == timedelta(hours=24)
 
 
-def test_a_link_works_once(client, outbox, buyer):
+def test_a_link_keeps_working_until_it_expires(client, outbox, buyer):
+    """The default since 12 Sep 2026: opening a link does not use it up."""
+    ask(client, buyer.email)
+    token = token_from(outbox[0])
+
+    for attempt in range(3):
+        answer = redeem(client, token)
+        assert answer.status_code == 200, f"refused on attempt {attempt + 1}"
+        assert answer.json()["token"]
+
+
+def test_a_reused_link_is_not_marked_used(client, db, outbox, buyer):
+    """Nothing may quietly spend it, or the next open would be refused."""
+    ask(client, buyer.email)
+    redeem(client, token_from(outbox[0]))
+    db.expire_all()
+    assert db.scalar(select(MagicLink)).used_at is None
+
+
+def test_single_use_can_be_switched_back_on(client, monkeypatch, outbox, buyer):
+    """The way back, without a code change: one environment variable.
+
+    Kept tested because it is the setting to reach for if a link ever leaks,
+    and a way back that nobody has exercised is not a way back.
+    """
+    from app.core import config
+
+    monkeypatch.setattr(config, "MAGIC_LINK_SINGLE_USE", True)
+
     ask(client, buyer.email)
     token = token_from(outbox[0])
     assert redeem(client, token).status_code == 200
@@ -180,6 +208,47 @@ def test_a_link_works_once(client, outbox, buyer):
     again = redeem(client, token)
     assert again.status_code == 400
     assert again.json()["detail"] == EXPIRED
+
+
+def test_the_email_says_the_link_can_be_used_more_than_once(client, outbox, buyer):
+    ask(client, buyer.email)
+    body = outbox[0].get_content()
+    assert "24 hours" in body
+    assert "more than once" in body
+    assert "works once" not in body
+
+
+def test_the_email_says_once_when_it_is_once(client, monkeypatch, outbox, buyer):
+    from app.core import config
+
+    monkeypatch.setattr(config, "MAGIC_LINK_SINGLE_USE", True)
+    ask(client, buyer.email)
+    body = outbox[0].get_content()
+    assert "It works once" in body
+    assert "more than once" not in body
+
+
+def test_the_sign_in_screen_is_told_the_rules_rather_than_guessing(client):
+    """The screens used to write "15 minutes" into the page by hand."""
+    options = client.get("/api/sign-in-options").json()
+    assert options["link_lasts"] == "24 hours"
+    assert options["link_single_use"] is False
+
+
+def test_how_long_it_lasts_is_written_for_a_person(monkeypatch):
+    from app.core import config
+    from app.services import magic_links
+
+    for seconds, words in (
+        (60, "1 minute"),
+        (900, "15 minutes"),
+        (3600, "1 hour"),
+        (7200, "2 hours"),
+        (86400, "24 hours"),
+        (172800, "2 days"),
+    ):
+        monkeypatch.setattr(config, "MAGIC_LINK_TTL_SECONDS", seconds)
+        assert magic_links.validity_in_words() == words
 
 
 def test_an_expired_link_is_refused(client, db, outbox, buyer):
@@ -196,10 +265,17 @@ def test_an_expired_link_is_refused(client, db, outbox, buyer):
 
 
 def test_asking_again_retires_the_earlier_link(client, outbox, buyer):
+    """Now that opening a link no longer ends it, this is the way to end one.
+
+    It matters more than it did: asking for a new link is what a customer
+    does if they think the old one has been seen by somebody else.
+    """
     ask(client, buyer.email)
     ask(client, buyer.email)
     first, second = (token_from(m) for m in outbox)
     assert redeem(client, first).status_code == 400, "only the newest works"
+    assert redeem(client, second).status_code == 200
+    # And the newest still works more than once.
     assert redeem(client, second).status_code == 200
 
 

@@ -43,8 +43,8 @@ export default function SignInLinkScreen({ token, onSignedIn, onStartOver }) {
         <h2>Link expired</h2>
         <p className="lead">{EXPIRED}</p>
         <p className="login-hint login-hint--left">
-          A sign-in link works once, and only for 15 minutes after it was sent.
-          If you asked for more than one, only the newest works.
+          A sign-in link stops working once it expires. If you asked for more
+          than one, only the newest works.
         </p>
         <button type="button" className="button" onClick={onStartOver}>
           Request a new link

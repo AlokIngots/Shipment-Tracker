@@ -182,10 +182,11 @@ def test_the_sign_in_screen_is_told_whether_to_show_the_password_box(client, mon
     """No sign-in needed to ask, and the answer follows the switch as it is now."""
     monkeypatch.setattr(config, "PASSWORD_SIGN_IN", False)
     off = client.get("/api/sign-in-options")
-    assert (off.status_code, off.json()) == (200, {"password_sign_in": False})
+    assert off.status_code == 200
+    assert off.json()["password_sign_in"] is False
 
     monkeypatch.setattr(config, "PASSWORD_SIGN_IN", True)
-    assert client.get("/api/sign-in-options").json() == {"password_sign_in": True}
+    assert client.get("/api/sign-in-options").json()["password_sign_in"] is True
 
 
 def test_if_email_fails_staff_get_back_in_with_the_switch_on(client, db):
