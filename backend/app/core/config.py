@@ -112,16 +112,29 @@ TRUST_PROXY_HEADER = _flag("TRUST_PROXY_HEADER", "true")
 # an account ever works.
 MAGIC_LINK_TTL_SECONDS = int(os.getenv("MAGIC_LINK_TTL_SECONDS", "86400"))  # 24 h
 
-# Whether a link stops working the moment it is used.
+# Whether a link stops working the moment it is used. True: it does.
 #
-# False, the default since 12 Sep 2026 on Alok's decision: the link keeps
-# working until it expires, however many times it is opened.
+# Reusable links were asked for on 12 Sep 2026 and briefly the default, to
+# stop email scanners spending a link before the customer reached it. That
+# turned out to be a problem this portal does not have, and Alok chose single
+# use once he saw why:
 #
-# Set it true to go back to a link that is spent on first use. That is the
-# safer setting, and it needs no code change and no deploy -- one environment
-# variable and a restart of the api container, the same way PASSWORD_SIGN_IN
-# works.
-MAGIC_LINK_SINGLE_USE = _flag("MAGIC_LINK_SINGLE_USE")
+#   * the token travels in the URL fragment, after the "#", which no browser
+#     ever sends to a server -- a scanner fetching the link makes a request
+#     the token is simply not in;
+#   * redeeming waits for a press of a button on the sign-in page, and a
+#     scanner does not press buttons.
+#
+# Both were built in step 26 for exactly this reason. See SignInLinkScreen.jsx.
+#
+# So the reliability problem is solved by MAGIC_LINK_TTL_SECONDS above being
+# 24 hours instead of 15 minutes, and nothing is bought by also letting a
+# 24-hour credential in an inbox be replayed.
+#
+# Set it false if a real scanner problem ever does appear -- one environment
+# variable and a restart of the api container, no rebuild and no deploy, the
+# same way PASSWORD_SIGN_IN works. It is kept tested in both positions.
+MAGIC_LINK_SINGLE_USE = _flag("MAGIC_LINK_SINGLE_USE", "true")
 
 # Asking for a link sends an email, so EVERY request is counted, not only
 # failed ones -- otherwise anybody could fill a customer's inbox.

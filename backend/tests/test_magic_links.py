@@ -60,6 +60,13 @@ def token_from(message) -> str:
     return match.group(1)
 
 
+def url_from(message) -> str:
+    """The whole sign-in address as it appears in the email."""
+    match = re.search(r"https?://\S*#sign-in=\S+", message.get_content())
+    assert match, "the email must carry a sign-in link"
+    return match.group(0)
+
+
 def bearer(body) -> dict:
     return {"Authorization": f"Bearer {body['token']}"}
 
@@ -172,35 +179,14 @@ def test_a_link_lasts_twenty_four_hours(client, db, outbox, buyer):
     assert row.expires_at - row.created_at == timedelta(hours=24)
 
 
-def test_a_link_keeps_working_until_it_expires(client, outbox, buyer):
-    """The default since 12 Sep 2026: opening a link does not use it up."""
-    ask(client, buyer.email)
-    token = token_from(outbox[0])
+def test_a_link_works_once(client, outbox, buyer):
+    """The default: opening a link spends it.
 
-    for attempt in range(3):
-        answer = redeem(client, token)
-        assert answer.status_code == 200, f"refused on attempt {attempt + 1}"
-        assert answer.json()["token"]
-
-
-def test_a_reused_link_is_not_marked_used(client, db, outbox, buyer):
-    """Nothing may quietly spend it, or the next open would be refused."""
-    ask(client, buyer.email)
-    redeem(client, token_from(outbox[0]))
-    db.expire_all()
-    assert db.scalar(select(MagicLink)).used_at is None
-
-
-def test_single_use_can_be_switched_back_on(client, monkeypatch, outbox, buyer):
-    """The way back, without a code change: one environment variable.
-
-    Kept tested because it is the setting to reach for if a link ever leaks,
-    and a way back that nobody has exercised is not a way back.
+    A link scanner cannot spend one on the customer's behalf, which is why
+    this is safe to keep. The token is in the URL fragment, which no browser
+    sends to a server, and redeeming waits for a button press -- see
+    test_a_scanner_fetching_the_link_cannot_spend_it below.
     """
-    from app.core import config
-
-    monkeypatch.setattr(config, "MAGIC_LINK_SINGLE_USE", True)
-
     ask(client, buyer.email)
     token = token_from(outbox[0])
     assert redeem(client, token).status_code == 200
@@ -210,29 +196,79 @@ def test_single_use_can_be_switched_back_on(client, monkeypatch, outbox, buyer):
     assert again.json()["detail"] == EXPIRED
 
 
-def test_the_email_says_the_link_can_be_used_more_than_once(client, outbox, buyer):
+def test_a_scanner_fetching_the_link_cannot_spend_it(client, db, outbox, buyer):
+    """Why single use is safe here, pinned so it cannot quietly stop being true.
+
+    Outlook Safe Links and the like fetch every URL in an email. What they
+    fetch is everything before the "#": a browser never sends the fragment to
+    a server, so the token is not in the request at all. Nothing the server
+    can do with that request could spend the link, and the customer's own
+    press afterwards still works.
+    """
     ask(client, buyer.email)
-    body = outbox[0].get_content()
-    assert "24 hours" in body
-    assert "more than once" in body
-    assert "works once" not in body
+    url = url_from(outbox[0])
+    assert "#sign-in=" in url, "the token must stay in the fragment"
+
+    before_hash = url.split("#", 1)[0]
+    assert "sign-in" not in before_hash, "a scanner would fetch the token"
+
+    # Whatever a scanner does with that address, the link is untouched.
+    client.get("/")
+    db.expire_all()
+    assert db.scalar(select(MagicLink)).used_at is None
+
+    assert redeem(client, token_from(outbox[0])).status_code == 200
 
 
-def test_the_email_says_once_when_it_is_once(client, monkeypatch, outbox, buyer):
+def test_reusable_links_can_be_switched_on(client, monkeypatch, outbox, buyer):
+    """The way out if a scanner problem ever does appear: one variable.
+
+    Kept tested in both positions, because a way back nobody has exercised
+    is not a way back.
+    """
     from app.core import config
 
-    monkeypatch.setattr(config, "MAGIC_LINK_SINGLE_USE", True)
+    monkeypatch.setattr(config, "MAGIC_LINK_SINGLE_USE", False)
+
+    ask(client, buyer.email)
+    token = token_from(outbox[0])
+    for attempt in range(3):
+        assert redeem(client, token).status_code == 200, f"refused on try {attempt + 1}"
+
+
+def test_a_reusable_link_is_not_marked_used(client, db, monkeypatch, outbox, buyer):
+    from app.core import config
+
+    monkeypatch.setattr(config, "MAGIC_LINK_SINGLE_USE", False)
+    ask(client, buyer.email)
+    redeem(client, token_from(outbox[0]))
+    db.expire_all()
+    assert db.scalar(select(MagicLink)).used_at is None
+
+
+def test_the_email_says_it_works_once_and_for_how_long(client, outbox, buyer):
     ask(client, buyer.email)
     body = outbox[0].get_content()
     assert "It works once" in body
+    assert "24 hours" in body
     assert "more than once" not in body
+
+
+def test_the_email_says_more_than_once_when_it_is(client, monkeypatch, outbox, buyer):
+    from app.core import config
+
+    monkeypatch.setattr(config, "MAGIC_LINK_SINGLE_USE", False)
+    ask(client, buyer.email)
+    body = outbox[0].get_content()
+    assert "more than once" in body
+    assert "It works once" not in body
 
 
 def test_the_sign_in_screen_is_told_the_rules_rather_than_guessing(client):
     """The screens used to write "15 minutes" into the page by hand."""
     options = client.get("/api/sign-in-options").json()
     assert options["link_lasts"] == "24 hours"
-    assert options["link_single_use"] is False
+    assert options["link_single_use"] is True
 
 
 def test_how_long_it_lasts_is_written_for_a_person(monkeypatch):
@@ -274,8 +310,6 @@ def test_asking_again_retires_the_earlier_link(client, outbox, buyer):
     ask(client, buyer.email)
     first, second = (token_from(m) for m in outbox)
     assert redeem(client, first).status_code == 400, "only the newest works"
-    assert redeem(client, second).status_code == 200
-    # And the newest still works more than once.
     assert redeem(client, second).status_code == 200
 
 
