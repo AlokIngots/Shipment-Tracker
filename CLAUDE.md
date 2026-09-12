@@ -79,8 +79,8 @@ to the next step. Never run ahead through multiple steps at once.
 
 ## Where we are now
 
-**Last worked on: 11 September 2026.** Steps 1–29 are built and merged to
-`dev`. **The portal is live** at https://portal.alokindia.co.in on
+**Last worked on: 12 September 2026.** Steps 1–29 and 31–33 are built and
+merged to `dev`. **The portal is live** at https://portal.alokindia.co.in on
 srv1427359, and **email works there**: on 11 Sep 2026 the server's `.env`
 was set to `SEND_EMAILS=true` with AWS SES SMTP (region ap-south-1, sending
 from enquiries@alokindia.com), and a real sign-in link was received and
@@ -107,6 +107,17 @@ the sign-in screen shows the password box again. It is merged to `dev`
 after step 31, and the same two conditions hold for deploying both.
 
 Do not deploy, or tell the user it is safe to, until both are confirmed.
+
+**Step 33, notifications that send themselves**
+(`feature/step33-auto-notify`), is built and tested but **not deployed**.
+It carries migration 0011 and turns on a timer inside the API that emails
+customers when a shipment moves, every `NOTIFY_EVERY_MINUTES` (15 by
+default). On the live server `SEND_EMAILS=true` already, so **deploying it
+means real customers with a login start receiving real email without
+anybody pressing anything.** Nobody has an order on the live portal yet, so
+there is nothing for it to send today — but set `NOTIFY_ONLY_EMAILS` to
+your own address, or `NOTIFY_EVERY_MINUTES=0`, before the first real order
+is loaded, unless you want it live from that moment.
 
 **Step 30, "Forgot your password", is held unmerged** on
 `feature/step30-password-reset` (`a37b9b7`) on the user's decision: do not
@@ -164,6 +175,15 @@ before step 29 (hidden details removed from full-size photos). Undo it on
 `dev` with `git revert --no-edit pre-strip-photo-details..dev`. There is no
 migration to take back. A revert does not put removed details back into any
 photo: they are gone from the files for good, which is the point.
+
+**Restore point:** tag `pre-auto-notify` is `dev` after step 32, before
+step 33 (notifications that send themselves). Undo it on `dev` with
+`git revert --no-edit pre-auto-notify..dev`. If it was already deployed,
+first take the database back with
+`docker compose -f docker-compose.prod.yml exec api python -m alembic downgrade 0009`
+— that drops the two columns counting attempts and nothing else. Reverting
+does not un-send anything already emailed, and does not need to: the record
+of what was sent is what stops anybody being told twice, and it stays.
 
 **Restore point:** tag `pre-magic-link-only` is `dev` after step 29, before
 step 31 (sign-in by email link only). Undo it on `dev` with
@@ -459,7 +479,8 @@ frontend/src/
   needs and holds its own state; `App.jsx` only decides which screen is on.
 - **Reserved names, so future work lands right:**
   `app/routers/photos.py` for material photos,
-  `app/routers/notifications.py` if sending ever becomes an endpoint,
+  `app/routers/admin/notifications.py` — taken in step 33 by the Messages
+  screen and Send now,
   `app/services/photos.py` — which now holds photo previews — for
   whatever the Bundle Inspection app needs too.
 
@@ -508,6 +529,7 @@ the customer side needs, and a step is done when both work.
 | 30 | Forgot your password (`feature/step30-password-reset`, `a37b9b7`) | Email reset link on each login | "Forgot your password?" on the sign-in card | **Built, held unmerged** on the user's decision, 11 Sep 2026; moot while sign-in is link-only. Do not merge or delete without asking |
 | 31 | Sign in by email link only (`feature/magic-link-only`) | no Change password or Reset password button; Add customer login says "tell them to sign in with email link" instead of showing a temporary password; the four quick actions unchanged | the sign-in card has only the email box and Sign in with email link: no password box, no password Sign in button, no "or"; no Change password button | **Merged, not deployed**: deploying waits on two confirmations, see "Where we are now" |
 | 32 | The escape hatch (`feature/password-escape-hatch`) | with `PASSWORD_SIGN_IN` on, `manage_users --reset-password` gives a temporary password to sign in with; a written "If email fails" procedure | the password box, the password Sign in button and "or" come back on the sign-in card only while the server switch is on; hidden while it is off | **Merged, not deployed**: same two conditions as step 31 |
+| 33 | Notifications send themselves (`feature/step33-auto-notify`) | the API sends whatever is waiting on a timer, `NOTIFY_EVERY_MINUTES`, with only one sender at a time however many workers or containers are up; a **Messages to customers** tab showing what is waiting, what was sent, held back or failed, and how many tries it took; a Send now button; `scripts/notify.py` still works and now shares the same loop | the customer is told when their shipment moves, without anybody at Alok Ingots remembering a command | **Done, not deployed** |
 
 ### Still to build, both sides
 
@@ -612,6 +634,7 @@ Update after every step: what was done, and the commit.
 | 2026-09-11 | **Step 31 — Sign in by email link only, both halves** (`feature/magic-link-only`, restore tag `pre-magic-link-only`). On the user's decision, the sign-in card keeps only the email box and **Sign in with email link**: the password box, the password Sign in button and the "or" divider are gone. (`dev` never had a "Forgot your password?" link; step 30, which adds one, is held unmerged.) The password code is **dormant, not deleted**. A new setting, `PASSWORD_SIGN_IN`, off unless `.env` says true, makes `POST /api/login` give everybody the same refusal before anything is looked up, and switches off the rule that keeps a person on a temporary password away from their orders. Without that second part, every new login would have signed in by link and then been asked for a temporary password nobody sent them. Switched back on, both work exactly as before. Staff lose the Change password and Reset password buttons; Add customer login now says "tell them to open the portal and press Sign in with email link" instead of showing a temporary password, and the Start here checklist says the same. Customers lose Change password. The four quick actions, `manage_users.py`, and the change-password and forced-password screens are all kept. The sign-in email and the too-many-links message no longer mention a password. Proved by 6 new tests (211 in all; every older test now runs with password sign-in switched on, as the proof the dormant code still works): a right password, a wrong one and an unknown address all get the same 403; a brand-new login signs in by link and sees its orders; a staff login signs in by link and adds a customer, a customer login, an order, a shipment and a document, and that customer then signs in by link and sees the order and the document; the email says nothing of a password; and switched on, the temporary-password rule is back. The frontend build passes, `manage_users --list` runs, and a headless Edge run on the development site passed 22 checks: one button on the sign-in card at desktop and phone width, no password box, no divider, no Forgot link, `/api/login` refused from the browser, no Change password or Reset password button on either half, all four quick actions open (Upload document onto Documents & photos with its Upload buttons), Add customer login shows the new note and no password, and no browser errors. The two runs left two development-only logins (`link-only-check-…@demo-customer.example`) and their change-history entries. A fresh sign-in link requested from the live server for mis@alokindia.com has **not arrived**; see Known issues. Merged to `dev` and pushed the same day on the user's OK; **not deployed** | `f1c8ac7` + _this commit_ |
 
 | 2026-09-11 | **Step 32 — The escape hatch, both halves** (`feature/password-escape-hatch`, restore tag `pre-password-escape-hatch`). After step 31, `PASSWORD_SIGN_IN=true` reopened password sign-in in the API only: the sign-in screen had no password box, so if email ever failed nobody could get in from a browser. On the user's request, the sign-in card now asks the server, through a new read-only `GET /api/sign-in-options`, every time it loads, and shows the password box, the password Sign in button and the "or" divider only while the switch is on. Off, the normal state, it is exactly step 31's link-only card, and if the question cannot be answered it stays link-only. Switching needs no rebuild of the website. The recovery procedure is written under "If email fails" in "Deploying": switch on and recreate the API, `manage_users --reset-password` for anyone without a password, sign in, choose a password, switch off again once email works. Proved by 2 new tests (213 in all): the screen is told the switch's current state without signing in; and with the switch on, a staff member reset on the server signs in with the temporary password, is held to choosing a real one, then reaches the staff screens. The frontend build passes. One build of the development site was run in headless Edge against the API started first with the switch off, then with it on. Off, 9 checks: only Sign in with email link at desktop and phone width, no password box or divider, `/api/login` refused from the browser, no browser errors. On, 10 checks: the password box and both buttons back at desktop and phone width, nothing scrolling sideways, a login made by `manage_users --add-user` signed in with its temporary password, was made to choose its own and reached its orders, no browser errors. That run left one development-only login (`recovery-check-…@second-demo.example`). Merged to `dev` on the user's OK; **not deployed**, and deploying waits on the same two conditions as step 31 | _this commit_ |
+| 2026-09-12 | **Step 33 — Notifications send themselves, both halves** (`feature/step33-auto-notify`, restore tag `pre-auto-notify`). Until now nothing reached a customer unless somebody at Alok Ingots remembered to run `python -m scripts.notify` on the server, which made “has the customer been told?” a question about a person's memory. The API now sends whatever is waiting on a timer of its own (`NOTIFY_EVERY_MINUTES`, 15 by default; 0 switches it off), started in a FastAPI lifespan. The sending loop moved out of the script into `notifications.run()`, so the timer, the new Send now button and the command all do exactly the same thing. Two senders cannot both send: whoever takes a PostgreSQL advisory lock sends and the other skips, which matters with more than one worker and during a deploy when two containers briefly overlap — skipping loses nothing, because what is waiting stays waiting. A fifth staff tab, **Messages to customers**, shows what is waiting and who it is for, what was sent, held back or failed with the server's own reason, how many tries it took, and how the sender is configured — including, in plain words, that email being off means messages are recorded but not delivered. Migration 0011 adds `notifications.last_attempt_at` and `attempts`, because a message suppressed in the morning and sent in the afternoon kept saying “morning”. **Numbered 0011, not 0010**: revision 0010 is already taken by the held-unmerged step 30 branch, and two files claiming one revision is the Alembic mistake with no clean way out. Proved by 16 new tests (229 in all, all passing); the migration drilled upgrade → downgrade → upgrade on a throwaway database with every row count unchanged; the frontend build and `npm run lint` clean; and a live run against a throwaway database and a local mail sink in which the timer, with nobody pressing anything, emailed a shipment marked Shipped, did not email it a second time, then caught a move to In transit about fifteen seconds later and emailed that. A headless Edge pass over the new tab at 1440 and 390px: five tabs all on screen and none off the edge, nothing scrolling sideways, both messages listed, Send now pressed for real and reporting back, no browser errors. The development database and the live one were not touched. **Not deployed** | _this commit_ |
 
 ### Design decisions worth remembering
 
@@ -1195,8 +1218,29 @@ Update after every step: what was done, and the commit.
 - **WhatsApp is not built.** It needs a WhatsApp Business account and a
   pre-approved message template through Twilio or Meta's Cloud API. The
   channel would slot into `app/services/notifications.py` alongside email.
-- **Nothing triggers notifications automatically.** `python -m scripts.notify` must be run
-  after each import, by hand or on a schedule.
+- **The development database is stamped `0010` and should not be.** On
+  12 Sep 2026 the local `alok_portal` database said it was at revision 0010
+  — that is step 30's `0010_password_reset_links`, applied while that branch
+  was checked out and never taken back when it was held unmerged. The file
+  is not on `dev`, so `alembic upgrade head` there fails with "Can't locate
+  revision 0010" until it is put right. Nothing was done about it, because
+  it is the user's database and step 30 is the user's decision. **The live
+  server is not affected** — it has never had step 30. To fix it when you
+  want to: check the step 30 migration out on its own
+  (`git show feature/step30-password-reset:backend/migrations/versions/0010_password_reset_links.py`),
+  `alembic downgrade 0009`, then delete the file again.
+- **Revision 0010 is spoken for.** `feature/step30-password-reset` owns it,
+  so step 33's migration is 0011 with 0009 as its parent. If step 30 is ever
+  merged, renumber its migration to 0012 with `down_revision = '0011'`
+  first, or Alembic will see two heads.
+- **What the automatic sender still does not do.** Since step 33 the API
+  sends on a timer by itself, so nothing waits on somebody remembering a
+  command. What it is not: it only looks at shipment *status*, so a
+  correction to a vessel name or an ETA tells nobody; it sends to every
+  active login of a customer, with no way to say "this person only"; and
+  the timer lives in the API process, so while the API is down nothing is
+  sent — it catches up on the next run, because what is waiting stays
+  waiting.
 - **Nothing stops the same photo being uploaded twice.** Documents are
   deduplicated by type; photos have no equivalent, so a double click on
   Add photos leaves two identical tiles that must be removed one at a time.
@@ -1224,7 +1268,7 @@ Update after every step: what was done, and the commit.
   drills, against the reorganised backend. What it has still never met is a
   real machine, a real domain, or Caddy actually obtaining an HTTPS
   certificate — that cannot be tested until DNS points somewhere.
-- **The frontend has no tests.** The 213 committed tests are all backend.
+- **The frontend has no tests.** The 229 committed tests are all backend.
   Nothing checks that the progress track draws, that the photo gallery
   revokes its blob URLs, or that a backwards status change asks before it
   saves. `npm run build` passing only means it compiles.

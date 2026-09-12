@@ -15,12 +15,15 @@ Safety, set in .env:
 
 All the deciding and sending is in app/services/notifications.py. This file
 only reads the arguments and prints what happened.
+
+Since step 33 the API also sends on a timer by itself (NOTIFY_EVERY_MINUTES)
+and staff can press Send now on the Messages screen, so this is no longer the
+only way anything goes out. It stays because a command that can be run over
+SSH, with --dry-run, is the right tool when something looks wrong.
 """
 
 import argparse
 import sys
-
-from sqlalchemy.exc import IntegrityError
 
 from app.core.config import NOTIFY_ONLY_EMAILS, SEND_EMAILS
 from app.core.database import SessionLocal
@@ -67,12 +70,8 @@ def main() -> int:
             )
         print()
 
-        counts = {"sent": 0, "suppressed": 0, "failed": 0}
-
-        for shipment, order, customer, user in todo:
-            message = notifications.build_message(user, customer, order, shipment)
-
-            if args.dry_run:
+        if args.dry_run:
+            for shipment, order, customer, user in todo:
                 mark = (
                     "would send"
                     if notifications.would_send_to(user.email)
@@ -82,29 +81,20 @@ def main() -> int:
                     f"  [{mark}] {user.email:<32} {order.sales_order_no} "
                     f"{shipment.shipment_no} ({shipment.status})"
                 )
-                continue
+            print("\nDry run — nothing was sent and nothing was recorded.")
+            return 0
 
-            outcome, detail = notifications.send(message)
-            counts[outcome] += 1
-            notifications.record_outcome(session, shipment, user, outcome, detail)
-
-            try:
-                session.commit()
-            except IntegrityError:
-                # Another run inserted the same row a moment ago; that is
-                # exactly what the unique constraint is for.
-                session.rollback()
-                continue
-
+        def show(shipment, order, customer, user, outcome, detail):
             note = f" — {detail}" if detail else ""
             print(
                 f"  [{outcome}] {user.email:<32} {order.sales_order_no} "
                 f"{shipment.shipment_no} ({shipment.status}){note}"
             )
 
-        if args.dry_run:
-            print("\nDry run — nothing was sent and nothing was recorded.")
-            return 0
+        # The sending loop itself lives in the service, because the timer in
+        # the API and the Send now button need exactly the same loop and
+        # neither can import a script to get it.
+        counts = notifications.run(session, on_result=show)
 
         print(
             f"\nsent {counts['sent']}, suppressed {counts['suppressed']}, "

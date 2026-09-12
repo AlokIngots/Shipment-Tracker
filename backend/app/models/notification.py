@@ -52,6 +52,15 @@ class Notification(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+    # When it was last TRIED, which is not when the row was made: a message
+    # suppressed this morning and sent this afternoon keeps one row, and the
+    # afternoon is the answer a person wants on the Messages screen.
+    last_attempt_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    # How many times it has been tried. Above 1 means an earlier attempt was
+    # suppressed or failed and this one is a retry.
+    attempts: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
 
     def __repr__(self) -> str:
         return f"<Notification {self.event} -> user {self.user_id} ({self.outcome})>"
