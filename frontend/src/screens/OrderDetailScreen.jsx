@@ -4,7 +4,7 @@ import PhotoGallery from '../components/PhotoGallery'
 import StatusPill from '../components/StatusPill'
 import StatusTrack from '../components/StatusTrack'
 import Toolbar from '../components/Toolbar'
-import { TrackActions, VesselMap } from '../components/Tracking'
+import { TrackActions } from '../components/Tracking'
 import { DASH, fmtDate } from '../lib/format'
 
 function DocumentRow({ doc }) {
@@ -59,13 +59,16 @@ function DocumentRow({ doc }) {
 // Where the goods are, in the words a buyer uses. Only what is known is
 // shown: a column of dashes before a vessel is booked looks broken, when all
 // it means is "not yet".
+//
+// The IMO number used to be here. It is gone, because the only thing it was
+// for was a link to the vessel's position, and that link was wrong for
+// transshipped cargo. Staff still see it; it is on the paperwork.
 function Tracking({ shipment }) {
   const facts = [
+    ['Shipping line', shipment.carrier],
     ['Vessel', shipment.vessel_name],
-    ['Vessel IMO number', shipment.imo_number],
     ['Container number', shipment.container_no],
     ['Bill of Lading number', shipment.bl_number],
-    ['Shipping line', shipment.carrier],
     ['Departure date', shipment.etd && fmtDate(shipment.etd)],
     ['Expected arrival', shipment.eta && fmtDate(shipment.eta)],
   ].filter(([, value]) => value)
@@ -74,10 +77,7 @@ function Tracking({ shipment }) {
     <div className="docs">
       <span className="docs-label">Track your shipment</span>
 
-      {facts.length === 0 &&
-        !shipment.tracking_url &&
-        !shipment.container_tracking_url &&
-        !shipment.vessel_map_url && (
+      {facts.length === 0 && !shipment.container_tracking_url && (
         <p className="docs-none">
           The vessel, container and dates will appear here once this shipment
           is booked.
@@ -94,8 +94,6 @@ function Tracking({ shipment }) {
           ))}
         </dl>
       )}
-
-      <VesselMap shipment={shipment} />
 
       <TrackActions shipment={shipment} />
     </div>
@@ -232,7 +230,7 @@ export default function OrderDetailScreen({ orderId, onBack, onSignOut, session 
                 <p className="empty-title">Nothing has shipped yet</p>
                 <p className="empty-text">
                   Each shipment will appear here as it leaves, with its
-                  documents and a link to follow the vessel.
+                  documents and a link to track the container.
                 </p>
               </div>
             </div>

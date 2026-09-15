@@ -173,23 +173,16 @@ STORAGE_DIR = Path(
 
 # ------------------------------------------------------------------ tracking
 
-# The portal never hard-codes a tracking link: the server builds it from this
-# template, so moving to a paid carrier API is a configuration change and the
-# UI does not move at all.
-TRACKING_URL_TEMPLATE = os.getenv(
-    "TRACKING_URL_TEMPLATE",
-    "https://www.marinetraffic.com/en/ais/details/ships/imo:{imo}",
-).strip()
-
-TRACKING_PROVIDER_NAME = os.getenv("TRACKING_PROVIDER_NAME", "MarineTraffic").strip()
-
-
-# Tracking the box, rather than the ship, is the carrier's own page and so
-# there is one URL per carrier. The templates live in
-# app/services/tracking.py; any of them can be corrected or a new carrier
-# added from .env alone, which matters because a carrier can change its
-# tracking URL without warning and a deploy should not be the only way to
-# keep up:
+# There is no vessel tracking any more, and that is deliberate. A link or a
+# map showing where a named ship is now answers a different question from
+# "where is my cargo": transshipped goods change vessel, so the first ship
+# sails on to its next voyage while the boxes wait at a hub. WAN HAI 359,
+# carrying an Antwerp order, read Chennai to China. Removed on 15 Sep 2026
+# rather than left to mislead.
+#
+# What remains is the carrier's own container tracking, which follows the
+# box and not the hull. The templates live in app/services/tracking.py;
+# these overrides let a carrier's URL be corrected without a deploy.
 #
 #     CARRIER_URL_EVERGREEN_BL=https://example.com/track?bl={bl}
 #     CARRIER_URL_EVERGREEN_CONTAINER=https://example.com/track?ct={container}
@@ -203,29 +196,6 @@ CARRIER_URL_OVERRIDES = {
     for name, value in os.environ.items()
     if name.upper().startswith("CARRIER_URL_") and value.strip()
 }
-
-
-# The live vessel map shown on the page itself, rather than behind a link.
-# VesselFinder's free embed is documented as a <script> that writes an
-# iframe; the iframe is all it writes, so the portal builds the iframe URL
-# itself and loads no third-party JavaScript into its own page. That is not
-# a shortcut but the point: a script here would run in the portal's origin,
-# where the customer's sign-in token lives, while an iframe is a separate
-# origin the browser keeps to itself.
-#
-# {imo} is the vessel, {ra} the referring page VesselFinder's embed expects.
-# `lat`, `lon` and `zoom` only set the opening view; the IMO decides which
-# ship is shown, and VesselFinder resolves it to the vessel server-side.
-VESSEL_MAP_URL_TEMPLATE = os.getenv(
-    "VESSEL_MAP_URL_TEMPLATE",
-    "https://www.vesselfinder.com/aismap"
-    "?zoom=7&lat=undefined&lon=undefined&width=100%25&height=420"
-    "&names=true&imo={imo}&track=true"
-    "&fleet=false&fleet_name=false&fleet_hide_old_positions=false"
-    "&clicktoact=false&store_pos=true&ra={ra}",
-).strip()
-
-VESSEL_MAP_PROVIDER_NAME = os.getenv("VESSEL_MAP_PROVIDER_NAME", "VesselFinder").strip()
 
 
 # ------------------------------------------------------------- notifications

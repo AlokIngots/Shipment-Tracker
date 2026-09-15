@@ -33,13 +33,16 @@ def test_valid_imo(value, valid, why):
     assert tracking.valid_imo(value) is valid, why
 
 
-def test_tracking_url_only_for_a_usable_imo():
-    """A dead link is worse than no link, so a bad IMO produces neither."""
-    assert tracking.tracking_url("9074729")
-    assert "9074729" in tracking.tracking_url("9074729")
-    assert tracking.tracking_url("9074728") is None
-    assert tracking.tracking_url(None) is None
-    assert tracking.tracking_url("") is None
+def test_there_is_no_vessel_tracking_to_build():
+    """Removed on 15 Sep 2026, and this is here so it does not creep back.
+
+    A named ship's current position is a different voyage once cargo is
+    transshipped -- WAN HAI 359, carrying an Antwerp order, read Chennai to
+    China -- so the portal says nothing about where the hull is. The IMO
+    number is still validated, because it is still on the paperwork.
+    """
+    assert not hasattr(tracking, "tracking_url")
+    assert not hasattr(tracking, "vessel_map_url")
 
 
 # ------------------------------------------------------------- container

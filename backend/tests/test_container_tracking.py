@@ -231,16 +231,6 @@ def test_an_unrecognised_carrier_is_kept_but_gets_no_button(
     assert shipment["container_tracking_url"] is None
 
 
-def test_the_vessel_link_is_untouched_by_any_of_this(
-    client, staff_auth, customer_auth, order
-):
-    """Two questions, two links; the older one must not have moved."""
-    set_carrier(client, staff_auth, order, "Evergreen Line")
-    shipment = customer_shipment(client, customer_auth, order)
-    assert "9074729" in shipment["tracking_url"]
-    assert shipment["tracking_provider"]
-
-
 def test_the_customer_side_is_still_read_only(client, customer_auth, order):
     """A customer cannot set a carrier, or anything else on a shipment."""
     shipment_id = order["shipments"][0]["id"]
@@ -261,53 +251,10 @@ def test_setting_the_carrier_is_in_the_activity_record(client, staff_auth, order
     assert changes["Carrier"] == (None, "Evergreen Line")
 
 
-# ------------------------------------------------ the map on the page itself
-
-
-def test_the_map_is_built_from_the_imo_alone():
-    """No MMSI is stored and none is needed: VesselFinder resolves the IMO
-    itself. Checked against WAN HAI 359 (IMO 9554092), whose embed came back
-    with MMSI 563182400 and no configuration error."""
-    url = tracking.vessel_map_url("9554092")
-    assert url and url.startswith("https://")
-    assert "imo=9554092" in url
-
-
-@pytest.mark.parametrize("imo", [None, "", "9554091", "955409", "abcdefg"])
-def test_no_map_without_a_usable_imo(imo):
-    """An empty map frame explains nothing, so none is drawn."""
-    assert tracking.vessel_map_url(imo) is None
-
-
-def test_the_map_says_nothing_about_which_order_is_being_looked_at():
-    """The embed wants a referring URL. It gets the portal's own address,
-    not the page the customer happens to be on."""
-    url = tracking.vessel_map_url("9554092")
-    assert "ra=https%3A%2F%2F" in url
-    assert "/orders/" not in url
-
-
-def test_the_map_url_comes_from_a_template_like_every_other_link(monkeypatch):
-    monkeypatch.setattr(
-        tracking, "VESSEL_MAP_URL_TEMPLATE", "https://example.test/m?i={imo}&r={ra}"
-    )
-    assert tracking.vessel_map_url("9554092").startswith(
-        "https://example.test/m?i=9554092&r="
-    )
-
-
-def test_a_template_that_cannot_take_an_imo_yields_no_map(monkeypatch):
-    """Rather than a frame pointed at the wrong thing."""
-    monkeypatch.setattr(tracking, "VESSEL_MAP_URL_TEMPLATE", "https://example.test/m")
-    assert tracking.vessel_map_url("9554092") is None
-    monkeypatch.setattr(tracking, "VESSEL_MAP_URL_TEMPLATE", "")
-    assert tracking.vessel_map_url("9554092") is None
-
-
 # ------------------------------------------- one function, both halves alike
 
 
-def test_links_for_gathers_everything_a_shipment_offers():
+def test_links_for_gathers_what_a_shipment_offers():
     row = SimpleNamespace(
         imo_number="9554092",
         container_no=CONTAINER,
@@ -315,25 +262,32 @@ def test_links_for_gathers_everything_a_shipment_offers():
         carrier="Evergreen Line",
     )
     links = tracking.links_for(row)
-    assert "imo=9554092" in links.vessel_map_url
-    assert links.vessel_map_provider == "VesselFinder"
-    assert "9554092" in links.tracking_url
-    assert links.tracking_provider
     assert links.container_tracking_carrier == "Evergreen Line"
+    assert links.container_tracking_url.startswith("https://")
     assert links.container_tracking_prefilled is False
 
 
-def test_links_for_names_no_provider_it_cannot_link_to():
-    """A provider name beside a missing link would read as a broken feature."""
+def test_links_for_offers_nothing_it_cannot_link_to():
+    """A carrier name beside a missing link would read as a broken feature."""
     row = SimpleNamespace(
         imo_number=None, container_no=None, bl_number=None, carrier=None
     )
     links = tracking.links_for(row)
-    assert links.vessel_map_url is None and links.vessel_map_provider is None
-    assert links.tracking_url is None and links.tracking_provider is None
     assert links.container_tracking_url is None
     assert links.container_tracking_carrier is None
     assert links.container_tracking_prefilled is False
+
+
+def test_links_for_says_nothing_about_the_vessel():
+    """An IMO number no longer produces any link at all. It is kept on the
+    shipment because it is on the paperwork, not to be followed."""
+    row = SimpleNamespace(
+        imo_number="9554092", container_no=None, bl_number=None, carrier=None
+    )
+    links = tracking.links_for(row)
+    assert not hasattr(links, "tracking_url")
+    assert not hasattr(links, "vessel_map_url")
+    assert links.container_tracking_url is None
 
 
 def test_a_shipment_with_no_carrier_attribute_at_all_is_survivable():
@@ -347,7 +301,7 @@ def test_staff_and_customer_are_shown_the_same_tracking(
     client, staff_auth, customer_auth, order
 ):
     """The whole point of one shared function: staff on the phone to a
-    customer must not be looking at a different position."""
+    customer must not be looking at something different."""
     set_carrier(client, staff_auth, order, "Evergreen Line")
 
     theirs = customer_shipment(client, customer_auth, order)
@@ -356,21 +310,22 @@ def test_staff_and_customer_are_shown_the_same_tracking(
     ours = ours.json()["shipments"][0]
 
     for field in (
-        "vessel_map_url",
-        "vessel_map_provider",
-        "tracking_url",
-        "tracking_provider",
         "container_tracking_url",
         "container_tracking_carrier",
         "container_tracking_prefilled",
     ):
         assert theirs[field] == ours[field], field
-    assert ours["vessel_map_url"]
+    assert ours["container_tracking_url"]
 
 
-def test_the_customer_gets_the_map_on_the_page(client, customer_auth, order):
-    shipment = customer_shipment(client, customer_auth, order)
-    assert "imo=9074729" in shipment["vessel_map_url"]
-    assert shipment["vessel_map_provider"] == "VesselFinder"
-    # The link stays as the fallback; the map does not replace it.
-    assert shipment["tracking_url"]
+def test_neither_half_is_sent_a_vessel_link_any_more(
+    client, staff_auth, customer_auth, order
+):
+    set_carrier(client, staff_auth, order, "Evergreen Line")
+    theirs = customer_shipment(client, customer_auth, order)
+    ours = client.get(
+        f"/api/staff/orders/{order['id']}", headers=staff_auth
+    ).json()["shipments"][0]
+    for gone in ("tracking_url", "vessel_map_url"):
+        assert gone not in theirs, gone
+        assert gone not in ours, gone

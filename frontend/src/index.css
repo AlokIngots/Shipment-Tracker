@@ -9,8 +9,11 @@
   --page: #f5f6fa;
   --ok: #0f7b4f;
   --ok-bg: #e6f4ec;
-  --bad: #a32020;
-  --bad-bg: #fbeaea;
+  /* Alok Ingots red. A signal colour only -- errors, a cancelled order, a
+     balance that needs attention -- and never decoration, so that when it
+     does appear it means something. */
+  --bad: #BC0300;
+  --bad-bg: #fdecec;
 
   color-scheme: light;
 }
