@@ -88,6 +88,10 @@ class Shipment(Base):
     # The carrier's Bill of Lading number. No standard format exists --
     # every line numbers its own way -- so this is stored as given.
     bl_number: Mapped[str | None] = mapped_column(String(60))
+    # The shipping line, as a person would write it ("Evergreen Line").
+    # Stored as given and matched loosely, because it is what turns a
+    # container number into a link to the carrier's own tracking page.
+    carrier: Mapped[str | None] = mapped_column(String(60))
     etd: Mapped[date | None] = mapped_column(Date)
     eta: Mapped[date | None] = mapped_column(Date)
 

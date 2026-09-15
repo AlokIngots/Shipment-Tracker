@@ -54,6 +54,7 @@ SHIPMENT_FIELDS = {
     "imo_number": "IMO number",
     "container_no": "Container number",
     "bl_number": "B/L number",
+    "carrier": "Carrier",
     "etd": "ETD",
     "eta": "ETA",
 }

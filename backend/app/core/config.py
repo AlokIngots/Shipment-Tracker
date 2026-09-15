@@ -184,6 +184,27 @@ TRACKING_URL_TEMPLATE = os.getenv(
 TRACKING_PROVIDER_NAME = os.getenv("TRACKING_PROVIDER_NAME", "MarineTraffic").strip()
 
 
+# Tracking the box, rather than the ship, is the carrier's own page and so
+# there is one URL per carrier. The templates live in
+# app/services/tracking.py; any of them can be corrected or a new carrier
+# added from .env alone, which matters because a carrier can change its
+# tracking URL without warning and a deploy should not be the only way to
+# keep up:
+#
+#     CARRIER_URL_EVERGREEN_BL=https://example.com/track?bl={bl}
+#     CARRIER_URL_EVERGREEN_CONTAINER=https://example.com/track?ct={container}
+#     CARRIER_URL_EVERGREEN_HOME=https://example.com/track
+#
+# The middle word is the carrier's key in tracking.py, and the last says
+# which of the three the URL is. An empty value is ignored rather than
+# blanking the built-in, so a half-written line cannot remove a link.
+CARRIER_URL_OVERRIDES = {
+    name[len("CARRIER_URL_") :].upper(): value.strip()
+    for name, value in os.environ.items()
+    if name.upper().startswith("CARRIER_URL_") and value.strip()
+}
+
+
 # ------------------------------------------------------------- notifications
 
 # Off by default, deliberately. With SEND_EMAILS false, messages are built

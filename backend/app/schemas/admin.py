@@ -54,6 +54,7 @@ class StaffOrderShipmentOut(BaseModel):
     imo_number: str | None
     container_no: str | None
     bl_number: str | None
+    carrier: str | None
     etd: date | None
     eta: date | None
     # So the page can say why a shipment refuses to be removed.
@@ -115,6 +116,9 @@ class ShipmentIn(BaseModel):
     imo_number: str | None = None
     container_no: str | None = None
     bl_number: str | None = None
+    # The shipping line. Free text: it is matched loosely against the
+    # carriers the portal can link to, and an unknown one is still stored.
+    carrier: str | None = None
     etd: date | None = None
     eta: date | None = None
     # Moving a status back down the sequence is refused unless this says it

@@ -65,12 +65,20 @@ class ShipmentOut(BaseModel):
     imo_number: str | None
     container_no: str | None
     bl_number: str | None
+    carrier: str | None
     etd: date | None
     eta: date | None
     # Built by the server so the provider can change without touching the UI.
     # None when there is no usable IMO number, so the UI shows no dead link.
     tracking_url: str | None = None
     tracking_provider: str | None = None
+    # The carrier's own tracking page -- where the box is, not the ship.
+    # None when the carrier is unknown or unset, so no dead button is drawn.
+    container_tracking_url: str | None = None
+    container_tracking_carrier: str | None = None
+    # False when the carrier's page opens empty, so the screen can tell the
+    # customer to paste the number rather than implying it is already there.
+    container_tracking_prefilled: bool = False
     documents: list[DocumentOut] = []
     photos: list[PhotoOut] = []
 

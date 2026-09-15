@@ -79,45 +79,35 @@ to the next step. Never run ahead through multiple steps at once.
 
 ## Where we are now
 
-**Last worked on: 12 September 2026.** Steps 1–29 and 31–33 are built and
-merged to `dev`. **The portal is live** at https://portal.alokindia.co.in on
-srv1427359, and **email works there**: on 11 Sep 2026 the server's `.env`
-was set to `SEND_EMAILS=true` with AWS SES SMTP (region ap-south-1, sending
-from enquiries@alokindia.com), and a real sign-in link was received and
-used. The user deploys to the server themselves; this PC has no SSH to it.
-The live server runs an **older build** than `dev`: on 11 Sep 2026 its
-sign-in page had the email link but not the usability pass or steps 28–29,
-so deploying `dev` brings all of those at once. No real customer has used
-it yet.
+**Last worked on: 15 September 2026.** Steps 1–29 and 31–34 are built,
+merged to `dev` **and deployed**. Step 35 (container tracking) is built on
+its branch and not yet deployed.
 
-**Step 31, sign-in by email link only**, is merged to `dev` and pushed
-(11 Sep 2026, on the user's OK) but **not deployed**. The user's two
-conditions for deploying `dev` to the live server:
+**The portal is live and current** at https://portal.alokindia.co.in on
+srv1427359. On **15 September 2026** `dev@de723f0` was deployed there:
+`safe-deploy.sh` ran clean, the schema reported "Already up to date at
+0011", the API and website came up healthy, and **magic-link sign-in is
+confirmed working live**. So steps 28, 29, 31, 32, 33 and 34 and migrations
+0009 and 0011 are all on the server now, and the long "merged but not
+deployed" backlog that stood here before is gone.
 
-1. The fresh sign-in link requested from the live server for
-   **exports@alokindia.com** (a live staff login) at 11:46 UTC on 11 Sep
-   2026 is confirmed received in that inbox. Alok checks.
-2. Alok confirms he is OK with step 28 working order status out from the
-   shipments instead of it being typed. The live portal holds no orders
-   yet, so migration 0009 loses nothing there.
+Email works there: on 11 Sep 2026 the server's `.env` was set to
+`SEND_EMAILS=true` with AWS SES SMTP (region ap-south-1, sending from
+enquiries@alokindia.com), and a real sign-in link was received and used.
+**`NOTIFY_ONLY_EMAILS` is set to the owner's address on the server**, so
+step 33's automatic sender — which is live — can reach nobody else however
+many customers are in the database. Leave it that way until a real customer
+is meant to start receiving mail.
 
-**Step 32, the escape hatch** (`feature/password-escape-hatch`), makes
-`PASSWORD_SIGN_IN=true` a real way back in if email fails: while it is on,
-the sign-in screen shows the password box again. It is merged to `dev`
-after step 31, and the same two conditions hold for deploying both.
+The user deploys to the server themselves; this PC has no SSH to it.
 
-Do not deploy, or tell the user it is safe to, until both are confirmed.
+**The two conditions that used to gate a deploy are both met** and are
+history: the 11 Sep sign-in link was received, and order status coming from
+the shipments rather than being typed was accepted. Nothing gates a deploy
+today except the usual: a green test run, a backup, and the user saying go.
 
-**Step 33, notifications that send themselves**
-(`feature/step33-auto-notify`), is built and tested but **not deployed**.
-It carries migration 0011 and turns on a timer inside the API that emails
-customers when a shipment moves, every `NOTIFY_EVERY_MINUTES` (15 by
-default). On the live server `SEND_EMAILS=true` already, so **deploying it
-means real customers with a login start receiving real email without
-anybody pressing anything.** Nobody has an order on the live portal yet, so
-there is nothing for it to send today — but set `NOTIFY_ONLY_EMAILS` to
-your own address, or `NOTIFY_EVERY_MINUTES=0`, before the first real order
-is loaded, unless you want it live from that moment.
+**The next deploy carries step 35 alone** — container tracking plus
+migration 0012, one new nullable column. Not the old batch.
 
 **Step 30, "Forgot your password", is held unmerged** on
 `feature/step30-password-reset` (`a37b9b7`) on the user's decision: do not
@@ -209,6 +199,15 @@ password sign-in back, screen included.
 before step 32 (the password box comes back while `PASSWORD_SIGN_IN` is
 on). Undo it on `dev` with
 `git revert --no-edit pre-password-escape-hatch..dev`. No migration.
+
+**Restore point:** tag `pre-container-tracking` is `dev` after step 34,
+before step 35 (the Track container button). Undo it on `dev` with
+`git revert --no-edit pre-container-tracking..dev`. If it was already
+deployed, first take the database back with
+`docker compose -f docker-compose.prod.yml exec api python -m alembic downgrade 0011`
+— that drops the one `carrier` column and nothing else. Faster than a
+revert and needing no deploy: a carrier nobody recognises gets no button,
+so emptying `shipments.carrier` turns the feature off wherever it is wrong.
 
 **`dev` is the branch to work from.** **`main` is still the empty anchor
 commit, deliberately** — it gets its first real content only when the portal
@@ -530,25 +529,27 @@ the customer side needs, and a step is done when both work.
 | 19 | Deploy verification | `safe-deploy.sh` fixed after the reorganisation, and drilled | — | **Done** |
 | 20 | Sign-in rate limiting | — | bulk password guessing is slowed to a stop | **Done** |
 | 21 | A test suite that exists | 123 tests committed, run on every push | — | **Done** |
-| 22 | Ready to share a server | deploy on a host that already runs nginx, without touching it | — | **Done, not yet deployed** |
-| 23 | Port 8090, and the nginx site in the repo | 8080 was taken by alok-crm-frontend | — | **Done, not yet deployed** |
+| 22 | Ready to share a server | deploy on a host that already runs nginx, without touching it | — | **Done, deployed 15 Sep 2026** |
+| 23 | Port 8090, and the nginx site in the repo | 8080 was taken by alok-crm-frontend | — | **Done, deployed 15 Sep 2026** |
 | 24 | Who changed what | every change recorded with who, when and before → after; an Activity tab to read it; nobody can edit or remove it | (nothing — internal only, and customers cannot reach it) | **Done** |
 | 25 | Photo previews | a small preview made at upload; a file that is not really a picture refused; a command for photos uploaded before | gallery tiles load the preview, clicking opens the original | **Done** |
 | 26 | Sign in with an email link | staff can sign in by link too | "Sign in with email link" beside the password; single-use 15-minute link; same answer for any address; rate limited | **Done, live: a real link received and used on 11 Sep 2026** |
 | 27 | Screens that fit | on a phone the toolbar, the four tabs and every row fit; no page scrolls sideways | every order-list column visible on any screen, order cards below 880px; the whole progress track and the totals fit a phone | **Done, not seen on a real phone** |
-| — | Easy for real users (`feature/easy-usability`) | quick actions above the tabs (Add customer, Add customer login, New order, Upload document); a "Start here" 1-2-3 checklist on empty screens; plain labels; no screen mentions a server command | plain labels (Order status, Your documents, Track your shipment); friendly empty and error states with Try again | **Built and tested, not yet deployed** |
-| 28 | Order status from shipments | the order form shows the status instead of asking for it; a Cancelled tick on the order; a Last shipment tick on each shipment; a reminder when nearly all of an order has gone and nothing is ticked; `last_shipment` in the CSV importer | the order says Part shipped until the last lot is ticked, then follows the lot furthest behind; "final shipment" on that lot | **Done, not yet deployed** |
+| — | Easy for real users (`feature/easy-usability`) | quick actions above the tabs (Add customer, Add customer login, New order, Upload document); a "Start here" 1-2-3 checklist on empty screens; plain labels; no screen mentions a server command | plain labels (Order status, Your documents, Track your shipment); friendly empty and error states with Try again | **Done, deployed 15 Sep 2026** |
+| 28 | Order status from shipments | the order form shows the status instead of asking for it; a Cancelled tick on the order; a Last shipment tick on each shipment; a reminder when nearly all of an order has gone and nothing is ticked; `last_shipment` in the CSV importer | the order says Part shipped until the last lot is ticked, then follows the lot furthest behind; "final shipment" on that lot | **Done, deployed 15 Sep 2026** |
 | 29 | Hidden details out of full-size photos | every photo saved without its camera, time and GPS position as it is uploaded; a line on the photo box says so; a command cleans photos uploaded before; phone photos with a second picture inside (MPO) accepted instead of refused; a photo cut short refused | the full-size photo they download carries only the picture | **Done** |
 | 30 | Forgot your password (`feature/step30-password-reset`, `a37b9b7`) | Email reset link on each login | "Forgot your password?" on the sign-in card | **Built, held unmerged** on the user's decision, 11 Sep 2026; moot while sign-in is link-only. Do not merge or delete without asking |
-| 31 | Sign in by email link only (`feature/magic-link-only`) | no Change password or Reset password button; Add customer login says "tell them to sign in with email link" instead of showing a temporary password; the four quick actions unchanged | the sign-in card has only the email box and Sign in with email link: no password box, no password Sign in button, no "or"; no Change password button | **Merged, not deployed**: deploying waits on two confirmations, see "Where we are now" |
-| 32 | The escape hatch (`feature/password-escape-hatch`) | with `PASSWORD_SIGN_IN` on, `manage_users --reset-password` gives a temporary password to sign in with; a written "If email fails" procedure | the password box, the password Sign in button and "or" come back on the sign-in card only while the server switch is on; hidden while it is off | **Merged, not deployed**: same two conditions as step 31 |
-| 33 | Notifications send themselves (`feature/step33-auto-notify`) | the API sends whatever is waiting on a timer, `NOTIFY_EVERY_MINUTES`, with only one sender at a time however many workers or containers are up; a **Messages to customers** tab showing what is waiting, what was sent, held back or failed, and how many tries it took; a Send now button; `scripts/notify.py` still works and now shares the same loop | the customer is told when their shipment moves, without anybody at Alok Ingots remembering a command | **Done, not deployed** |
-| 34 | Sign-in links that last a day (`feature/step34-longer-signin-links`, `feature/step35-single-use-default`) | `MAGIC_LINK_TTL_SECONDS` is 24 hours, not 15 minutes. A link is still spent on first use: `MAGIC_LINK_SINGLE_USE` defaults true, and false is there if email scanners ever do start spending links. `GET /api/sign-in-options` now tells the screens the rules so they cannot state them wrongly | the link in the inbox still works the next morning; the email and the sign-in screen say what is actually true | **Done, not deployed** |
+| 31 | Sign in by email link only (`feature/magic-link-only`) | no Change password or Reset password button; Add customer login says "tell them to sign in with email link" instead of showing a temporary password; the four quick actions unchanged | the sign-in card has only the email box and Sign in with email link: no password box, no password Sign in button, no "or"; no Change password button | **Done, deployed 15 Sep 2026** |
+| 32 | The escape hatch (`feature/password-escape-hatch`) | with `PASSWORD_SIGN_IN` on, `manage_users --reset-password` gives a temporary password to sign in with; a written "If email fails" procedure | the password box, the password Sign in button and "or" come back on the sign-in card only while the server switch is on; hidden while it is off | **Done, deployed 15 Sep 2026** |
+| 33 | Notifications send themselves (`feature/step33-auto-notify`) | the API sends whatever is waiting on a timer, `NOTIFY_EVERY_MINUTES`, with only one sender at a time however many workers or containers are up; a **Messages to customers** tab showing what is waiting, what was sent, held back or failed, and how many tries it took; a Send now button; `scripts/notify.py` still works and now shares the same loop | the customer is told when their shipment moves, without anybody at Alok Ingots remembering a command | **Done, deployed 15 Sep 2026** |
+| 34 | Sign-in links that last a day (`feature/step34-longer-signin-links`, `feature/step35-single-use-default`) | `MAGIC_LINK_TTL_SECONDS` is 24 hours, not 15 minutes. A link is still spent on first use: `MAGIC_LINK_SINGLE_USE` defaults true, and false is there if email scanners ever do start spending links. `GET /api/sign-in-options` now tells the screens the rules so they cannot state them wrongly | the link in the inbox still works the next morning; the email and the sign-in screen say what is actually true | **Done, deployed 15 Sep 2026** |
+| 35 | Track the box, not the ship (`feature/step35-container-tracking`) | a Shipping line field on the shipment form and a `carrier` column in the CSV importer; a per-carrier registry of tracking URLs, each overridable from `.env`; Evergreen Line first | a **Track container** button on each shipment, opening the carrier's own page by B/L or container number, with the carrier's search page as the fallback that always works | **Built, not deployed**; Evergreen's deep link still unverified |
 
 ### Still to build, both sides
 
 | Step | Admin Console side | Customer Portal side |
 | ---- | ------------------ | -------------------- |
+| **36 — Shipping details that have nowhere to go** | fields for what the Bill of Lading holds and the portal cannot store: customer address and EORI number, the customer contact's name and email without creating them a login, order date and Shipping Bill number, load and discharge ports, ETD/ETA where they are known, voyage number and seal number, container size, and gross weight beside net | the route and the dates on the order detail, instead of only what the carrier's page happens to show |
 | **Photos from the Bundle app** | pull photos from the existing Bundle Inspection app instead of uploading them by hand | (gallery already built in step 15) |
 | **Notifications — WhatsApp** | choose which statuses message which channel | receives the WhatsApp message |
 | **SAP/PMS auto-pull** | replace the hand-run CSV import with a scheduled pull | — |
@@ -651,6 +652,8 @@ Update after every step: what was done, and the commit.
 | 2026-09-12 | **Step 33 — Notifications send themselves, both halves** (`feature/step33-auto-notify`, restore tag `pre-auto-notify`). Until now nothing reached a customer unless somebody at Alok Ingots remembered to run `python -m scripts.notify` on the server, which made “has the customer been told?” a question about a person's memory. The API now sends whatever is waiting on a timer of its own (`NOTIFY_EVERY_MINUTES`, 15 by default; 0 switches it off), started in a FastAPI lifespan. The sending loop moved out of the script into `notifications.run()`, so the timer, the new Send now button and the command all do exactly the same thing. Two senders cannot both send: whoever takes a PostgreSQL advisory lock sends and the other skips, which matters with more than one worker and during a deploy when two containers briefly overlap — skipping loses nothing, because what is waiting stays waiting. A fifth staff tab, **Messages to customers**, shows what is waiting and who it is for, what was sent, held back or failed with the server's own reason, how many tries it took, and how the sender is configured — including, in plain words, that email being off means messages are recorded but not delivered. Migration 0011 adds `notifications.last_attempt_at` and `attempts`, because a message suppressed in the morning and sent in the afternoon kept saying “morning”. **Numbered 0011, not 0010**: revision 0010 is already taken by the held-unmerged step 30 branch, and two files claiming one revision is the Alembic mistake with no clean way out. Proved by 16 new tests (229 in all, all passing); the migration drilled upgrade → downgrade → upgrade on a throwaway database with every row count unchanged; the frontend build and `npm run lint` clean; and a live run against a throwaway database and a local mail sink in which the timer, with nobody pressing anything, emailed a shipment marked Shipped, did not email it a second time, then caught a move to In transit about fifteen seconds later and emailed that. A headless Edge pass over the new tab at 1440 and 390px: five tabs all on screen and none off the edge, nothing scrolling sideways, both messages listed, Send now pressed for real and reporting back, no browser errors. The development database and the live one were not touched. **Not deployed** | _this commit_ |
 | 2026-09-12 | **Step 34 — Sign-in links that last a day, and survive being opened** (`feature/step34-longer-signin-links`, restore tag `pre-longer-signin-links`). On Alok's decision a link now lasts 24 hours instead of 15 minutes, and keeps working until it expires however many times it is opened. **The reason given for the reusable half does not hold in this codebase, and Alok was told so**: the token travels in the URL fragment, which no browser ever sends to a server, and redeeming waits for a button press — both put there in step 26 precisely so that Outlook Safe Links and the like cannot spend a link. A scanner fetching the URL was proved to leave the token unseen by the server. The longer expiry stands on its own merits; the reusable half is a real security trade-off bought for a problem that was already solved, and is one environment variable away from being undone. `MAGIC_LINK_SINGLE_USE` is that variable, modelled on step 32's escape hatch: set it true and recreate the api container, no rebuild and no deploy. Asking for a new link still retires the old one, and a password change or reset still kills any link already sent — which now matter more, being the only things that end a link early. `GET /api/sign-in-options` also gained `link_lasts` and `link_single_use`, because two screens had “15 minutes” written into them by hand and would have started lying the moment the setting changed. The sign-in email was reworded honestly and still never mentions a password, which step 31 forbids — caught by a test, not by luck. Proved by 6 new tests (235 in all, all passing), the frontend build and lint clean, and a live run against a throwaway database and a local mail sink: the email says 24 hours and “more than once”, a scanner's GET reaches the server without the token, the same link then signed in three times in a row, asking again killed it, and the newest worked. **Not deployed** — this PC has no SSH to the server | _this commit_ |
 | 2026-09-12 | **Reusable sign-in links reversed, on Alok's decision** (`feature/step35-single-use-default`, restore tag `pre-single-use-default`). Reusable links had been asked for so that email scanners could not spend a link before the customer reached it. Shown that this portal has never had that problem — the token travels in the URL fragment, which no browser sends to a server, and redeeming waits for a button press, both built in step 26 for exactly this — Alok chose single use. `MAGIC_LINK_SINGLE_USE` now defaults to true. **The 24-hour expiry stays**, which is what actually fixed the reliability complaint: a customer reading the email next morning no longer finds a dead link. Reusable is still one environment variable away and is kept tested, so the way out exists if a real scanner problem ever appears. A new test pins the reason single use is safe here — that the emailed address carries no token before the “#” and that fetching it leaves the link unused — so the property cannot quietly stop being true. Proved by 236 tests all passing, the frontend build and lint clean, and a live run against a throwaway database and a local mail sink: the portal and the email both say “works once, within 24 hours” and no longer mention reuse, the stored link lasts exactly one day, the first press signed in and the second was refused. **Not deployed** | _this commit_ |
+| 2026-09-15 | **`dev@de723f0` deployed to the live server, by Alok.** `safe-deploy.sh` ran clean, the schema reported "Already up to date at 0011", the API and website came up healthy, and magic-link sign-in was confirmed working on the live site. This cleared the whole backlog in one go: steps 28, 29, 31, 32, 33 and 34 and the usability pass are now live, and migrations 0009 and 0011 are applied on the server. `NOTIFY_ONLY_EMAILS` is set to the owner's address there, so step 33's automatic sender — which is now running on the server — can reach nobody else whatever is in the database. The two conditions that had gated this deploy since 11 Sep are both met and are now history. No real customer has signed in yet | (deploy, no commit) |
+| 2026-09-15 | **Step 35 — Track the box, not the ship** (`feature/step35-container-tracking`, restore tag `pre-container-tracking`). The vessel link answers "where is the ship", which is not what a buyer asks, so each shipment now also carries the shipping line and a **Track container** button that opens that carrier's own tracking page. Migration 0012 adds one nullable `shipments.carrier`, free text, left empty on every existing row rather than guessed from a B/L prefix. A per-carrier registry in `app/services/tracking.py` holds up to three URLs per line — by Bill of Lading, by container number, and the carrier's search page with nothing filled in — and adding a carrier is one entry and no code. Every URL can be corrected from `.env` (`CARRIER_URL_<CARRIER>_<BL|CONTAINER|HOME>`), because a carrier can change its tracking URL without warning and a deploy should not be the only way to follow. The B/L is preferred over the container, both being identifiers of the shipment but the B/L the carrier's own reference for that consignment. A container number failing its ISO 6346 check digit is never deep-linked, the same rule the staff form already applies. Carrier matching is loose — case, spacing and punctuation ignored, plus aliases — because staff copy the line off a Bill of Lading and will not type a code; an unrecognised line is stored and shown but gets no button, rather than a button leading nowhere. The customer side stays read-only and the server builds every URL, as the vessel link already did. Staff get a Shipping line field on the shipment form, the carrier on the orders screen summary, a `carrier` column in the CSV importer and template, and a Carrier entry in the activity record. **Evergreen Line is the only carrier in the registry, and its two deep links are unverified**: ShipmentLink refused every connection from this machine and its tracking form has historically been a POST, so the design always keeps a `home` fallback and tells the screen whether the link was prefilled — the button works either way and says "paste the container number" when it has to. Proved by 25 new database-free tests passing (registry matching, B/L preferred over container, a bad check digit never linked, the always-safe fallback, URL escaping, `.env` overriding a built-in and an empty override not deleting one) and a clean frontend build. **The full suite and the end-to-end half have not been run: Docker Desktop will not start on this PC, so there is no database.** 6 further end-to-end tests are written and waiting for one, taking the suite to 267 collected. Not deployed | `161a32f` + _this commit_ |
 
 ### Design decisions worth remembering
 
@@ -1196,10 +1199,35 @@ Update after every step: what was done, and the commit.
   screen and the importer will both reject it and the only way through is
   to leave the field blank. Worth knowing before somebody assumes the
   portal is broken.
-- **Container tracking is still vessel tracking.** The container number is
-  now recorded and shown, but the "View live on..." link still points at
-  MarineTraffic by IMO, which shows where the *ship* is. Nothing tracks the
-  box itself. Real container-level tracking needs a paid carrier API.
+- **Container tracking is now the carrier's own page, not a paid API.**
+  Since step 35 each shipment can carry a shipping line, and a **Track
+  container** button opens that carrier's tracking page by Bill of Lading or
+  container number. It is an outbound link and nothing more: the portal does
+  not read the carrier's answer, so it still cannot show a live position or
+  ETA on its own screens, and nothing confirms the box is aboard. Real
+  shipment-level data inside the portal still needs a paid carrier API.
+- **Evergreen's two deep links have never been proved to work.** They were
+  written from this machine, which ShipmentLink refused every connection
+  from (`ECONNREFUSED` on both `www.shipmentlink.com` and
+  `ct.shipmentlink.com`), and ShipmentLink's tracking form has historically
+  been a POST — in which case a GET deep link lands on an empty search box
+  rather than the shipment. The design survives that: every carrier entry
+  has a `home` URL that always works, and the server tells the screen
+  whether the link was prefilled, so the button says "paste the container
+  number" when it has to. **Open one in a browser and check before trusting
+  it.** If it is wrong, either set `CARRIER_URL_EVERGREEN_BL` and
+  `CARRIER_URL_EVERGREEN_CONTAINER` in the server's `.env` to the real URLs
+  — no deploy needed — or drop both templates to `None` in
+  `app/services/tracking.py` and the button falls back to the search page.
+- **Only Evergreen Line is in the registry.** Any other carrier typed on the
+  form is stored and shown, and simply gets no button. That is deliberate —
+  a button labelled with a line the portal cannot link to is a dead end —
+  but it means the feature does nothing at all for a shipment on Maersk,
+  MSC, Hapag-Lloyd or a feeder line until an entry is added.
+- **Every shipment already in the database has no carrier.** The column
+  arrives empty and nothing backfills it, because a carrier guessed from a
+  B/L prefix would be a guess written into real data. Until staff set it,
+  those shipments show no Track container button — exactly as before.
 - **`scripts/add_document.py` still works** and does the same thing as the
   staff page. Keep them in step: both store a random name and replace a
   document of the same type.

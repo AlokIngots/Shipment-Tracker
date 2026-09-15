@@ -641,6 +641,21 @@
   color: var(--muted);
 }
 
+/* Two links sit here now: the container and the vessel. The container is the
+   one a buyer reaches for, so it is filled and the vessel stays outlined --
+   the hierarchy is the answer to "which of these do I want", drawn rather
+   than explained. Same navy either way; no new colour enters the palette. */
+.track--primary {
+  border-color: var(--navy);
+  background: var(--navy);
+  color: #fff;
+}
+
+.track--primary:hover {
+  border-color: var(--navy-soft);
+  background: var(--navy-soft);
+}
+
 /* ---- narrow screens ---- */
 
 /* Below this the order table cannot fit its five columns, so each order is
