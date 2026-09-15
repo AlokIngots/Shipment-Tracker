@@ -57,6 +57,15 @@ class StaffOrderShipmentOut(BaseModel):
     carrier: str | None
     etd: date | None
     eta: date | None
+    # The same tracking the customer gets, built by the same function, so
+    # staff can follow a shipment without borrowing a customer login.
+    vessel_map_url: str | None = None
+    vessel_map_provider: str | None = None
+    tracking_url: str | None = None
+    tracking_provider: str | None = None
+    container_tracking_url: str | None = None
+    container_tracking_carrier: str | None = None
+    container_tracking_prefilled: bool = False
     # So the page can say why a shipment refuses to be removed.
     document_count: int
 

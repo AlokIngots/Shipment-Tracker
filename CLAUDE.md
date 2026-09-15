@@ -209,6 +209,14 @@ deployed, first take the database back with
 revert and needing no deploy: a carrier nobody recognises gets no button,
 so emptying `shipments.carrier` turns the feature off wherever it is wrong.
 
+**Restore point:** tag `pre-carrier-fallback` is `dev` after step 35,
+before step 36 (the live map, staff tracking, and Evergreen's fallback).
+Undo it on `dev` with `git revert --no-edit pre-carrier-fallback..dev`.
+There is no migration to take back. Two smaller undos need no revert and no
+deploy: setting `VESSEL_MAP_URL_TEMPLATE` to anything without `{imo}` in it
+removes the map and leaves the link, and setting
+`CARRIER_URL_EVERGREEN_BL` puts a container deep link back.
+
 **`dev` is the branch to work from.** **`main` is still the empty anchor
 commit, deliberately** — it gets its first real content only when the portal
 has actually been deployed to a real server and proved to work there.
@@ -544,12 +552,13 @@ the customer side needs, and a step is done when both work.
 | 33 | Notifications send themselves (`feature/step33-auto-notify`) | the API sends whatever is waiting on a timer, `NOTIFY_EVERY_MINUTES`, with only one sender at a time however many workers or containers are up; a **Messages to customers** tab showing what is waiting, what was sent, held back or failed, and how many tries it took; a Send now button; `scripts/notify.py` still works and now shares the same loop | the customer is told when their shipment moves, without anybody at Alok Ingots remembering a command | **Done, deployed 15 Sep 2026** |
 | 34 | Sign-in links that last a day (`feature/step34-longer-signin-links`, `feature/step35-single-use-default`) | `MAGIC_LINK_TTL_SECONDS` is 24 hours, not 15 minutes. A link is still spent on first use: `MAGIC_LINK_SINGLE_USE` defaults true, and false is there if email scanners ever do start spending links. `GET /api/sign-in-options` now tells the screens the rules so they cannot state them wrongly | the link in the inbox still works the next morning; the email and the sign-in screen say what is actually true | **Done, deployed 15 Sep 2026** |
 | 35 | Track the box, not the ship (`feature/step35-container-tracking`) | a Shipping line field on the shipment form and a `carrier` column in the CSV importer; a per-carrier registry of tracking URLs, each overridable from `.env`; Evergreen Line first | a **Track container** button on each shipment, opening the carrier's own page by B/L or container number, with the carrier's search page as the fallback that always works | **Built, not deployed**; Evergreen's deep link still unverified |
+| 36 | The map on the page, and tracking for staff (`feature/step36-live-vessel-map`) | a **Track** button on each shipment row opens the same map and the same buttons the customer sees, built by the same function, so nobody needs a customer login to follow a shipment | the vessel's live position embedded in the order detail rather than behind a link, the MarineTraffic link kept as the fallback, and Evergreen's **Track container** button now opening its search page with the B/L and container number shown beside it to copy | **Built, not deployed**; the map frame has never been opened in a browser |
 
 ### Still to build, both sides
 
 | Step | Admin Console side | Customer Portal side |
 | ---- | ------------------ | -------------------- |
-| **36 — Shipping details that have nowhere to go** | fields for what the Bill of Lading holds and the portal cannot store: customer address and EORI number, the customer contact's name and email without creating them a login, order date and Shipping Bill number, load and discharge ports, ETD/ETA where they are known, voyage number and seal number, container size, and gross weight beside net | the route and the dates on the order detail, instead of only what the carrier's page happens to show |
+| **37 — Shipping details that have nowhere to go** | fields for what the Bill of Lading holds and the portal cannot store: customer address and EORI number, the customer contact's name and email without creating them a login, order date and Shipping Bill number, load and discharge ports, ETD/ETA where they are known, voyage number and seal number, container size, and gross weight beside net | the route and the dates on the order detail, instead of only what the carrier's page happens to show |
 | **Photos from the Bundle app** | pull photos from the existing Bundle Inspection app instead of uploading them by hand | (gallery already built in step 15) |
 | **Notifications — WhatsApp** | choose which statuses message which channel | receives the WhatsApp message |
 | **SAP/PMS auto-pull** | replace the hand-run CSV import with a scheduled pull | — |
@@ -654,6 +663,7 @@ Update after every step: what was done, and the commit.
 | 2026-09-12 | **Reusable sign-in links reversed, on Alok's decision** (`feature/step35-single-use-default`, restore tag `pre-single-use-default`). Reusable links had been asked for so that email scanners could not spend a link before the customer reached it. Shown that this portal has never had that problem — the token travels in the URL fragment, which no browser sends to a server, and redeeming waits for a button press, both built in step 26 for exactly this — Alok chose single use. `MAGIC_LINK_SINGLE_USE` now defaults to true. **The 24-hour expiry stays**, which is what actually fixed the reliability complaint: a customer reading the email next morning no longer finds a dead link. Reusable is still one environment variable away and is kept tested, so the way out exists if a real scanner problem ever appears. A new test pins the reason single use is safe here — that the emailed address carries no token before the “#” and that fetching it leaves the link unused — so the property cannot quietly stop being true. Proved by 236 tests all passing, the frontend build and lint clean, and a live run against a throwaway database and a local mail sink: the portal and the email both say “works once, within 24 hours” and no longer mention reuse, the stored link lasts exactly one day, the first press signed in and the second was refused. **Not deployed** | _this commit_ |
 | 2026-09-15 | **`dev@de723f0` deployed to the live server, by Alok.** `safe-deploy.sh` ran clean, the schema reported "Already up to date at 0011", the API and website came up healthy, and magic-link sign-in was confirmed working on the live site. This cleared the whole backlog in one go: steps 28, 29, 31, 32, 33 and 34 and the usability pass are now live, and migrations 0009 and 0011 are applied on the server. `NOTIFY_ONLY_EMAILS` is set to the owner's address there, so step 33's automatic sender — which is now running on the server — can reach nobody else whatever is in the database. The two conditions that had gated this deploy since 11 Sep are both met and are now history. No real customer has signed in yet | (deploy, no commit) |
 | 2026-09-15 | **Step 35 — Track the box, not the ship** (`feature/step35-container-tracking`, restore tag `pre-container-tracking`). The vessel link answers "where is the ship", which is not what a buyer asks, so each shipment now also carries the shipping line and a **Track container** button that opens that carrier's own tracking page. Migration 0012 adds one nullable `shipments.carrier`, free text, left empty on every existing row rather than guessed from a B/L prefix. A per-carrier registry in `app/services/tracking.py` holds up to three URLs per line — by Bill of Lading, by container number, and the carrier's search page with nothing filled in — and adding a carrier is one entry and no code. Every URL can be corrected from `.env` (`CARRIER_URL_<CARRIER>_<BL|CONTAINER|HOME>`), because a carrier can change its tracking URL without warning and a deploy should not be the only way to follow. The B/L is preferred over the container, both being identifiers of the shipment but the B/L the carrier's own reference for that consignment. A container number failing its ISO 6346 check digit is never deep-linked, the same rule the staff form already applies. Carrier matching is loose — case, spacing and punctuation ignored, plus aliases — because staff copy the line off a Bill of Lading and will not type a code; an unrecognised line is stored and shown but gets no button, rather than a button leading nowhere. The customer side stays read-only and the server builds every URL, as the vessel link already did. Staff get a Shipping line field on the shipment form, the carrier on the orders screen summary, a `carrier` column in the CSV importer and template, and a Carrier entry in the activity record. **Evergreen Line is the only carrier in the registry, and its two deep links are unverified**: ShipmentLink refused every connection from this machine and its tracking form has historically been a POST, so the design always keeps a `home` fallback and tells the screen whether the link was prefilled — the button works either way and says "paste the container number" when it has to. Proved by 25 new database-free tests passing (registry matching, B/L preferred over container, a bad check digit never linked, the always-safe fallback, URL escaping, `.env` overriding a built-in and an empty override not deleting one) and a clean frontend build. **The full suite and the end-to-end half have not been run: Docker Desktop will not start on this PC, so there is no database.** 6 further end-to-end tests are written and waiting for one, taking the suite to 267 collected. Not deployed | `161a32f` + _this commit_ |
+| 2026-09-15 | **Step 36 — The map on the page, staff tracking, and Evergreen's fallback** (`feature/step36-live-vessel-map`, restore tag `pre-carrier-fallback`). Three things, one branch. **The vessel's live position is now embedded in the order detail** instead of only behind a link, with the caption "Live position of the vessel — may pause when the ship is out of range." and the MarineTraffic link kept underneath as the fallback. It is an iframe the portal builds itself, from `VESSEL_MAP_URL_TEMPLATE`, and deliberately **not** VesselFinder's documented `<script>`: that script writes nothing but this iframe, and running it here would put third-party JavaScript in the portal's own origin, where the customer's sign-in token lives — a cross-origin frame cannot reach it. **No MMSI is stored and none is needed**: VesselFinder resolves the IMO the portal already holds, checked against WAN HAI 359 (IMO 9554092), whose embed answered with MMSI 563182400 and `configError:""`. **Evergreen's deep link is gone**, confirmed broken: both candidates opened on ShipmentLink's blank Quick Tracking form, so the button opens that search page and the screen shows the B/L and container number beside it, each with a one-tap Copy that degrades to selectable text when the clipboard is refused. **Staff get the same map and the same buttons** behind a per-shipment Track toggle — shut by default, because an order with a dozen lots would otherwise load a dozen frames — and both halves now read from one `tracking.links_for()`, so a customer and the member of staff on the phone to them cannot be shown different positions; a test asserts all seven link fields match across the two endpoints. **No migration.** **No CSP change was needed and none was made**: the portal sends no Content-Security-Policy, so nothing blocks the frame; `deploy/Caddyfile` now carries a comment saying what `frame-src` must name if one is ever added, and `X-Frame-Options DENY` — which is about the portal being framed by others — stays untouched. Proved by 38 database-free tests passing (46 in the file, 282 collected), a clean frontend build and a clean `npm run lint`, and over HTTP: the exact URL the portal builds returns 200, names the right vessel, and sends no `X-Frame-Options`. **Not proved: the map has never been opened in a browser** — Docker Desktop will not start on this PC, so the 8 end-to-end tests and the whole suite are unrun, and nothing has confirmed the frame draws, sizes or scrolls on a real screen. Not deployed | _this commit_ |
 
 ### Design decisions worth remembering
 
@@ -1206,19 +1216,46 @@ Update after every step: what was done, and the commit.
   not read the carrier's answer, so it still cannot show a live position or
   ETA on its own screens, and nothing confirms the box is aboard. Real
   shipment-level data inside the portal still needs a paid carrier API.
-- **Evergreen's two deep links have never been proved to work.** They were
-  written from this machine, which ShipmentLink refused every connection
-  from (`ECONNREFUSED` on both `www.shipmentlink.com` and
-  `ct.shipmentlink.com`), and ShipmentLink's tracking form has historically
-  been a POST — in which case a GET deep link lands on an empty search box
-  rather than the shipment. The design survives that: every carrier entry
-  has a `home` URL that always works, and the server tells the screen
-  whether the link was prefilled, so the button says "paste the container
-  number" when it has to. **Open one in a browser and check before trusting
-  it.** If it is wrong, either set `CARRIER_URL_EVERGREEN_BL` and
-  `CARRIER_URL_EVERGREEN_CONTAINER` in the server's `.env` to the real URLs
-  — no deploy needed — or drop both templates to `None` in
-  `app/services/tracking.py` and the button falls back to the search page.
+- **The live map frame has never been opened in a browser.** Everything
+  about it was proved over HTTP instead: the embed URL the portal builds
+  returns 200, resolves IMO 9554092 to WAN HAI 359 (MMSI 563182400) with
+  `configError:""`, and sends no `X-Frame-Options`, so framing is allowed.
+  What that does not prove is that the map draws, sizes or scrolls properly
+  on a real screen, which needs a browser and a running portal. Docker
+  Desktop will not start on this PC, so it could not be tried.
+- **No Content-Security-Policy is set on the portal**, which is why the map
+  frame is not blocked today. If a CSP is ever added — and it is worth
+  adding — it must name the map provider in `frame-src` or the frame goes
+  blank with no error in any log. There is a comment in `deploy/Caddyfile`
+  where whoever does it will be looking. `X-Frame-Options DENY` is about
+  the portal being framed by others and is unrelated: it stays.
+- **The map is a third-party frame, and it can see that somebody is looking.**
+  VesselFinder is sent the vessel's IMO and the portal's base address, and
+  runs Google Analytics inside its own frame. It is not told which order or
+  which customer — the referring URL passed is deliberately the portal's
+  front door and not the page being viewed — but a customer opening an
+  order does cause a request to VesselFinder. It loads no script into the
+  portal's own page, which is the part that would have mattered: a script
+  there could read the sign-in token out of `sessionStorage`, and a
+  cross-origin frame cannot.
+- **The map frame has no `sandbox` attribute**, matching what VesselFinder's
+  own documented embed script writes. Adding `sandbox` would block things
+  like a top-level redirect out of the frame, and is worth trying — but it
+  can also stop the map rendering, and that could not be tested here.
+- **Evergreen's deep links are confirmed not to work**, and are gone. Both
+  candidates were opened against the real Bill of Lading on 15 Sep 2026 and
+  both landed on ShipmentLink's blank Quick Tracking form, which is what a
+  POST-only form does with a GET. The button now opens that search page and
+  the portal shows the B/L and container number beside it to copy. If
+  Evergreen ever offers a real GET link, `CARRIER_URL_EVERGREEN_BL` in
+  `.env` turns it back on with no release. Note the asymmetry: `.env` can
+  add or replace a template but never remove one — an empty value is
+  ignored on purpose, so a half-written line cannot delete a working link —
+  so switching a carrier *back* to its search page is a code change.
+- **Copying a number can fail and says so.** The Copy button needs the
+  clipboard API, which wants a secure context; the numbers are always on
+  screen as selectable text, and the button changes to "Select it" with an
+  explanation when the browser refuses. Untested in a browser.
 - **Only Evergreen Line is in the registry.** Any other carrier typed on the
   form is stored and shown, and simply gets no button. That is deliberate —
   a button labelled with a line the portal cannot link to is a dead end —

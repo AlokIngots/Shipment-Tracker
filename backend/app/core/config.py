@@ -205,6 +205,29 @@ CARRIER_URL_OVERRIDES = {
 }
 
 
+# The live vessel map shown on the page itself, rather than behind a link.
+# VesselFinder's free embed is documented as a <script> that writes an
+# iframe; the iframe is all it writes, so the portal builds the iframe URL
+# itself and loads no third-party JavaScript into its own page. That is not
+# a shortcut but the point: a script here would run in the portal's origin,
+# where the customer's sign-in token lives, while an iframe is a separate
+# origin the browser keeps to itself.
+#
+# {imo} is the vessel, {ra} the referring page VesselFinder's embed expects.
+# `lat`, `lon` and `zoom` only set the opening view; the IMO decides which
+# ship is shown, and VesselFinder resolves it to the vessel server-side.
+VESSEL_MAP_URL_TEMPLATE = os.getenv(
+    "VESSEL_MAP_URL_TEMPLATE",
+    "https://www.vesselfinder.com/aismap"
+    "?zoom=7&lat=undefined&lon=undefined&width=100%25&height=420"
+    "&names=true&imo={imo}&track=true"
+    "&fleet=false&fleet_name=false&fleet_hide_old_positions=false"
+    "&clicktoact=false&store_pos=true&ra={ra}",
+).strip()
+
+VESSEL_MAP_PROVIDER_NAME = os.getenv("VESSEL_MAP_PROVIDER_NAME", "VesselFinder").strip()
+
+
 # ------------------------------------------------------------- notifications
 
 # Off by default, deliberately. With SEND_EMAILS false, messages are built

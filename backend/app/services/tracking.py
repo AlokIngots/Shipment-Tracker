@@ -35,6 +35,22 @@ search box next to a container number the customer can paste -- so when a
 carrier has no deep link, or the shipment has neither number, the button
 still goes somewhere useful and `prefilled` says which it is, so the screen
 can word itself honestly.
+
+The map on the page
+-------------------
+
+A link sends somebody away from the portal to find out something the portal
+could have shown them, so the vessel's position is also embedded in the page
+as a small live map. `vessel_map_url` builds the frame's address from a
+template, `VESSEL_MAP_URL_TEMPLATE`, exactly as the link above is built.
+
+It is an iframe and deliberately not the provider's own <script>. The script
+VesselFinder documents writes nothing but this iframe, and running it here
+would put third-party JavaScript in the portal's own origin -- where the
+customer's sign-in token lives. A cross-origin frame cannot reach either.
+
+The link stays alongside the map, because a frame can be blocked, slow or
+simply not what somebody wants.
 """
 
 from dataclasses import dataclass
@@ -42,24 +58,31 @@ from urllib.parse import quote
 
 from app.core.config import (
     CARRIER_URL_OVERRIDES,
+    PORTAL_URL,
     TRACKING_PROVIDER_NAME,
     TRACKING_URL_TEMPLATE,
+    VESSEL_MAP_PROVIDER_NAME,
+    VESSEL_MAP_URL_TEMPLATE,
 )
 
 __all__ = [
     "CARRIERS",
     "CarrierTracking",
+    "ShipmentLinks",
     "TRACKING_PROVIDER_NAME",
     "TRACKING_URL_TEMPLATE",
+    "VESSEL_MAP_PROVIDER_NAME",
     "carrier_key",
     "carrier_name",
     "container_tracking",
     "known_carriers",
+    "links_for",
     "tidy_carrier",
     "tidy_container_no",
     "tracking_url",
     "valid_container_no",
     "valid_imo",
+    "vessel_map_url",
 ]
 
 
@@ -173,22 +196,25 @@ class Carrier:
 
 # One entry per carrier. Adding a line is an entry here and nothing else.
 #
-# WARNING, Evergreen's two deep links are UNVERIFIED. ShipmentLink refused
-# every connection from the machine this was written on (ECONNREFUSED on both
-# www.shipmentlink.com and ct.shipmentlink.com), and its tracking form has
-# historically been a POST, in which case a GET deep link will land on an
-# empty search box rather than the shipment. That is why `home` is set and
-# why the caller is told whether a link was prefilled: the button works
-# either way. Confirm the deep link in a browser before trusting it, and if
-# it does not work, either drop the two templates to None or correct them
-# from .env -- no deploy needed for the second.
+# Evergreen has NO deep link, and that is a finding rather than an omission.
+# Both candidate GET URLs were tried against the real Bill of Lading on
+# 15 Sep 2026 and both landed on ShipmentLink's blank Quick Tracking form,
+# which is what a POST-only tracking form does with a GET. A button that
+# opens a blank form having promised the shipment is worse than one that
+# says so, so `bl` and `container` are None and the search page stands on
+# its own -- with the two numbers shown beside it to copy.
+#
+# If Evergreen ever offers a real GET deep link, it needs no release:
+# set CARRIER_URL_EVERGREEN_BL (or _CONTAINER) in .env and it is used from
+# the next restart. Note that .env can only ADD or REPLACE a template, never
+# remove one -- an empty value is ignored on purpose, so that a half-written
+# line cannot silently delete a working link. Switching a carrier back to
+# the search page is therefore a change here, as this one was.
 _CARRIER_LIST = (
     Carrier(
         key="EVERGREEN",
         name="Evergreen Line",
         home="https://www.shipmentlink.com/servlet/TDB1_CargoTracking.do",
-        bl="https://www.shipmentlink.com/servlet/TDB1_CargoTracking.do?TYPE=BL&BL={bl}",
-        container="https://www.shipmentlink.com/servlet/TDB1_CargoTracking.do?TYPE=CT&CT={container}",
         aliases=("EVERGREENLINE", "EVERGREENMARINE", "EGLV"),
     ),
 )
@@ -313,4 +339,75 @@ def container_tracking(
         carrier_name=entry.name,
         prefilled=False,
         by="home",
+    )
+
+
+# ------------------------------------------------- the map on the page itself
+
+def vessel_map_url(imo_number: str | None) -> str | None:
+    """The embeddable live map for this vessel, or None if we cannot build one.
+
+    None for a missing or checksum-failing IMO number, on the same principle
+    as `tracking_url`: an empty map frame explains nothing, so the screen is
+    better off not drawing one.
+
+    VesselFinder resolves the IMO to the vessel itself, so no MMSI is needed
+    and none is stored -- checked against WAN HAI 359 (IMO 9554092), which
+    the embed answered with MMSI 563182400 and no configuration error.
+    """
+    if not imo_number or not valid_imo(imo_number):
+        return None
+    if not VESSEL_MAP_URL_TEMPLATE or "{imo}" not in VESSEL_MAP_URL_TEMPLATE:
+        return None
+    return VESSEL_MAP_URL_TEMPLATE.format(
+        imo=quote(imo_number.strip(), safe=""),
+        # The portal's own address, not the page the customer happens to be
+        # on: the embed wants a referring URL, and the base one tells
+        # VesselFinder nothing about which order is being looked at.
+        ra=quote(PORTAL_URL, safe=""),
+    )
+
+
+# ------------------------------------------- everything a shipment can offer
+
+@dataclass(frozen=True)
+class ShipmentLinks:
+    """Every tracking link for one shipment, built in one place.
+
+    Both halves of the portal show the same three things, and they must not
+    drift: a customer and the member of staff on the phone to them need to
+    be looking at the same position. So neither router works any of this out
+    for itself -- they both ask here.
+    """
+
+    # The vessel's live position, embedded in the page.
+    vessel_map_url: str | None
+    vessel_map_provider: str | None
+    # The same vessel on the provider's own site, kept as the fallback for
+    # when an embedded frame is blocked, slow, or simply not what is wanted.
+    tracking_url: str | None
+    tracking_provider: str | None
+    # The carrier's own page: where the box is, not where the ship is.
+    container_tracking_url: str | None
+    container_tracking_carrier: str | None
+    container_tracking_prefilled: bool
+
+
+def links_for(shipment) -> ShipmentLinks:
+    """Every tracking link for a shipment row, for either half of the portal."""
+    vessel_map = vessel_map_url(shipment.imo_number)
+    vessel_link = tracking_url(shipment.imo_number)
+    box = container_tracking(
+        getattr(shipment, "carrier", None),
+        shipment.container_no,
+        shipment.bl_number,
+    )
+    return ShipmentLinks(
+        vessel_map_url=vessel_map,
+        vessel_map_provider=VESSEL_MAP_PROVIDER_NAME if vessel_map else None,
+        tracking_url=vessel_link,
+        tracking_provider=TRACKING_PROVIDER_NAME if vessel_link else None,
+        container_tracking_url=box.url if box else None,
+        container_tracking_carrier=box.carrier_name if box else None,
+        container_tracking_prefilled=bool(box and box.prefilled),
     )

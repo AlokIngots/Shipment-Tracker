@@ -5,8 +5,17 @@ import StatusPill, { PART_SHIPPED } from '../../components/StatusPill'
 import { describeError, fmtDate, plural } from '../../lib/format'
 import OrderForm from './OrderForm'
 import ShipmentForm from './ShipmentForm'
+import { TrackActions, VesselMap } from '../../components/Tracking'
 
 function ShipmentRow({ shipment, onEdit, onRemove, onDocuments, busy }) {
+  // Shut by default. An order can hold many lots, and a live map for each of
+  // them would have the staff list loading a dozen frames nobody asked for.
+  const [tracking, setTracking] = useState(false)
+  const canTrack = Boolean(
+    shipment.vessel_map_url ||
+      shipment.tracking_url ||
+      shipment.container_tracking_url,
+  )
   // Only what is known, joined into one line. A row of dashes before a vessel
   // is booked reads as broken, when all it means is "not yet".
   const facts = [
@@ -30,6 +39,16 @@ function ShipmentRow({ shipment, onEdit, onRemove, onDocuments, busy }) {
       </div>
       <StatusPill status={shipment.status} />
       <div className="docrow-actions">
+        {canTrack && (
+          <button
+            type="button"
+            className="minibutton"
+            onClick={() => setTracking((open) => !open)}
+            aria-expanded={tracking}
+          >
+            {tracking ? 'Hide tracking' : 'Track'}
+          </button>
+        )}
         <button type="button" className="minibutton" onClick={onEdit} disabled={busy}>
           Edit
         </button>
@@ -45,6 +64,16 @@ function ShipmentRow({ shipment, onEdit, onRemove, onDocuments, busy }) {
           Remove
         </button>
       </div>
+
+      {/* The same map and the same buttons the customer gets, from the same
+          function on the server -- so staff on the phone to a customer are
+          not looking at a different position. */}
+      {tracking && (
+        <div className="shiprow-tracking">
+          <VesselMap shipment={shipment} />
+          <TrackActions shipment={shipment} />
+        </div>
+      )}
     </div>
   )
 }
