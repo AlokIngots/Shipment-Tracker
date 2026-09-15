@@ -4,6 +4,7 @@ import PhotoGallery from '../components/PhotoGallery'
 import StatusPill from '../components/StatusPill'
 import StatusTrack from '../components/StatusTrack'
 import Toolbar from '../components/Toolbar'
+import { TrackActions, VesselMap } from '../components/Tracking'
 import { DASH, fmtDate } from '../lib/format'
 
 function DocumentRow({ doc }) {
@@ -73,7 +74,10 @@ function Tracking({ shipment }) {
     <div className="docs">
       <span className="docs-label">Track your shipment</span>
 
-      {facts.length === 0 && !shipment.tracking_url && !shipment.container_tracking_url && (
+      {facts.length === 0 &&
+        !shipment.tracking_url &&
+        !shipment.container_tracking_url &&
+        !shipment.vessel_map_url && (
         <p className="docs-none">
           The vessel, container and dates will appear here once this shipment
           is booked.
@@ -91,40 +95,9 @@ function Tracking({ shipment }) {
         </dl>
       )}
 
-      {/* The box first, the ship second. "Where is my container" is the
-          question a buyer actually asks; where the vessel happens to be is
-          interesting, but it cannot tell them the box is aboard. */}
-      {shipment.container_tracking_url && (
-        <p className="track-line">
-          <a
-            className="track track--button track--primary"
-            href={shipment.container_tracking_url}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Track container
-          </a>
-          <span className="track-by">
-            {shipment.container_tracking_prefilled
-              ? `Opens ${shipment.container_tracking_carrier} in a new tab`
-              : `Opens ${shipment.container_tracking_carrier} in a new tab — paste the container number above`}
-          </span>
-        </p>
-      )}
+      <VesselMap shipment={shipment} />
 
-      {shipment.tracking_url && (
-        <p className="track-line">
-          <a
-            className="track track--button"
-            href={shipment.tracking_url}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            See where the vessel is now
-          </a>
-          <span className="track-by">Opens {shipment.tracking_provider} in a new tab</span>
-        </p>
-      )}
+      <TrackActions shipment={shipment} />
     </div>
   )
 }

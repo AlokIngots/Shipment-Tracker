@@ -68,8 +68,13 @@ class ShipmentOut(BaseModel):
     carrier: str | None
     etd: date | None
     eta: date | None
+    # The live map embedded in the page. None when there is no usable IMO
+    # number, so the screen draws no empty frame.
+    vessel_map_url: str | None = None
+    vessel_map_provider: str | None = None
     # Built by the server so the provider can change without touching the UI.
     # None when there is no usable IMO number, so the UI shows no dead link.
+    # Kept alongside the map: a frame can be blocked or slow.
     tracking_url: str | None = None
     tracking_provider: str | None = None
     # The carrier's own tracking page -- where the box is, not the ship.

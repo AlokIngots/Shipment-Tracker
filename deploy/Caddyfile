@@ -43,7 +43,19 @@
 
 	header {
 		X-Content-Type-Options nosniff
+		# Stops anyone framing the portal. It says nothing about what the
+		# portal may frame itself, so the live vessel map is unaffected.
 		X-Frame-Options DENY
 		Referrer-Policy strict-origin-when-cross-origin
 	}
+
+	# No Content-Security-Policy is set, so nothing blocks the live vessel
+	# map today. If one is ever added -- worth doing -- it must allow the map
+	# provider or the frame goes blank with no error anywhere:
+	#
+	#   frame-src 'self' https://www.vesselfinder.com;
+	#
+	# and whatever host VESSEL_MAP_URL_TEMPLATE points at, if it is changed.
+	# The map is an iframe and loads no third-party script into the portal's
+	# own page, so script-src needs nothing added for it.
 }

@@ -67,15 +67,10 @@ def get_order(
     shipments = []
     for s in sorted(order.shipments, key=lambda s: s.id):
         ship = ShipmentOut.model_validate(s)
-        ship.tracking_url = tracking.tracking_url(s.imo_number)
-        ship.tracking_provider = (
-            tracking.TRACKING_PROVIDER_NAME if ship.tracking_url else None
-        )
-        box = tracking.container_tracking(s.carrier, s.container_no, s.bl_number)
-        if box is not None:
-            ship.container_tracking_url = box.url
-            ship.container_tracking_carrier = box.carrier_name
-            ship.container_tracking_prefilled = box.prefilled
+        # Both halves of the portal ask the same function, so a customer and
+        # the member of staff on the phone to them see the same position.
+        for field, value in vars(tracking.links_for(s)).items():
+            setattr(ship, field, value)
         ship.documents = [
             DocumentOut(
                 id=d.id,

@@ -86,6 +86,7 @@ def staff_order_out(order: Order, customer: Customer) -> StaffOrderOut:
                 etd=s.etd,
                 eta=s.eta,
                 document_count=len(s.documents),
+                **vars(tracking.links_for(s)),
             )
             for s in sorted(order.shipments, key=lambda s: s.id)
         ],
