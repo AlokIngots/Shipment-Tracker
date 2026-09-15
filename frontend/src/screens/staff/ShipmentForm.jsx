@@ -31,6 +31,7 @@ export default function ShipmentForm({ orderId, shipment, onSaved, onCancel }) {
     imo_number: shipment?.imo_number ?? '',
     container_no: shipment?.container_no ?? '',
     bl_number: shipment?.bl_number ?? '',
+    carrier: shipment?.carrier ?? '',
     etd: shipment?.etd ?? '',
     eta: shipment?.eta ?? '',
   }))
@@ -74,6 +75,7 @@ export default function ShipmentForm({ orderId, shipment, onSaved, onCancel }) {
       imo_number: blankToNull(form.imo_number),
       container_no: blankToNull(form.container_no),
       bl_number: blankToNull(form.bl_number),
+      carrier: blankToNull(form.carrier),
       etd: blankToNull(form.etd),
       eta: blankToNull(form.eta),
     }
@@ -172,6 +174,18 @@ export default function ShipmentForm({ orderId, shipment, onSaved, onCancel }) {
           onChange={set('bl_number')}
           maxLength={60}
           hint="Exactly as the shipping line wrote it."
+        />
+
+        {/* Free text on purpose. The portal matches it loosely against the
+            lines it can link to, and keeps one it does not recognise --
+            which is still true, it just gets no Track container button. */}
+        <TextField
+          label="Shipping line"
+          value={form.carrier}
+          onChange={set('carrier')}
+          maxLength={60}
+          placeholder="Evergreen Line"
+          hint="From the Bill of Lading. It gives the customer a Track container button."
         />
 
         <TextField

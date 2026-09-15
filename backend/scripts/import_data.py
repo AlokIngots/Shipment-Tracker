@@ -45,6 +45,10 @@ shipment columns left blank. Order fields repeat on every row of that order.
     imo_number          optional   7 digits, checksum validated
     container_no        optional   ISO 6346, e.g. MSCU1234566, check digit validated
     bl_number           optional   the carrier's Bill of Lading number, any format
+    carrier             optional   the shipping line, e.g. Evergreen Line. Gives
+                                   the customer a link to the carrier's own
+                                   container tracking; an unknown line is still
+                                   stored, it simply gets no link
     etd                 optional   YYYY-MM-DD
     eta                 optional   YYYY-MM-DD
 
@@ -62,7 +66,12 @@ from app.core.database import SessionLocal
 from app.models import Customer, Order, Shipment
 from sqlalchemy import select
 from app.services import audit, statuses
-from app.services.tracking import tidy_container_no, valid_container_no, valid_imo
+from app.services.tracking import (
+    tidy_carrier,
+    tidy_container_no,
+    valid_container_no,
+    valid_imo,
+)
 
 REQUIRED_COLUMNS = [
     "customer_code",
@@ -75,7 +84,8 @@ ALL_COLUMNS = [
     "sales_order_no", "customer_po", "grade", "description",
     "ordered_qty", "unit", "order_status",
     "shipment_no", "dispatched_qty", "shipment_status", "last_shipment",
-    "vessel_name", "imo_number", "container_no", "bl_number", "etd", "eta",
+    "vessel_name", "imo_number", "container_no", "bl_number", "carrier",
+    "etd", "eta",
 ]
 
 YES = {"yes", "y", "true", "1", "x"}
@@ -141,7 +151,7 @@ def check_row(row: dict, line: int) -> tuple[dict, list[str]]:
     if not data["shipment_no"] and any(
         data[f]
         for f in ("vessel_name", "imo_number", "container_no", "bl_number",
-                  "shipment_status", "last_shipment")
+                  "carrier", "shipment_status", "last_shipment")
     ):
         errors.append("shipment details given without a shipment_no")
 
@@ -303,6 +313,7 @@ def apply_rows(rows: list[dict], dry_run: bool, file_name: str = "a CSV file") -
                     "imo_number": data["imo_number"] or None,
                     "container_no": data["container_no"] or None,
                     "bl_number": data["bl_number"] or None,
+                    "carrier": tidy_carrier(data["carrier"]),
                     "etd": data["etd"],
                     "eta": data["eta"],
                 }

@@ -18,6 +18,7 @@ function ShipmentRow({ shipment, onEdit, onRemove, onDocuments, busy }) {
     shipment.eta && `arrives ${fmtDate(shipment.eta)}`,
     shipment.container_no && `container ${shipment.container_no}`,
     shipment.bl_number && `B/L ${shipment.bl_number}`,
+    shipment.carrier,
     plural(shipment.document_count, 'document'),
   ].filter(Boolean)
 

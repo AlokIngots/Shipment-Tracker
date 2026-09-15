@@ -82,6 +82,7 @@ def staff_order_out(order: Order, customer: Customer) -> StaffOrderOut:
                 imo_number=s.imo_number,
                 container_no=s.container_no,
                 bl_number=s.bl_number,
+                carrier=s.carrier,
                 etd=s.etd,
                 eta=s.eta,
                 document_count=len(s.documents),
@@ -185,6 +186,11 @@ def apply_shipment(shipment: Shipment, body: ShipmentIn, db: Session) -> None:
     # No format to check: every carrier numbers its Bills of Lading its own
     # way, so refusing anything here would only refuse real ones.
     shipment.bl_number = tidy(body.bl_number)
+    # Stored as typed, matched loosely. An unrecognised line is kept rather
+    # than refused -- it is still true, it just gets no tracking button, and
+    # refusing it would mean the portal had to know every carrier on earth
+    # before staff could record the one in front of them.
+    shipment.carrier = tracking.tidy_carrier(body.carrier)
     shipment.etd = body.etd
     shipment.eta = body.eta
 

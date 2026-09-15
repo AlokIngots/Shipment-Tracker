@@ -71,6 +71,11 @@ def get_order(
         ship.tracking_provider = (
             tracking.TRACKING_PROVIDER_NAME if ship.tracking_url else None
         )
+        box = tracking.container_tracking(s.carrier, s.container_no, s.bl_number)
+        if box is not None:
+            ship.container_tracking_url = box.url
+            ship.container_tracking_carrier = box.carrier_name
+            ship.container_tracking_prefilled = box.prefilled
         ship.documents = [
             DocumentOut(
                 id=d.id,

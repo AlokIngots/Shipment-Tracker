@@ -64,6 +64,7 @@ function Tracking({ shipment }) {
     ['Vessel IMO number', shipment.imo_number],
     ['Container number', shipment.container_no],
     ['Bill of Lading number', shipment.bl_number],
+    ['Shipping line', shipment.carrier],
     ['Departure date', shipment.etd && fmtDate(shipment.etd)],
     ['Expected arrival', shipment.eta && fmtDate(shipment.eta)],
   ].filter(([, value]) => value)
@@ -72,7 +73,7 @@ function Tracking({ shipment }) {
     <div className="docs">
       <span className="docs-label">Track your shipment</span>
 
-      {facts.length === 0 && !shipment.tracking_url && (
+      {facts.length === 0 && !shipment.tracking_url && !shipment.container_tracking_url && (
         <p className="docs-none">
           The vessel, container and dates will appear here once this shipment
           is booked.
@@ -88,6 +89,27 @@ function Tracking({ shipment }) {
             </div>
           ))}
         </dl>
+      )}
+
+      {/* The box first, the ship second. "Where is my container" is the
+          question a buyer actually asks; where the vessel happens to be is
+          interesting, but it cannot tell them the box is aboard. */}
+      {shipment.container_tracking_url && (
+        <p className="track-line">
+          <a
+            className="track track--button track--primary"
+            href={shipment.container_tracking_url}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Track container
+          </a>
+          <span className="track-by">
+            {shipment.container_tracking_prefilled
+              ? `Opens ${shipment.container_tracking_carrier} in a new tab`
+              : `Opens ${shipment.container_tracking_carrier} in a new tab — paste the container number above`}
+          </span>
+        </p>
       )}
 
       {shipment.tracking_url && (
