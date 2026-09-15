@@ -1,0 +1,77 @@
+# Run the backend test suite on every push and pull request.
+#
+# The point of committing tests was that anybody can re-run them. This is
+# what makes that automatic: a pull request that breaks the read-only rule,
+# the container check digit, or the "no route can create staff" boundary
+# fails here before anyone has to remember to look.
+
+name: tests
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+
+    services:
+      # The suite runs against real PostgreSQL, never SQLite. SQLite would
+      # quietly disagree about Numeric, ON DELETE CASCADE and unique
+      # constraints -- exactly the class of bug the tests exist to catch.
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: portal
+          POSTGRES_PASSWORD: portal
+          POSTGRES_DB: portal
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U portal -d portal"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql+psycopg2://portal:portal@localhost:5432/portal
+      # Not a secret: this database is created and destroyed by this job and
+      # holds nothing. A real SECRET_KEY lives in .env on the server and is
+      # never committed.
+      SECRET_KEY: github-actions-throwaway-key-not-used-anywhere-real
+      SEND_EMAILS: "false"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
+
+      - name: Install dependencies
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Run the tests
+        working-directory: backend
+        run: python -m pytest
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+      - name: Build
+        working-directory: frontend
+        run: npm run build

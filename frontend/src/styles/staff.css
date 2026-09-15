@@ -1,0 +1,892 @@
+/* The Alok Ingots pages. */
+
+/* ---- staff document page ---- */
+
+.card--summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.summary {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--navy);
+}
+
+.checkline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.shipment-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding-bottom: 12px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+}
+
+.shipment-no {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--navy);
+}
+
+.shipment-sub {
+  margin: 3px 0 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+/* Wraps rather than squeezes. On a phone the buttons drop under the text
+   instead of crushing a file name or an email into a column a few letters
+   wide; 14rem is as narrow as the text is allowed to get first. */
+.docrow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.docrow:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+/* Green when the document is there, hollow when it is not: the whole page
+   can be read at a glance down this column. */
+.dot {
+  width: 9px;
+  height: 9px;
+  flex: none;
+  border-radius: 50%;
+  border: 1.5px solid var(--line);
+  background: #fff;
+}
+
+.dot--on {
+  border-color: var(--ok);
+  background: var(--ok);
+}
+
+.docrow-main {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1 1 14rem;
+}
+
+.docrow-type {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--navy);
+}
+
+.docrow-file {
+  font-size: 12px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.docrow-error {
+  font-size: 12px;
+  color: var(--bad);
+  font-weight: 500;
+}
+
+.docrow-actions {
+  display: flex;
+  gap: 8px;
+  flex: none;
+  /* Keeps the buttons on the right when they have wrapped onto a line of
+     their own. */
+  margin-left: auto;
+}
+
+.minibutton {
+  display: inline-block;
+  padding: 5px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--navy);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.minibutton:hover {
+  background: #eef0f6;
+}
+
+.minibutton--quiet {
+  color: var(--muted);
+}
+
+.minibutton--off {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* ---- staff: quick actions ---- */
+
+/* The four jobs staff do most, above the tabs, so none of them depends on
+   knowing which tab it lives under. Outlined, not filled: they sit above
+   every page and must not shout louder than the page's own main button. */
+.quickbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: -4px 0 16px;
+}
+
+.quick {
+  padding: 8px 14px;
+  border: 1px solid var(--navy);
+  border-radius: 7px;
+  background: #fff;
+  color: var(--navy);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.quick::before {
+  content: "+ ";
+}
+
+.quick:hover {
+  background: var(--navy);
+  color: #fff;
+}
+
+.minibutton--primary {
+  border-color: var(--navy);
+  background: var(--navy);
+  color: #fff;
+}
+
+.minibutton--primary:hover {
+  background: var(--navy-soft);
+}
+
+/* ---- staff: start here ---- */
+
+.starthere {
+  border: 2px solid var(--navy);
+  margin-bottom: 14px;
+}
+
+.starthere-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--navy);
+}
+
+.starthere-lead {
+  margin: 4px 0 10px;
+  font-size: 13.5px;
+  color: var(--muted);
+}
+
+.startsteps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.startstep {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+}
+
+.startstep-num {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 2px solid var(--navy);
+  border-radius: 50%;
+  color: var(--navy);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.startstep--done .startstep-num {
+  border-color: var(--ok);
+  background: var(--ok);
+  color: #fff;
+}
+
+.startstep-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 14rem;
+}
+
+.startstep-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--navy);
+}
+
+.startstep--done .startstep-title {
+  color: var(--muted);
+}
+
+.startstep-flag {
+  font-style: normal;
+  font-weight: 500;
+  color: var(--ok);
+}
+
+.startstep-text {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.startstep .minibutton {
+  margin-left: auto;
+}
+
+/* A plain sentence of guidance between cards: what to do on this page. */
+.guide {
+  margin: 14px 0;
+  padding: 10px 14px;
+  border: 1px solid #d5def3;
+  border-radius: 7px;
+  background: #f1f5fd;
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.form-note {
+  margin: -8px 0 14px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+/* ---- staff: tabs ---- */
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  margin: 0 0 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.tab {
+  padding: 9px 16px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.tab:hover {
+  color: var(--navy);
+}
+
+.tab--on {
+  color: var(--navy);
+  border-bottom-color: var(--navy);
+  font-weight: 600;
+}
+
+/* ---- staff: orders page ---- */
+
+/* One shipment as a line under its order. Denser than the customer's view
+   of the same thing, because staff are scanning a list rather than reading
+   one order. */
+/* Wraps rather than squeezes, like .docrow. */
+.shiprow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.shiprow:last-of-type {
+  border-bottom: 0;
+}
+
+.shiprow-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 14rem;
+}
+
+.shiprow-no {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--navy);
+}
+
+.shiprow-facts {
+  font-size: 12px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.card-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-top: 12px;
+  margin-top: 4px;
+  border-top: 1px solid var(--line);
+}
+
+.totals--compact {
+  margin: 0 0 4px;
+}
+
+.message--quiet {
+  padding: 8px 0;
+  font-size: 12.5px;
+}
+
+/* ---- staff: the order and shipment forms ---- */
+
+.card--form {
+  border-color: var(--navy);
+}
+
+/* A shipment form opens inside an order's card, so it needs its own edge
+   without being a card in a card. */
+.card--form-inner {
+  padding: 14px;
+  margin: 10px 0;
+  border: 1px solid var(--navy);
+  border-radius: 8px;
+  background: #f7f8fb;
+}
+
+.form-title {
+  margin: 0 0 14px;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--navy);
+}
+
+/* Two columns on a desktop, one on a phone. The description spans both. */
+.formgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 0 16px;
+}
+
+.field--wide {
+  grid-column: 1 / -1;
+}
+
+.formgrid select,
+.formgrid textarea {
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  box-sizing: border-box;
+}
+
+.formgrid textarea {
+  resize: vertical;
+}
+
+.formgrid select:focus,
+.formgrid textarea:focus {
+  outline: none;
+  border-color: var(--navy);
+}
+
+/* Just under its box, never over it. It used to be pulled up by 8px, which
+   laid the text across the bottom edge of the input it describes. */
+.field-hint {
+  display: block;
+  margin: 5px 0 0;
+  font-size: 11.5px;
+  line-height: 1.4;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+/* A labelled line on a form that is not a text box: an order's status,
+   shown rather than chosen, and the Cancelled and Last shipment ticks.
+   Spaced like a .field, without .field's rule that turns every span inside
+   it into a label -- which would take the colour off a status pill. */
+.formnote {
+  margin-bottom: 16px;
+}
+
+.formnote-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+/* As tall as the text boxes beside it, so the tick lines up with them. */
+.checkline--form {
+  min-height: 40px;
+  font-size: 14px;
+  color: var(--ink);
+}
+
+/* The page's main button beside its one-line summary, not a bar the width
+   of the page that reads like a heading. */
+.card--summary .button {
+  width: auto;
+  margin-top: 0;
+}
+
+.form-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.form-actions .button {
+  width: auto;
+  margin: 0;
+}
+
+/* ---- material photos ---- */
+
+.photos {
+  margin-top: 14px;
+}
+
+.photorow {
+  padding: 12px 0 2px;
+  border-top: 1px solid var(--line);
+  margin-top: 4px;
+}
+
+.photorow-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.photorow-count {
+  color: var(--muted);
+  font-style: normal;
+  font-weight: 400;
+}
+
+.photorow-add {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.photorow-caption {
+  width: 240px;
+  max-width: 45vw;
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--ink);
+}
+
+.photorow-caption:focus {
+  outline: none;
+  border-color: var(--navy);
+}
+
+/* A row of thumbnails that scrolls sideways rather than wrapping into a
+   wall of pictures. Twenty photos of bundles should not push the documents
+   off the bottom of the screen. */
+.photostrip {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+}
+
+.photothumb {
+  position: relative;
+  flex: none;
+  width: 116px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+  overflow: hidden;
+  cursor: pointer;
+  text-align: left;
+}
+
+.photothumb:hover {
+  border-color: var(--navy);
+}
+
+.photothumb--staff {
+  cursor: default;
+}
+
+.photothumb-img {
+  display: block;
+  width: 100%;
+  height: 84px;
+  object-fit: cover;
+  background: #eef0f6;
+}
+
+.photothumb-cap {
+  display: block;
+  padding: 5px 7px;
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--muted);
+  /* Two lines at most, so one long caption cannot make its tile taller
+     than every other tile in the row. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.photothumb-remove {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(0, 12, 46, 0.72);
+  color: #fff;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.photothumb-remove:hover {
+  background: var(--bad);
+}
+
+.photothumb-remove:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* While the picture is being fetched, and if it cannot be. Both keep the
+   tile the same size, so the row does not jump about as photos arrive. */
+.photo--loading,
+.photo--failed {
+  display: block;
+  width: 100%;
+  height: 84px;
+  background: #eef0f6;
+}
+
+.photo--failed {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: var(--muted);
+  text-align: center;
+}
+
+/* ---- one photo, full size ---- */
+
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 12, 46, 0.82);
+}
+
+.lightbox-figure {
+  margin: 0;
+  max-width: 100%;
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.lightbox-img {
+  display: block;
+  max-width: 100%;
+  max-height: 78vh;
+  object-fit: contain;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.lightbox-cap {
+  color: #fff;
+  font-size: 13px;
+  text-align: center;
+}
+
+.lightbox-close {
+  position: absolute;
+  top: 14px;
+  right: 18px;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.lightbox-close:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* ---- customers & logins ---- */
+
+/* A one-time password. Loud on purpose: closing this box is the last time
+   anybody can read it. */
+.card--password {
+  border: 2px solid var(--navy);
+  background: #f7f8fb;
+}
+
+.password-value {
+  margin: 4px 0 14px;
+  padding: 14px 16px;
+  border: 1px dashed var(--navy);
+  border-radius: 7px;
+  background: #fff;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 20px;
+  letter-spacing: 0.04em;
+  color: var(--navy);
+  text-align: center;
+  overflow-wrap: anywhere;
+  /* Selectable with one gesture, for whoever does not trust the copy button. */
+  user-select: all;
+}
+
+.card--password .lead {
+  margin-bottom: 10px;
+}
+
+.shipment-sub code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: #eef0f6;
+  font-size: 11.5px;
+}
+
+.formgrid input:disabled {
+  background: #f2f3f7;
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+/* ---- staff: activity ---- */
+
+.activity-filter {
+  width: 280px;
+  max-width: 100%;
+  padding: 7px 11px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  box-sizing: border-box;
+}
+
+.activity-filter:focus {
+  outline: none;
+  border-color: var(--navy);
+}
+
+.activity-note {
+  margin: 0 0 6px;
+}
+
+.activity {
+  padding: 11px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.activity:last-child {
+  border-bottom: 0;
+}
+
+.activity-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.activity-summary {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--navy);
+  overflow-wrap: anywhere;
+}
+
+/* Lined-up digits, so a column of times can be read down the page. */
+.activity-when {
+  flex: none;
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.activity-who {
+  display: block;
+  margin-top: 1px;
+  font-size: 12px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.activity-changes {
+  margin: 6px 0 0;
+  padding: 0 0 0 16px;
+  font-size: 12px;
+  color: var(--ink);
+}
+
+.activity-changes li {
+  margin: 1px 0;
+  overflow-wrap: anywhere;
+}
+
+.activity-field {
+  color: var(--muted);
+}
+
+.activity-field::after {
+  content: ':';
+}
+
+/* ---- staff: messages to customers ---- */
+
+/* Built from the Activity row so the two read-only lists in the console look
+   like the same thing, because they are: a record of what happened. */
+.msg {
+  padding: 11px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.msg:last-child {
+  border-bottom: 0;
+}
+
+.msg-outcome {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+/* Why a message was held back, or how it failed. The server's own words --
+   an SMTP refusal, say -- so it can be long and must wrap rather than push
+   the card sideways. */
+.msg-detail {
+  font-size: 12px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.sender-facts {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12.5px;
+  color: var(--ink);
+}
+
+.sender-facts li {
+  margin: 3px 0;
+  overflow-wrap: anywhere;
+}
+
+/* ---- narrow screens ---- */
+
+/* The tabs do not fit in a row on a phone. Two by two, every one of them
+   stays on the screen, instead of the last sitting off its edge. */
+@media (max-width: 700px) {
+  .tabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    border-bottom: 0;
+  }
+
+  .tab {
+    padding: 10px 8px;
+    margin-bottom: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  /* Five tabs, two to a row, leaves the last one alone on its row. Give it
+     the whole width rather than leaving a gap beside it. */
+  .tab:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+
+  .tab--on {
+    border-bottom-color: var(--line);
+    box-shadow: inset 0 -2px 0 var(--navy);
+  }
+}
