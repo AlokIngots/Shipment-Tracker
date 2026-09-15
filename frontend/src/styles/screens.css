@@ -613,7 +613,14 @@
 
 .facts--tight {
   margin: 0;
-  gap: 14px 28px;
+  gap: 16px 32px;
+}
+
+/* Six shipment facts, each a short label over a short value. Left to a
+   plain flex wrap they line up raggedly; a minimum width lets them form
+   tidy columns on a laptop and two on a phone instead of one long list. */
+.facts--tight > div {
+  min-width: 10.5rem;
 }
 
 .docs-none {
@@ -621,30 +628,19 @@
   line-height: 1.5;
 }
 
-.track-line {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 12px;
-  margin: 14px 0 0;
-}
-
 .track--button {
   margin-left: 0;
-  padding: 7px 14px;
+  /* Tall enough to be a comfortable tap on a phone, where most customers
+     will open this, rather than the 3px pill the inline links use. */
+  padding: 11px 18px;
   border-color: var(--navy);
-  font-size: 13px;
+  font-size: 14px;
+  line-height: 1.2;
 }
 
-.track-by {
-  font-size: 12px;
-  color: var(--muted);
-}
-
-/* Two links sit here now: the container and the vessel. The container is the
-   one a buyer reaches for, so it is filled and the vessel stays outlined --
-   the hierarchy is the answer to "which of these do I want", drawn rather
-   than explained. Same navy either way; no new colour enters the palette. */
+/* One action, so it is filled rather than outlined: nothing is competing
+   with it and there is no doubt about what to press. Brand navy; no new
+   colour enters the palette. */
 .track--primary {
   border-color: var(--navy);
   background: var(--navy);
@@ -656,30 +652,23 @@
   background: var(--navy-soft);
 }
 
-/* ---- the live vessel map, and the numbers beside it ---- */
+/* ---- tracking the container ---- */
 
-/* The frame comes from the provider and brings its own furniture, so all
-   this does is give it a shape that belongs on the page: full width, a
-   fixed height so the layout does not jump while it loads, and the same
-   border and radius as every other panel. */
-.vesselmap {
-  margin: 16px 0 0;
-}
-
-.vesselmap-frame {
-  display: block;
-  width: 100%;
-  height: 420px;
+/* One action, set in a panel of its own so it reads as "this is the thing to
+   press" rather than as another line of detail. */
+.trackbox {
+  margin: 18px 0 0;
+  padding: 16px;
   border: 1px solid var(--line);
   border-radius: 10px;
-  background: var(--surface);
+  background: #f8f9fc;
 }
 
-.vesselmap-caption {
-  display: block;
-  margin: 8px 0 0;
-  font-size: 12px;
-  line-height: 1.5;
+.trackbox-note {
+  margin: 10px 0 0;
+  max-width: 46em;
+  font-size: 13px;
+  line-height: 1.55;
   color: var(--muted);
 }
 
@@ -689,7 +678,7 @@
 .copynums {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px 28px;
+  gap: 14px 32px;
   margin: 14px 0 0;
 }
 
@@ -884,12 +873,5 @@
   .step-name {
     padding: 0 2px;
     font-size: 10.5px;
-  }
-}
-
-@media (max-width: 560px) {
-  /* 420px of map on a phone leaves no room for the order it belongs to. */
-  .vesselmap-frame {
-    height: 300px;
   }
 }

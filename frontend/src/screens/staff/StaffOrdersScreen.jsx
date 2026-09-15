@@ -5,17 +5,13 @@ import StatusPill, { PART_SHIPPED } from '../../components/StatusPill'
 import { describeError, fmtDate, plural } from '../../lib/format'
 import OrderForm from './OrderForm'
 import ShipmentForm from './ShipmentForm'
-import { TrackActions, VesselMap } from '../../components/Tracking'
+import { TrackActions } from '../../components/Tracking'
 
 function ShipmentRow({ shipment, onEdit, onRemove, onDocuments, busy }) {
-  // Shut by default. An order can hold many lots, and a live map for each of
-  // them would have the staff list loading a dozen frames nobody asked for.
+  // Shut by default: a staff list is a list, and an order can hold many
+  // lots. Open, it gives the numbers to read down a phone line.
   const [tracking, setTracking] = useState(false)
-  const canTrack = Boolean(
-    shipment.vessel_map_url ||
-      shipment.tracking_url ||
-      shipment.container_tracking_url,
-  )
+  const canTrack = Boolean(shipment.container_tracking_url)
   // Only what is known, joined into one line. A row of dashes before a vessel
   // is booked reads as broken, when all it means is "not yet".
   const facts = [
@@ -65,12 +61,11 @@ function ShipmentRow({ shipment, onEdit, onRemove, onDocuments, busy }) {
         </button>
       </div>
 
-      {/* The same map and the same buttons the customer gets, from the same
-          function on the server -- so staff on the phone to a customer are
-          not looking at a different position. */}
+      {/* The same link and the same numbers the customer gets, from the
+          same function on the server -- so staff on the phone to a customer
+          are not reading out something different. */}
       {tracking && (
         <div className="shiprow-tracking">
-          <VesselMap shipment={shipment} />
           <TrackActions shipment={shipment} />
         </div>
       )}

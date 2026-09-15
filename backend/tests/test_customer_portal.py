@@ -51,26 +51,24 @@ def test_the_shipment_carries_what_the_customer_needs(client, customer_auth, ord
     assert shipment["etd"] == "2026-09-01"
 
 
-def test_the_tracking_link_is_built_by_the_server(client, customer_auth, order):
-    """So changing provider is configuration, and never a dead link."""
+def test_the_customer_is_told_nothing_about_where_the_vessel_is(
+    client, customer_auth, order
+):
+    """The vessel link and the map were removed on 15 Sep 2026: a named
+    ship's position is a different voyage once cargo is transshipped. The
+    vessel name stays, because it is on the Bill of Lading."""
     shipment = client.get(
         f"/api/orders/{order['id']}", headers=customer_auth
     ).json()["shipments"][0]
-    assert shipment["tracking_url"] and "9074729" in shipment["tracking_url"]
-    assert shipment["tracking_provider"]
 
-
-def test_no_link_when_the_imo_is_missing(client, staff_auth, customer_auth, order):
-    client.put(
-        f"/api/staff/shipments/{order['shipments'][0]['id']}",
-        headers=staff_auth,
-        json={"shipment_no": "TEST/SHP/001-1", "dispatched_qty": "40.000"},
-    )
-    shipment = client.get(
-        f"/api/orders/{order['id']}", headers=customer_auth
-    ).json()["shipments"][0]
-    assert shipment["tracking_url"] is None
-    assert shipment["tracking_provider"] is None
+    assert shipment["vessel_name"] == "MV Test"
+    for gone in (
+        "tracking_url",
+        "tracking_provider",
+        "vessel_map_url",
+        "vessel_map_provider",
+    ):
+        assert gone not in shipment, gone
 
 
 # --------------------------------------------------------------- documents
