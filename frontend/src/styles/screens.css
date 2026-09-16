@@ -725,6 +725,29 @@
   background: #eef0f6;
 }
 
+/* The same button beside a fact rather than in the tracking panel: smaller,
+   and it sits on the line with the number instead of under a label. */
+.copynum-button--inline {
+  padding: 2px 8px;
+  font-size: 11px;
+}
+
+.fact--copyable {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* A container or B/L number is read a character at a time, and is long
+   enough to run off a phone if it is not allowed to break. */
+.fact-number {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  word-break: break-all;
+}
+
 .copynum-hint {
   display: block;
   margin-top: 4px;
