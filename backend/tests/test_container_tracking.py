@@ -199,6 +199,21 @@ def customer_shipment(client, customer_auth, order):
     return response.json()["shipments"][0]
 
 
+def staff_shipment(client, staff_auth, order):
+    """The same shipment, as the staff screen is given it.
+
+    There is no endpoint for one order on the staff side: the screen asks for
+    the whole list and draws from that, so these tests read it the same way.
+    Asking for /api/staff/orders/<id> answers 405, because that path exists
+    for PUT and DELETE only -- which is what these two tests used to do.
+    """
+    response = client.get("/api/staff/orders", headers=staff_auth)
+    assert response.status_code == 200, response.text
+    mine = [o for o in response.json() if o["id"] == order["id"]]
+    assert mine, f"order {order['id']} is missing from the staff list"
+    return mine[0]["shipments"][0]
+
+
 def test_the_customer_gets_a_container_link_built_by_the_server(
     client, staff_auth, customer_auth, order
 ):
@@ -305,9 +320,7 @@ def test_staff_and_customer_are_shown_the_same_tracking(
     set_carrier(client, staff_auth, order, "Evergreen Line")
 
     theirs = customer_shipment(client, customer_auth, order)
-    ours = client.get(f"/api/staff/orders/{order['id']}", headers=staff_auth)
-    assert ours.status_code == 200, ours.text
-    ours = ours.json()["shipments"][0]
+    ours = staff_shipment(client, staff_auth, order)
 
     for field in (
         "container_tracking_url",
@@ -323,9 +336,7 @@ def test_neither_half_is_sent_a_vessel_link_any_more(
 ):
     set_carrier(client, staff_auth, order, "Evergreen Line")
     theirs = customer_shipment(client, customer_auth, order)
-    ours = client.get(
-        f"/api/staff/orders/{order['id']}", headers=staff_auth
-    ).json()["shipments"][0]
+    ours = staff_shipment(client, staff_auth, order)
     for gone in ("tracking_url", "vessel_map_url"):
         assert gone not in theirs, gone
         assert gone not in ours, gone
