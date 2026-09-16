@@ -87,6 +87,23 @@ def staff_messages(
             )
             for shipment, order, customer, user in notifications.pending(db)
         ]
+        # Documents waiting to be announced, listed the same way. Several of
+        # them for one order leave as a single email; each is one line here,
+        # because the question this list answers is "what has the customer
+        # not been told yet", document by document.
+        waiting += [
+            StaffMessageWaitingOut(
+                to_email=user.email,
+                customer_name=customer.name,
+                sales_order_no=order.sales_order_no,
+                shipment_no=shipment.shipment_no,
+                event=notifications.document_event(document.doc_type),
+                would_send=notifications.would_send_to(user.email),
+            )
+            for document, shipment, order, customer, user in (
+                notifications.pending_documents(db)
+            )
+        ]
 
     # Like "what is waiting", this is about the whole portal rather than a
     # slice of it, so it belongs on the first page only.

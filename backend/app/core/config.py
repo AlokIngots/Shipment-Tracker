@@ -252,3 +252,19 @@ NOTIFIABLE_STATUSES = [
     if status.strip()
 ]
 
+# Document types worth telling a customer about when they first appear. The
+# default is every type the staff screen expects; a type left out of this
+# list is uploaded and downloadable as usual and simply says nothing.
+#
+# A test holds this default equal to EXPECTED_DOCUMENTS in the staff router,
+# so a fifth kind of document cannot be added there and quietly stay silent
+# here.
+NOTIFIABLE_DOCUMENTS = [
+    kind.strip()
+    for kind in os.getenv(
+        "NOTIFY_ON_DOCUMENTS",
+        "Packing List,Commercial Invoice,Bill of Lading,Mill Test Certificate",
+    ).split(",")
+    if kind.strip()
+]
+
