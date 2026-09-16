@@ -25,6 +25,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from app.core.config import (
+    NOTIFIABLE_DOCUMENTS,
     NOTIFIABLE_STATUSES,
     NOTIFY_ONLY_EMAILS,
     PORTAL_URL,
@@ -36,12 +37,16 @@ from app.core.config import (
     SMTP_USE_TLS,
     SMTP_USER,
 )
-from app.models import Customer, Notification, Order, Shipment, User
+from app.models import Customer, Document, Notification, Order, Shipment, User
 
 __all__ = [
+    "NOTIFIABLE_DOCUMENTS",
     "NOTIFIABLE_STATUSES",
+    "build_document_message",
     "build_message",
+    "document_event",
     "pending",
+    "pending_documents",
     "recent",
     "record_outcome",
     "run",
@@ -55,6 +60,21 @@ SUBJECTS = {
     "in transit": "Your order {sales_order_no} is on its way",
     "delivered": "Your order {sales_order_no} has arrived",
 }
+
+# A document notification is recorded in the same table as a status one, with
+# the document type in the event. That is what makes "tell each person once
+# per document type per shipment" true without a second table or a new
+# column: the unique constraint on (shipment, event, user) already says it.
+#
+# It also means a REPLACED document says nothing. Alok's decision, 16 Sep
+# 2026: a corrected invoice arriving as "your Commercial Invoice is ready" a
+# second time only asks the customer which one is right.
+DOCUMENT_EVENT_PREFIX = "Document: "
+
+
+def document_event(doc_type: str) -> str:
+    """The event recorded for one kind of document. Fits String(50)."""
+    return f"{DOCUMENT_EVENT_PREFIX}{doc_type}"[:50]
 
 
 def subject_for(event: str, sales_order_no: str) -> str:
@@ -108,6 +128,58 @@ def build_message(user, customer, order, shipment) -> EmailMessage:
 
     message = EmailMessage()
     message["Subject"] = subject_for(event, order.sales_order_no)
+    message["From"] = SMTP_FROM
+    message["To"] = user.email
+    message.set_content("\n".join(lines))
+    return message
+
+
+def build_document_message(user, customer, order, by_shipment) -> EmailMessage:
+    """One email about everything newly ready on one order.
+
+    `by_shipment` is [(shipment, [doc_type, ...]), ...]. Several documents
+    uploaded together make one email, not one each: Alok's rule of 16 Sep
+    2026 is the fewest emails that still keep the customer informed.
+    """
+    greeting = (user.full_name or "").strip() or "Hello"
+    kinds = [kind for _, types in by_shipment for kind in types]
+
+    if len(kinds) == 1:
+        opening = f"Your {kinds[0]} for order {order.sales_order_no} is ready."
+    else:
+        opening = f"New documents are ready for your order {order.sales_order_no}."
+
+    lines = [f"{greeting},", "", opening, ""]
+
+    for shipment, types in by_shipment:
+        # The shipment number only earns its place when there is more than
+        # one lot to tell apart.
+        if len(by_shipment) > 1:
+            lines.append(f"  Shipment {shipment.shipment_no}")
+            lines += [f"    {kind}" for kind in types]
+        else:
+            lines += [f"  {kind}" for kind in types]
+
+    if order.customer_po:
+        lines += ["", f"Your PO: {order.customer_po}"]
+
+    lines += [
+        "",
+        "You can download them here:",
+        f"  {PORTAL_URL}",
+        "",
+        "This is an automated message from the Alok Ingots customer portal.",
+        "Please reply to your usual contact if anything looks wrong.",
+        "",
+        "Alok Ingots",
+        "Stainless steel bright bars, Mumbai, India",
+    ]
+
+    message = EmailMessage()
+    if len(kinds) == 1:
+        message["Subject"] = f"Your {kinds[0]} is ready — order {order.sales_order_no}"
+    else:
+        message["Subject"] = f"New documents for your order {order.sales_order_no}"
     message["From"] = SMTP_FROM
     message["To"] = user.email
     message.set_content("\n".join(lines))
@@ -208,18 +280,67 @@ def pending(session):
     ]
 
 
-def record_outcome(session, shipment, user, outcome: str, detail: str | None):
+def pending_documents(session):
+    """Every (document, shipment, order, customer, user) still owed an email.
+
+    A document counts once it has a file behind it: a row with no
+    stored_path is a slot the staff screen draws, not a document. Only the
+    types in NOTIFIABLE_DOCUMENTS are considered, and only the first time
+    each type appears on a shipment -- a replacement finds its event already
+    recorded as sent and says nothing.
+    """
+    if not NOTIFIABLE_DOCUMENTS:
+        return []
+
+    rows = session.execute(
+        select(Document, Shipment, Order, Customer, User)
+        .join(Shipment, Document.shipment_id == Shipment.id)
+        .join(Order, Shipment.order_id == Order.id)
+        .join(Customer, Order.customer_id == Customer.id)
+        .join(User, User.customer_id == Customer.id)
+        .where(
+            Document.stored_path.is_not(None),
+            Document.doc_type.in_(NOTIFIABLE_DOCUMENTS),
+            User.is_active.is_(True),
+        )
+        .order_by(Shipment.id, Document.id, User.id)
+    ).all()
+
+    # Same rule as the status half: only a message that genuinely went out
+    # counts as done, so anything suppressed or failed is tried again.
+    already = {
+        (n.shipment_id, n.event, n.user_id)
+        for n in session.scalars(
+            select(Notification).where(Notification.outcome == "sent")
+        )
+    }
+
+    return [
+        (document, shipment, order, customer, user)
+        for document, shipment, order, customer, user in rows
+        if (shipment.id, document_event(document.doc_type), user.id) not in already
+    ]
+
+
+def record_outcome(
+    session, shipment, user, outcome: str, detail: str | None, event: str | None = None
+):
     """Write down what happened to one message, replacing any earlier attempt.
 
     An earlier attempt may already have left a row here, recorded as
     suppressed or failed. Updating that row rather than inserting a second
     one is what lets the unique constraint keep its promise: one record per
-    (shipment, status, user), so nobody is ever told the same thing twice.
+    (shipment, event, user), so nobody is ever told the same thing twice.
+
+    `event` defaults to the shipment's status, which is what a status
+    message is about. A document message passes its own -- "Document: Bill
+    of Lading" -- and the same promise then covers documents too.
     """
+    event = event if event is not None else shipment.status
     record = session.scalar(
         select(Notification).where(
             Notification.shipment_id == shipment.id,
-            Notification.event == shipment.status,
+            Notification.event == event,
             Notification.user_id == user.id,
         )
     )
@@ -227,7 +348,7 @@ def record_outcome(session, shipment, user, outcome: str, detail: str | None):
         record = Notification(
             shipment_id=shipment.id,
             user_id=user.id,
-            event=shipment.status,
+            event=event,
             channel="email",
             attempts=0,
         )
@@ -275,6 +396,74 @@ def run(session, on_result=None) -> dict[str, int]:
 
         if on_result is not None:
             on_result(shipment, order, customer, user, outcome, detail)
+
+    counts = _run_documents(session, counts, on_result)
+    return counts
+
+
+def _run_documents(session, counts, on_result=None) -> dict[str, int]:
+    """The document half of a run: one email per order, per person.
+
+    Everything newly ready on one order goes in one email, however many
+    documents and however many shipments it spans -- staff uploading a
+    packing list, an invoice and a Bill of Lading in the same minute must
+    not produce three emails. A row is still recorded per document, so the
+    once-each promise is per document type, not per email.
+    """
+    owed = pending_documents(session)
+    if not owed:
+        return counts
+
+    # (order id, user id) -> everything that order owes that person, kept in
+    # the order the query returned so the email reads shipment by shipment.
+    grouped: dict[tuple[int, int], dict] = {}
+    for document, shipment, order, customer, user in owed:
+        group = grouped.setdefault(
+            (order.id, user.id),
+            {"order": order, "customer": customer, "user": user, "shipments": {}},
+        )
+        entry = group["shipments"].setdefault(shipment.id, {"shipment": shipment, "types": []})
+        if document.doc_type not in entry["types"]:
+            entry["types"].append(document.doc_type)
+
+    for group in grouped.values():
+        by_shipment = [(e["shipment"], e["types"]) for e in group["shipments"].values()]
+        message = build_document_message(
+            group["user"], group["customer"], group["order"], by_shipment
+        )
+        outcome, detail = send(message)
+
+        # One email, but one record per document type, so that a type which
+        # has been told about is never told about again -- and so the
+        # Messages screen can say which documents that email covered.
+        wrote = False
+        for shipment, types in by_shipment:
+            for doc_type in types:
+                counts[outcome] += 1
+                record_outcome(
+                    session,
+                    shipment,
+                    group["user"],
+                    outcome,
+                    detail,
+                    event=document_event(doc_type),
+                )
+                wrote = True
+
+        if not wrote:
+            continue
+
+        try:
+            session.commit()
+        except IntegrityError:
+            session.rollback()
+            continue
+
+        if on_result is not None:
+            for shipment, _types in by_shipment:
+                on_result(
+                    shipment, group["order"], group["customer"], group["user"], outcome, detail
+                )
 
     return counts
 

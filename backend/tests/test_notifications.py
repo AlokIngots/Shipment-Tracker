@@ -312,3 +312,148 @@ def test_a_sign_in_link_that_failed_shows_on_the_messages_screen(
     assert failures[0]["outcome"] == "failed"
     assert "secret" not in str(failures)
     magic_links.RECENT_FAILURES.clear()
+
+
+# ------------------------------------------------- documents announce themselves
+#
+# Alok's rules, 16 Sep 2026: the fewest emails that still keep the customer
+# informed. Several documents uploaded together make ONE email; a replaced
+# document makes none; each type is announced once per shipment per person.
+
+
+def upload(client, staff_auth, shipment_id, doc_type, name="doc.pdf"):
+    return client.post(
+        f"/api/staff/shipments/{shipment_id}/documents",
+        headers=staff_auth,
+        data={"doc_type": doc_type},
+        files={"file": (name, b"%PDF-1.4", "application/pdf")},
+    )
+
+
+def events_for(db):
+    return sorted(n.event for n in db.scalars(select(Notification)))
+
+
+def flush(db):
+    """Send whatever is already owed -- the fixture's shipment is Shipped, so
+    a status email is waiting -- and leave the documents to the test."""
+    notifications.run(db)
+
+
+def test_a_document_is_announced_once(
+    db, client, staff_auth, order, customer_auth, delivers
+):
+    shipment_id = order["shipments"][0]["id"]
+    upload(client, staff_auth, shipment_id, "Bill of Lading")
+
+    notifications.run(db)
+    assert "Document: Bill of Lading" in events_for(db)
+    sent_first = len(delivers)
+    assert sent_first >= 1
+
+    # A second run tells nobody anything again.
+    notifications.run(db)
+    assert len(delivers) == sent_first
+
+
+def test_replacing_a_document_says_nothing(
+    db, client, staff_auth, order, customer_auth, delivers
+):
+    shipment_id = order["shipments"][0]["id"]
+    upload(client, staff_auth, shipment_id, "Commercial Invoice")
+    notifications.run(db)
+    after_first = len(delivers)
+
+    upload(client, staff_auth, shipment_id, "Commercial Invoice", name="corrected.pdf")
+    notifications.run(db)
+    assert len(delivers) == after_first, "a correction must not be announced"
+
+
+def test_documents_uploaded_together_make_one_email(
+    db, client, staff_auth, order, customer_auth, delivers
+):
+    flush(db)
+    shipment_id = order["shipments"][0]["id"]
+    for kind in ["Packing List", "Commercial Invoice", "Bill of Lading"]:
+        upload(client, staff_auth, shipment_id, kind)
+
+    before = len(delivers)
+    notifications.run(db)
+    new_mail = delivers[before:]
+
+    assert len(new_mail) == 1, "three documents, one email"
+    body = new_mail[0].get_content()
+    for kind in ["Packing List", "Commercial Invoice", "Bill of Lading"]:
+        assert kind in body
+    # Still recorded one by one, so each is announced only once ever.
+    assert events_for(db).count("Document: Packing List") == 1
+
+
+def test_documents_on_two_shipments_of_one_order_still_make_one_email(
+    db, client, staff_auth, order, customer_auth, delivers
+):
+    flush(db)
+    first = order["shipments"][0]["id"]
+    second = client.post(
+        f"/api/staff/orders/{order['id']}/shipments",
+        headers=staff_auth,
+        json={"shipment_no": "TEST/SHP/001-2", "dispatched_qty": "10.000"},
+    ).json()["shipments"][-1]["id"]
+
+    upload(client, staff_auth, first, "Packing List")
+    upload(client, staff_auth, second, "Packing List")
+
+    before = len(delivers)
+    notifications.run(db)
+    new_mail = delivers[before:]
+    assert len(new_mail) == 1, "one order, one email, however many shipments"
+    body = new_mail[0].get_content()
+    assert "TEST/SHP/001-1" in body and "TEST/SHP/001-2" in body
+
+
+def test_a_document_type_switched_off_says_nothing(
+    db, client, staff_auth, order, customer_auth, delivers, monkeypatch
+):
+    flush(db)
+    monkeypatch.setattr(notifications, "NOTIFIABLE_DOCUMENTS", ["Bill of Lading"])
+    shipment_id = order["shipments"][0]["id"]
+    upload(client, staff_auth, shipment_id, "Mill Test Certificate")
+
+    before = len(delivers)
+    notifications.run(db)
+    assert len(delivers) == before
+    assert "Document: Mill Test Certificate" not in events_for(db)
+
+
+def test_a_document_row_with_no_file_is_not_announced(db, order, customer_auth):
+    """A Document row can exist before its file does. Announcing that as
+    ready would send a customer to an empty download."""
+    from app.models import Document
+
+    db.add(
+        Document(
+            shipment_id=order["shipments"][0]["id"],
+            doc_type="Packing List",
+            file_name="packing-list.pdf",
+        )
+    )
+    db.commit()
+    assert notifications.pending_documents(db) == []
+
+
+def test_the_status_emails_are_untouched(
+    db, client, staff_auth, order, customer_auth, delivers
+):
+    """Round 1 adds the document half and changes nothing about the other."""
+    before = len(delivers)
+    notifications.run(db)
+    statuses = [m for m in delivers[before:] if "has shipped" in (m["Subject"] or "")]
+    assert statuses, "the shipment in the fixture is Shipped and still says so"
+
+
+def test_the_default_document_list_matches_the_staff_screen():
+    """A fifth kind of document added to the staff screen must not quietly
+    stay silent, so the two lists are held equal here."""
+    from app.routers.admin.documents import EXPECTED_DOCUMENTS
+
+    assert sorted(config.NOTIFIABLE_DOCUMENTS) == sorted(EXPECTED_DOCUMENTS)
