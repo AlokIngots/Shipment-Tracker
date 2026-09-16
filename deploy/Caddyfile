@@ -1,0 +1,75 @@
+# The portal's front door.
+#
+# PORTAL_DOMAIN decides how this behaves:
+#   portal.alokindia.co.in  -> Caddy obtains a real HTTPS certificate itself
+#                              and renews it, with nothing to remember
+#   :80                     -> plain HTTP, used when testing locally
+#
+# Caddy REPLACES X-Forwarded-For with the address it is talking to, unless
+# that address is a trusted proxy -- in which case it keeps what arrived.
+# Without this block the API sees the same address for every visitor:
+#
+#   * exposed directly, that address is Docker's gateway, so all customers
+#     share one rate-limit budget and one attacker locks everybody out
+#   * behind nginx, the client's real address is discarded at the door and
+#     replaced with nginx's own
+#
+# Trusting private ranges is the right rule for both. A real customer
+# arrives from a public address, is not trusted, and Caddy correctly records
+# the address it sees. nginx on the same host arrives from a private one, is
+# trusted, and the client address it wrote is preserved.
+{
+	servers {
+		trusted_proxies static private_ranges
+	}
+}
+
+{$PORTAL_DOMAIN::80} {
+	encode zstd gzip
+
+	# Anything under /api is the FastAPI backend. The browser only ever
+	# talks to this one origin, so there are no CORS problems.
+	handle /api/* {
+		reverse_proxy api:8000
+	}
+
+	# Everything else is the React app. Unknown paths fall back to
+	# index.html so the app can handle them itself.
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+
+	header {
+		X-Content-Type-Options nosniff
+		# Stops anyone framing the portal.
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+
+		# Everything the portal loads, it serves itself: no third-party
+		# scripts, no third-party frames, no web fonts, no analytics. So
+		# 'self' is the whole policy, with three deliberate exceptions:
+		#
+		#   img-src data: blob:   documents and photos are fetched with the
+		#                         sign-in token and handed to the browser as
+		#                         blob URLs, because a plain <img src> or a
+		#                         plain link would go without the token
+		#   style-src 'unsafe-inline'
+		#                         React writes style attributes; there is no
+		#                         way to allow those without this
+		#   frame-ancestors 'none'
+		#                         the same thing X-Frame-Options says, for
+		#                         browsers that prefer this one
+		#
+		# The live vessel map that would have needed a frame-src exception
+		# was removed on 15 Sep 2026, so nothing here has to allow it.
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; form-action 'self'; base-uri 'self'; object-src 'none'; frame-src 'none'; frame-ancestors 'none'"
+
+		# A year, and subdomains. No preload: that is a one-way door on the
+		# whole of alokindia.co.in and is not this portal's to walk through.
+		# nginx terminates TLS in front, so this header travels through it
+		# to the browser unchanged.
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	}
+}
