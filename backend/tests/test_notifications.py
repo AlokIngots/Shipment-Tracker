@@ -340,7 +340,9 @@ def flush(db):
     notifications.run(db)
 
 
-def test_a_document_is_announced_once(db, client, staff_auth, order, delivers):
+def test_a_document_is_announced_once(
+    db, client, staff_auth, order, customer_auth, delivers
+):
     shipment_id = order["shipments"][0]["id"]
     upload(client, staff_auth, shipment_id, "Bill of Lading")
 
@@ -354,7 +356,9 @@ def test_a_document_is_announced_once(db, client, staff_auth, order, delivers):
     assert len(delivers) == sent_first
 
 
-def test_replacing_a_document_says_nothing(db, client, staff_auth, order, delivers):
+def test_replacing_a_document_says_nothing(
+    db, client, staff_auth, order, customer_auth, delivers
+):
     shipment_id = order["shipments"][0]["id"]
     upload(client, staff_auth, shipment_id, "Commercial Invoice")
     notifications.run(db)
@@ -366,7 +370,7 @@ def test_replacing_a_document_says_nothing(db, client, staff_auth, order, delive
 
 
 def test_documents_uploaded_together_make_one_email(
-    db, client, staff_auth, order, delivers
+    db, client, staff_auth, order, customer_auth, delivers
 ):
     flush(db)
     shipment_id = order["shipments"][0]["id"]
@@ -386,7 +390,7 @@ def test_documents_uploaded_together_make_one_email(
 
 
 def test_documents_on_two_shipments_of_one_order_still_make_one_email(
-    db, client, staff_auth, order, delivers
+    db, client, staff_auth, order, customer_auth, delivers
 ):
     flush(db)
     first = order["shipments"][0]["id"]
@@ -408,7 +412,7 @@ def test_documents_on_two_shipments_of_one_order_still_make_one_email(
 
 
 def test_a_document_type_switched_off_says_nothing(
-    db, client, staff_auth, order, delivers, monkeypatch
+    db, client, staff_auth, order, customer_auth, delivers, monkeypatch
 ):
     flush(db)
     monkeypatch.setattr(notifications, "NOTIFIABLE_DOCUMENTS", ["Bill of Lading"])
@@ -421,17 +425,25 @@ def test_a_document_type_switched_off_says_nothing(
     assert "Document: Mill Test Certificate" not in events_for(db)
 
 
-def test_a_document_row_with_no_file_is_not_announced(db, order):
+def test_a_document_row_with_no_file_is_not_announced(db, order, customer_auth):
     """A Document row can exist before its file does. Announcing that as
     ready would send a customer to an empty download."""
     from app.models import Document
 
-    db.add(Document(shipment_id=order["shipments"][0]["id"], doc_type="Packing List"))
+    db.add(
+        Document(
+            shipment_id=order["shipments"][0]["id"],
+            doc_type="Packing List",
+            file_name="packing-list.pdf",
+        )
+    )
     db.commit()
     assert notifications.pending_documents(db) == []
 
 
-def test_the_status_emails_are_untouched(db, client, staff_auth, order, delivers):
+def test_the_status_emails_are_untouched(
+    db, client, staff_auth, order, customer_auth, delivers
+):
     """Round 1 adds the document half and changes nothing about the other."""
     before = len(delivers)
     notifications.run(db)
