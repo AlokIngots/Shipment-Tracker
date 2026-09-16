@@ -72,12 +72,64 @@ BEGIN;
 CREATE TEMP TABLE run_mode (m text) ON COMMIT DROP;
 INSERT INTO run_mode (m) VALUES (:'mode');
 
+-- Same trick for the "yes, beside real data" permission: a DO block cannot
+-- see a psql variable, so it is set as a database setting for this session.
+\if :{?allow_beside_real_data}
+\else
+  \set allow_beside_real_data no
+\endif
+SELECT set_config('portal.allow_beside_real_data', :'allow_beside_real_data', true);
+
 DO $$
 DECLARE mode text;
 BEGIN
   SELECT m INTO mode FROM run_mode;
   IF mode NOT IN ('dryrun', 'load', 'remove') THEN
     RAISE EXCEPTION 'mode must be dryrun, load or remove (got %)', mode;
+  END IF;
+END $$;
+
+
+-- ---------------------------------------------------------------------------
+-- Safety check: never load sample data into a database that holds real work.
+--
+-- Added 16 Sep 2026, after four sample orders had to be removed from the live
+-- portal by hand. Nothing re-seeds by itself -- this file is only ever run by
+-- a person -- so the way it came back would be somebody running mode=load
+-- again on the wrong database. Now it refuses: if there is a single order
+-- belonging to a customer whose code does not begin SAMPLE-, loading stops.
+--
+-- A fresh demo database has no real orders and loads exactly as before. If
+-- you genuinely mean to add sample data beside real data, say so out loud:
+--   $D -v mode=load -v allow_beside_real_data=yes < sample-data.sql
+-- ---------------------------------------------------------------------------
+DO $$
+DECLARE mode text; permitted text; real_orders bigint;
+BEGIN
+  SELECT m INTO mode FROM run_mode;
+  IF mode <> 'load' THEN
+    RETURN;
+  END IF;
+
+  SELECT count(*) INTO real_orders
+  FROM orders o
+  WHERE o.customer_id NOT IN (SELECT id FROM customers WHERE code LIKE 'SAMPLE-%');
+
+  IF real_orders = 0 THEN
+    RETURN;
+  END IF;
+
+  BEGIN
+    permitted := current_setting('portal.allow_beside_real_data');
+  EXCEPTION WHEN OTHERS THEN
+    permitted := '';
+  END;
+
+  IF permitted <> 'yes' THEN
+    RAISE EXCEPTION
+      'Refusing to load sample data: this database holds % real order(s). '
+      'This looks like the live server. If you really mean it, add '
+      '-v allow_beside_real_data=yes', real_orders;
   END IF;
 END $$;
 
@@ -117,6 +169,20 @@ END $$;
 -- cascades take the logins, orders, shipments, documents, photos, notification
 -- records and sign-in links with their customer.
 -- ---------------------------------------------------------------------------
+CREATE TEMP TABLE before_counts (what text, n bigint) ON COMMIT DROP;
+INSERT INTO before_counts (what, n)
+SELECT 'customers', count(*) FROM customers WHERE code LIKE 'SAMPLE-%'
+UNION ALL
+SELECT 'orders', count(*) FROM orders
+ WHERE customer_id IN (SELECT id FROM customers WHERE code LIKE 'SAMPLE-%')
+UNION ALL
+SELECT 'shipments', count(*) FROM shipments s
+ JOIN orders o ON o.id = s.order_id
+ WHERE o.customer_id IN (SELECT id FROM customers WHERE code LIKE 'SAMPLE-%')
+UNION ALL
+SELECT 'logins', count(*) FROM users
+ WHERE customer_id IN (SELECT id FROM customers WHERE code LIKE 'SAMPLE-%');
+
 DELETE FROM customers WHERE code LIKE 'SAMPLE-%';
 
 
@@ -239,6 +305,20 @@ BEGIN
   END IF;
 END $$;
 
+
+-- ---------------------------------------------------------------------------
+-- What just happened, in numbers. Removing should read "4 orders removed,
+-- 1 real order remaining" on the live server as it stands on 16 Sep 2026.
+-- ---------------------------------------------------------------------------
+\echo ''
+\echo '--- what this run changed ---'
+
+SELECT what AS sample_rows,
+       n     AS found_before_this_run,
+       CASE WHEN (SELECT m FROM run_mode) = 'remove' THEN 'removed'
+            ELSE 'replaced with a fresh copy' END AS outcome
+FROM before_counts
+ORDER BY what;
 
 -- ---------------------------------------------------------------------------
 -- What is there now.
