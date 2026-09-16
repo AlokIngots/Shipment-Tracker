@@ -66,9 +66,27 @@ def check_upload(file_name: str, content_type: str | None) -> str:
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png"}
 IMAGE_TYPES = {"image/jpeg", "image/png"}
 
-# The media type to serve a stored image back as, worked out from the
-# suffix rather than trusted from the browser that uploaded it.
-_TYPE_BY_SUFFIX = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png"}
+# The media type to serve a stored file back as, worked out from the suffix
+# rather than trusted from the browser that uploaded it. A stored name is
+# random plus the original suffix, so the suffix here is one this module
+# accepted at upload and not anything a person typed.
+_TYPE_BY_SUFFIX = {
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".pdf": "application/pdf",
+}
+
+
+def media_type_for(stored_path: str) -> str:
+    """What a stored document really is.
+
+    Documents were served as application/pdf whatever they were, so a Mill
+    Test Certificate scanned as a JPG arrived labelled as a PDF and would
+    not open. Anything unrecognised is sent as a plain download rather than
+    guessed at.
+    """
+    return _TYPE_BY_SUFFIX.get(Path(stored_path or "").suffix.lower(), "application/octet-stream")
 
 
 def check_image_upload(file_name: str, content_type: str | None) -> tuple[str, str]:

@@ -13,8 +13,10 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from sqlalchemy import func, select, update
 
+from email.message import EmailMessage
+
 from app.models import MagicLink
-from app.services import accounts, notifications
+from app.services import accounts, magic_links, notifications
 
 LINK = re.compile(r"https://portal\.alokindia\.co\.in/#sign-in=([A-Za-z0-9_\-]+)")
 EXPIRED = "This link has expired, please request a new one."
@@ -25,7 +27,7 @@ def outbox(monkeypatch):
     """Every email the portal tries to send, caught instead of sent."""
     caught = []
 
-    def catch(message):
+    def catch(message, pilot_list=True):
         caught.append(message)
         return "sent", None
 
@@ -389,3 +391,103 @@ def test_guessing_tokens_is_slowed_to_a_stop(client, outbox, buyer):
     assert redeem(client, token, ip="10.4.0.3").status_code == 200, (
         "and being refused did not spend the real link"
     )
+
+
+# ------------------------------------------- the pilot list is not a gate
+#
+# Until 16 Sep 2026 a sign-in link went through NOTIFY_ONLY_EMAILS, so a
+# customer who was not on that list asked to sign in, was told to check
+# their email, and got nothing. These tests hold the two halves apart: a
+# link is owed to anybody with a login, a notification is not.
+
+
+class FakeSMTP:
+    """Stands in for smtplib.SMTP. Collects what would have been sent."""
+
+    sent: list = []
+
+    def __init__(self, host, port, timeout=None):
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exception):
+        return False
+
+    def starttls(self):
+        pass
+
+    def login(self, user, password):
+        pass
+
+    def send_message(self, message):
+        FakeSMTP.sent.append(message)
+
+
+@pytest.fixture
+def mail_server(monkeypatch):
+    """A portal that really tries to send, with a pilot list that excludes
+    the customer, and a mail server that cannot refuse."""
+    FakeSMTP.sent = []
+    monkeypatch.setattr(notifications, "SEND_EMAILS", True)
+    monkeypatch.setattr(notifications, "NOTIFY_ONLY_EMAILS", ["owner@alokindia.com"])
+    monkeypatch.setattr(notifications, "SMTP_HOST", "mail.test")
+    monkeypatch.setattr(notifications, "SMTP_USE_TLS", False)
+    monkeypatch.setattr(notifications, "SMTP_USER", "")
+    monkeypatch.setattr(notifications.smtplib, "SMTP", FakeSMTP)
+    return FakeSMTP.sent
+
+
+def a_message_to(address):
+    """Any ordinary notification, to check the pilot list still bites."""
+    message = EmailMessage()
+    message["Subject"] = "Your shipment has been shipped"
+    message["From"] = "enquiries@alokindia.com"
+    message["To"] = address
+    message.set_content("Something about a shipment.")
+    return message
+
+
+def test_a_sign_in_link_is_sent_to_somebody_not_on_the_pilot_list(mail_server):
+    """The customer this portal exists for is not on the owner's pilot list,
+    and must still be able to sign in."""
+    outcome = magic_links.send(
+        "buyer@testco.example", "Petra Baumann", "https://portal.alokindia.co.in/#sign-in=x"
+    )
+    assert outcome == "sent"
+    assert [m["To"] for m in mail_server] == ["buyer@testco.example"]
+
+
+def test_an_automatic_notification_to_the_same_address_is_still_held_back(mail_server):
+    outcome, detail = notifications.send(a_message_to("buyer@testco.example"))
+    assert outcome == "suppressed"
+    assert "NOTIFY_ONLY_EMAILS" in detail
+    assert mail_server == [], "nothing may reach the mail server"
+
+
+def test_send_emails_off_still_stops_a_sign_in_link(mail_server, monkeypatch):
+    """The pilot list is not a master switch; SEND_EMAILS is, and it still
+    applies to everything including links."""
+    monkeypatch.setattr(notifications, "SEND_EMAILS", False)
+    assert magic_links.send("buyer@testco.example", None, "https://x/#sign-in=y") == "suppressed"
+    assert mail_server == []
+
+
+def test_a_link_that_does_not_arrive_is_recorded_for_staff(monkeypatch):
+    """The person is told to check their email whatever happens -- saying
+    anything else would tell a stranger which addresses have accounts -- so
+    the failure has to surface somewhere staff will see it."""
+    magic_links.RECENT_FAILURES.clear()
+    monkeypatch.setattr(notifications, "SEND_EMAILS", True)
+    monkeypatch.setattr(notifications, "NOTIFY_ONLY_EMAILS", [])
+    monkeypatch.setattr(notifications, "SMTP_HOST", "")  # nothing to send with
+
+    assert magic_links.send("buyer@testco.example", None, "https://x/#sign-in=secret") == "failed"
+
+    recorded = magic_links.recent_failures()
+    assert len(recorded) == 1
+    assert recorded[0]["email"] == "buyer@testco.example"
+    assert recorded[0]["outcome"] == "failed"
+    # The link must never be kept: this list is read on a screen.
+    assert "secret" not in str(recorded[0])

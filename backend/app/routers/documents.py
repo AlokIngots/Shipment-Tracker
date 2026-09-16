@@ -45,6 +45,9 @@ def download_document(
 
     return FileResponse(
         path,
-        media_type="application/pdf",
+        # What the file actually is, not what documents are usually. A JPG
+        # or PNG scan is a real case: a mill test certificate often arrives
+        # as a photograph of a sheet of paper.
+        media_type=storage.media_type_for(document.stored_path or ""),
         filename=document.file_name,
     )

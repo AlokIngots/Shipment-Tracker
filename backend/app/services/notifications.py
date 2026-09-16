@@ -115,7 +115,12 @@ def build_message(user, customer, order, shipment) -> EmailMessage:
 
 
 def would_send_to(email: str) -> bool:
-    """Whether a real email may go to this address right now."""
+    """Whether a real *notification* may go to this address right now.
+
+    Sign-in links are not subject to the pilot list -- see send() -- so this
+    answers only for the automatic shipment notifications, which is what the
+    Messages screen asks it about.
+    """
     if not SEND_EMAILS:
         return False
     if NOTIFY_ONLY_EMAILS and email.strip().lower() not in NOTIFY_ONLY_EMAILS:
@@ -123,17 +128,28 @@ def would_send_to(email: str) -> bool:
     return True
 
 
-def send(message: EmailMessage) -> tuple[str, str | None]:
+def send(message: EmailMessage, pilot_list: bool = True) -> tuple[str, str | None]:
     """Deliver a message. Returns (outcome, detail).
 
     Outcomes: "sent", "suppressed" or "failed". Nothing raises, so one bad
     address cannot stop the rest of a run.
+
+    `pilot_list=False` skips the NOTIFY_ONLY_EMAILS allow-list, and only
+    that. It is for mail the portal *owes* somebody who asked for it -- a
+    sign-in link -- rather than mail the portal decided by itself to send
+    about a shipment. Until 16 Sep 2026 a sign-in link went through the
+    allow-list too, so a customer who was not on it asked for a link, was
+    told to check their email, and received nothing: the portal's worst
+    failure, because it looked exactly like success.
+
+    SEND_EMAILS still stops everything. It is the switch for the whole
+    portal, not a pilot list, and a sign-in link is no exception.
     """
     recipient = message["To"]
 
     if not SEND_EMAILS:
         return "suppressed", "SEND_EMAILS is off"
-    if NOTIFY_ONLY_EMAILS and recipient.strip().lower() not in NOTIFY_ONLY_EMAILS:
+    if pilot_list and NOTIFY_ONLY_EMAILS and recipient.strip().lower() not in NOTIFY_ONLY_EMAILS:
         return "suppressed", "not on the NOTIFY_ONLY_EMAILS pilot list"
     if not SMTP_HOST:
         return "failed", "SMTP_HOST is not set"
