@@ -79,17 +79,25 @@ to the next step. Never run ahead through multiple steps at once.
 
 ## Where we are now
 
-**Last worked on: 15 September 2026.** Steps 1–29 and 31–34 are built,
-merged to `dev` **and deployed**. Step 35 (container tracking) is built on
-its branch and not yet deployed.
+**Last worked on: 16 September 2026.** Steps 1–29 and 31–37 are built,
+merged to `dev` **and deployed**. Nothing is merged and waiting to go out.
 
 **The portal is live and current** at https://portal.alokindia.co.in on
-srv1427359. On **15 September 2026** `dev@de723f0` was deployed there:
-`safe-deploy.sh` ran clean, the schema reported "Already up to date at
-0011", the API and website came up healthy, and **magic-link sign-in is
-confirmed working live**. So steps 28, 29, 31, 32, 33 and 34 and migrations
-0009 and 0011 are all on the server now, and the long "merged but not
-deployed" backlog that stood here before is gone.
+srv1427359. On **16 September 2026** `dev` at step 37 (`4a86156`) was
+deployed there: `safe-deploy.sh` ran clean, the schema is at **0012**, and
+the API and website came up healthy. So steps 35, 36 and 37 — container
+tracking, the staff Track panel, and the honest order detail with no vessel
+map — are live, on top of the 15 September deploy that carried steps 28,
+29, 31, 32, 33 and 34 with migrations 0009 and 0011. Magic-link sign-in is
+confirmed working live.
+
+**The first real order is on the live portal.** The Bucher order,
+**EXP-043**, was entered through the staff screens on 16 September 2026 and
+checked from the other side — Alok signed in as that customer and saw it.
+So the portal holds real customer data now, and the tracking work of steps
+35–37 has been seen on a real screen with a real shipment on it, which is
+what the three "not opened in a browser" caveats in the progress log were
+waiting for.
 
 Email works there: on 11 Sep 2026 the server's `.env` was set to
 `SEND_EMAILS=true` with AWS SES SMTP (region ap-south-1, sending from
@@ -106,8 +114,10 @@ history: the 11 Sep sign-in link was received, and order status coming from
 the shipments rather than being typed was accepted. Nothing gates a deploy
 today except the usual: a green test run, a backup, and the user saying go.
 
-**The next deploy carries step 35 alone** — container tracking plus
-migration 0012, one new nullable column. Not the old batch.
+**Nothing is waiting to be deployed.** The server is at step 37 and schema
+0012; `dev` and the live stack are in step. Before the next deploy, check
+`NOTIFY_ONLY_EMAILS` on the server first — there is a real customer in the
+database now, so the automatic sender has somebody it could reach.
 
 **Step 30, "Forgot your password", is held unmerged** on
 `feature/step30-password-reset` (`a37b9b7`) on the user's decision: do not
@@ -557,9 +567,9 @@ the customer side needs, and a step is done when both work.
 | 32 | The escape hatch (`feature/password-escape-hatch`) | with `PASSWORD_SIGN_IN` on, `manage_users --reset-password` gives a temporary password to sign in with; a written "If email fails" procedure | the password box, the password Sign in button and "or" come back on the sign-in card only while the server switch is on; hidden while it is off | **Done, deployed 15 Sep 2026** |
 | 33 | Notifications send themselves (`feature/step33-auto-notify`) | the API sends whatever is waiting on a timer, `NOTIFY_EVERY_MINUTES`, with only one sender at a time however many workers or containers are up; a **Messages to customers** tab showing what is waiting, what was sent, held back or failed, and how many tries it took; a Send now button; `scripts/notify.py` still works and now shares the same loop | the customer is told when their shipment moves, without anybody at Alok Ingots remembering a command | **Done, deployed 15 Sep 2026** |
 | 34 | Sign-in links that last a day (`feature/step34-longer-signin-links`, `feature/step35-single-use-default`) | `MAGIC_LINK_TTL_SECONDS` is 24 hours, not 15 minutes. A link is still spent on first use: `MAGIC_LINK_SINGLE_USE` defaults true, and false is there if email scanners ever do start spending links. `GET /api/sign-in-options` now tells the screens the rules so they cannot state them wrongly | the link in the inbox still works the next morning; the email and the sign-in screen say what is actually true | **Done, deployed 15 Sep 2026** |
-| 35 | Track the box, not the ship (`feature/step35-container-tracking`) | a Shipping line field on the shipment form and a `carrier` column in the CSV importer; a per-carrier registry of tracking URLs, each overridable from `.env`; Evergreen Line first | a **Track container** button on each shipment, opening the carrier's own page by B/L or container number, with the carrier's search page as the fallback that always works | **Built, not deployed**; Evergreen's deep link still unverified |
-| 36 | The map on the page, and tracking for staff (`feature/step36-live-vessel-map`) | a **Track** button on each shipment row opens the same map and the same buttons the customer sees, built by the same function, so nobody needs a customer login to follow a shipment | the vessel's live position embedded in the order detail rather than behind a link, the MarineTraffic link kept as the fallback, and Evergreen's **Track container** button now opening its search page with the B/L and container number shown beside it to copy | **Superseded by step 37**: the map and the vessel link were removed before either was ever deployed. What survives from this step is the staff Track panel and one shared `links_for()` |
-| 37 | Honest tracking (`feature/step37-honest-tracking`) | the Track panel keeps the carrier link and the copyable numbers; no map, no vessel link | the vessel map and "See where the vessel is now" are gone, because a transshipped hull's position is a different voyage. What is left is the status timeline, the shipment facts, the copyable B/L and container numbers, and one clearly-worded **Track this container on <carrier>** button. Plus a light readability pass on the order detail | **Built, not deployed** |
+| 35 | Track the box, not the ship (`feature/step35-container-tracking`) | a Shipping line field on the shipment form and a `carrier` column in the CSV importer; a per-carrier registry of tracking URLs, each overridable from `.env`; Evergreen Line first | a **Track container** button on each shipment, opening the carrier's own page by B/L or container number, with the carrier's search page as the fallback that always works | **Done, deployed 16 Sep 2026**; Evergreen's deep link still unverified, so the button opens the carrier's search page |
+| 36 | The map on the page, and tracking for staff (`feature/step36-live-vessel-map`) | a **Track** button on each shipment row opens the same map and the same buttons the customer sees, built by the same function, so nobody needs a customer login to follow a shipment | the vessel's live position embedded in the order detail rather than behind a link, the MarineTraffic link kept as the fallback, and Evergreen's **Track container** button now opening its search page with the B/L and container number shown beside it to copy | **Superseded by step 37**: the map and the vessel link were removed before either was ever deployed. What survives from this step is the staff Track panel and one shared `links_for()`, both **deployed 16 Sep 2026** as part of step 37 |
+| 37 | Honest tracking (`feature/step37-honest-tracking`) | the Track panel keeps the carrier link and the copyable numbers; no map, no vessel link | the vessel map and "See where the vessel is now" are gone, because a transshipped hull's position is a different voyage. What is left is the status timeline, the shipment facts, the copyable B/L and container numbers, and one clearly-worded **Track this container on <carrier>** button. Plus a light readability pass on the order detail | **Done, deployed 16 Sep 2026**, and seen live on the first real order |
 
 ### Still to build, both sides
 
@@ -672,6 +682,7 @@ Update after every step: what was done, and the commit.
 | 2026-09-15 | **Step 35 — Track the box, not the ship** (`feature/step35-container-tracking`, restore tag `pre-container-tracking`). The vessel link answers "where is the ship", which is not what a buyer asks, so each shipment now also carries the shipping line and a **Track container** button that opens that carrier's own tracking page. Migration 0012 adds one nullable `shipments.carrier`, free text, left empty on every existing row rather than guessed from a B/L prefix. A per-carrier registry in `app/services/tracking.py` holds up to three URLs per line — by Bill of Lading, by container number, and the carrier's search page with nothing filled in — and adding a carrier is one entry and no code. Every URL can be corrected from `.env` (`CARRIER_URL_<CARRIER>_<BL|CONTAINER|HOME>`), because a carrier can change its tracking URL without warning and a deploy should not be the only way to follow. The B/L is preferred over the container, both being identifiers of the shipment but the B/L the carrier's own reference for that consignment. A container number failing its ISO 6346 check digit is never deep-linked, the same rule the staff form already applies. Carrier matching is loose — case, spacing and punctuation ignored, plus aliases — because staff copy the line off a Bill of Lading and will not type a code; an unrecognised line is stored and shown but gets no button, rather than a button leading nowhere. The customer side stays read-only and the server builds every URL, as the vessel link already did. Staff get a Shipping line field on the shipment form, the carrier on the orders screen summary, a `carrier` column in the CSV importer and template, and a Carrier entry in the activity record. **Evergreen Line is the only carrier in the registry, and its two deep links are unverified**: ShipmentLink refused every connection from this machine and its tracking form has historically been a POST, so the design always keeps a `home` fallback and tells the screen whether the link was prefilled — the button works either way and says "paste the container number" when it has to. Proved by 25 new database-free tests passing (registry matching, B/L preferred over container, a bad check digit never linked, the always-safe fallback, URL escaping, `.env` overriding a built-in and an empty override not deleting one) and a clean frontend build. **The full suite and the end-to-end half have not been run: Docker Desktop will not start on this PC, so there is no database.** 6 further end-to-end tests are written and waiting for one, taking the suite to 267 collected. Not deployed | `161a32f` + _this commit_ |
 | 2026-09-15 | **Step 36 — The map on the page, staff tracking, and Evergreen's fallback** (`feature/step36-live-vessel-map`, restore tag `pre-carrier-fallback`). Three things, one branch. **The vessel's live position is now embedded in the order detail** instead of only behind a link, with the caption "Live position of the vessel — may pause when the ship is out of range." and the MarineTraffic link kept underneath as the fallback. It is an iframe the portal builds itself, from `VESSEL_MAP_URL_TEMPLATE`, and deliberately **not** VesselFinder's documented `<script>`: that script writes nothing but this iframe, and running it here would put third-party JavaScript in the portal's own origin, where the customer's sign-in token lives — a cross-origin frame cannot reach it. **No MMSI is stored and none is needed**: VesselFinder resolves the IMO the portal already holds, checked against WAN HAI 359 (IMO 9554092), whose embed answered with MMSI 563182400 and `configError:""`. **Evergreen's deep link is gone**, confirmed broken: both candidates opened on ShipmentLink's blank Quick Tracking form, so the button opens that search page and the screen shows the B/L and container number beside it, each with a one-tap Copy that degrades to selectable text when the clipboard is refused. **Staff get the same map and the same buttons** behind a per-shipment Track toggle — shut by default, because an order with a dozen lots would otherwise load a dozen frames — and both halves now read from one `tracking.links_for()`, so a customer and the member of staff on the phone to them cannot be shown different positions; a test asserts all seven link fields match across the two endpoints. **No migration.** **No CSP change was needed and none was made**: the portal sends no Content-Security-Policy, so nothing blocks the frame; `deploy/Caddyfile` now carries a comment saying what `frame-src` must name if one is ever added, and `X-Frame-Options DENY` — which is about the portal being framed by others — stays untouched. Proved by 38 database-free tests passing (46 in the file, 282 collected), a clean frontend build and a clean `npm run lint`, and over HTTP: the exact URL the portal builds returns 200, names the right vessel, and sends no `X-Frame-Options`. **Not proved: the map has never been opened in a browser** — Docker Desktop will not start on this PC, so the 8 end-to-end tests and the whole suite are unrun, and nothing has confirmed the frame draws, sizes or scrolls on a real screen. Not deployed | _this commit_ |
 | 2026-09-15 | **Step 37 — Honest tracking** (`feature/step37-honest-tracking`, restore tag `pre-honest-tracking`). The first real order settled an argument step 36 had got wrong. Bucher's boxes go to Antwerp; WAN HAI 359, the vessel on the Bill of Lading, was showing Chennai to China, because export cargo is transshipped — the ship drops the boxes at a hub and sails on to its next voyage. So **the embedded map and the "See where the vessel is now" link are both gone**, from the customer view and the staff view, along with `tracking_url()`, `vessel_map_url()`, `TRACKING_URL_TEMPLATE`, `TRACKING_PROVIDER_NAME` and both `VESSEL_MAP_*` settings: dead plumbing in a service is worse than none, and a test in each of `test_validation.py` and `test_container_tracking.py` now asserts they stay gone. Neither was ever deployed, so no customer saw either. **The vessel name and IMO number are still stored**, because they are on the paperwork; the IMO row was dropped from the *customer* facts, as the only thing it was ever for was the link. What is left is what a buyer can act on: the status timeline, the shipment facts (shipping line, vessel, container number, B/L number, departure date, expected arrival), the copyable numbers, and **one** action — **Track this container on Evergreen Line** — which opens the carrier's own page, the one party that knows about the transshipment. The screen says the carrier's site can be slow and that its page asks for a number, with a Copy button on each. A light readability pass came with it: brand red corrected to `#BC0300` and kept strictly as a signal colour, the one action given a phone-sized tap target instead of a 3px pill, the six facts given a minimum column width so they form tidy columns rather than a ragged list, and the tracking action set in a panel of its own. No dark theme; `color-scheme: light` unchanged. **No migration.** Proved by 95 database-free tests passing (272 collected, down from 282 as the map's own tests went with it), a clean frontend build and a clean `npm run lint`. **Not proved: nothing has been opened in a browser** — Docker Desktop will not start on this PC, so the end-to-end tests and the whole suite are unrun and no screen has been looked at. Not deployed | _this commit_ |
+| 2026-09-16 | **Steps 35, 36 and 37 deployed to the live server, by Alok, and the first real order loaded.** `safe-deploy.sh` ran clean, the schema is at **0012** — migration 0012's nullable `shipments.carrier` applied — and the API and website came up healthy. So container tracking, the staff Track panel and the honest order detail (carrier link and copyable numbers, no vessel map, no vessel link) are all live. The **Bucher order, EXP-043**, was then entered through the staff screens and checked from the other side: Alok signed in as that customer and saw the order. That is the first real customer data on the portal, and the first time steps 35–37 have been looked at in a browser at all — the three rows above say they never had been, because Docker Desktop would not start on this PC. The end-to-end tests are still unrun here for the same reason. `NOTIFY_ONLY_EMAILS` was last recorded as holding only the owner's address; with a real customer in the database it is worth confirming on the server before Bucher is meant to start receiving mail | (deploy, no commit) |
 
 ### Design decisions worth remembering
 
@@ -1093,7 +1104,11 @@ Update after every step: what was done, and the commit.
   the live portal, or is not on `NOTIFY_ONLY_EMAILS`, rather than sending
   having broken, but that is not proven. A second link was requested for
   **exports@alokindia.com**, which has a live staff login, at 11:46 UTC
-  (answer 202); Alok is to confirm it arrived. Deploying waits on that.
+  (answer 202). **Settled since:** email on the live server is confirmed
+  working — a magic-link sign-in was used there on 15 Sep 2026 — so this
+  gates nothing any more. The mis@alokindia.com silence is still unexplained
+  and most likely means that address has no login, or is not on
+  `NOTIFY_ONLY_EMAILS`.
 - **While `PASSWORD_SIGN_IN` is on, a password is a way in for everybody.**
   That is the point during an email failure, but it also brings back
   password guessing (rate limited as before) and temporary passwords staff
@@ -1270,10 +1285,9 @@ Update after every step: what was done, and the commit.
 - **`scripts.seed --reset` clears the database but leaves document files behind**
   in `storage/documents/`, so old files accumulate as orphans. Harmless while
   the data is invented; worth a tidy-up before real documents arrive.
-- **`safe-deploy.sh` has only ever run against a local Docker stack.** It has
-  never met a real server, a real domain, or a real HTTPS certificate. Caddy's
-  certificate step in particular cannot be tested until DNS points at a real
-  machine.
+- ~~**`safe-deploy.sh` has only ever run against a local Docker stack.**~~
+  **No longer true:** it has run clean against srv1427359 several times, most
+  recently on 16 Sep 2026, with a real domain and Caddy's real certificate.
 - **Docker Hub could not be reached from this machine on 9 Sep 2026.** Pulling
   base images failed with a TLS error through Docker Desktop's proxy, while
   the same request from Windows itself worked. The images were fetched from
