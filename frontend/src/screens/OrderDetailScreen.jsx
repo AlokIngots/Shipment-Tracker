@@ -4,7 +4,7 @@ import PhotoGallery from '../components/PhotoGallery'
 import StatusPill from '../components/StatusPill'
 import StatusTrack from '../components/StatusTrack'
 import Toolbar from '../components/Toolbar'
-import { TrackActions } from '../components/Tracking'
+import { CopyButton } from '../components/Tracking'
 import { DASH, fmtDate } from '../lib/format'
 
 function DocumentRow({ doc }) {
@@ -63,12 +63,18 @@ function DocumentRow({ doc }) {
 // The IMO number used to be here. It is gone, because the only thing it was
 // for was a link to the vessel's position, and that link was wrong for
 // transshipped cargo. Staff still see it; it is on the paperwork.
+//
+// Nothing here leaves the portal. The "Track this container on <carrier>"
+// button went on 16 Sep 2026, on Alok's decision: a customer reading their
+// own order should not be handed off to somebody else's website. The two
+// numbers a carrier or forwarder will ask for are copyable instead, so they
+// can be used wherever the customer chooses.
 function Tracking({ shipment }) {
   const facts = [
     ['Shipping line', shipment.carrier],
     ['Vessel', shipment.vessel_name],
-    ['Container number', shipment.container_no],
-    ['Bill of Lading number', shipment.bl_number],
+    ['Container number', shipment.container_no, 'copy'],
+    ['Bill of Lading number', shipment.bl_number, 'copy'],
     ['Departure date', shipment.etd && fmtDate(shipment.etd)],
     ['Expected arrival', shipment.eta && fmtDate(shipment.eta)],
   ].filter(([, value]) => value)
@@ -77,7 +83,7 @@ function Tracking({ shipment }) {
     <div className="docs">
       <span className="docs-label">Track your shipment</span>
 
-      {facts.length === 0 && !shipment.container_tracking_url && (
+      {facts.length === 0 && (
         <p className="docs-none">
           The vessel, container and dates will appear here once this shipment
           is booked.
@@ -86,16 +92,17 @@ function Tracking({ shipment }) {
 
       {facts.length > 0 && (
         <dl className="facts facts--tight">
-          {facts.map(([label, value]) => (
+          {facts.map(([label, value, copyable]) => (
             <div key={label}>
               <dt>{label}</dt>
-              <dd>{value}</dd>
+              <dd className={copyable ? 'fact--copyable' : undefined}>
+                <span className={copyable ? 'fact-number' : undefined}>{value}</span>
+                {copyable && <CopyButton label={label} value={value} />}
+              </dd>
             </div>
           ))}
         </dl>
       )}
-
-      <TrackActions shipment={shipment} />
     </div>
   )
 }

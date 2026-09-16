@@ -1,13 +1,17 @@
 import { useState } from 'react'
 
-// The tracking both halves of the portal show. Staff on the phone to a
-// customer need the same numbers and the same link in front of them, so
-// there is one component and not two that drift.
+// The tracking the portal shows.
 //
 // There is no vessel map and no vessel link. Both were removed on
 // 15 Sep 2026: export cargo is transshipped, so the named ship sails on to
 // another voyage while the boxes wait at a hub, and a map of that hull shows
-// a ship going somewhere the cargo is not. The carrier follows the box.
+// a ship going somewhere the cargo is not.
+//
+// Since 16 Sep 2026 the CUSTOMER is not sent to the carrier's website either
+// (Alok's decision): a customer looking at their order should not be handed
+// off to somebody else's site. They get the numbers, and a button to copy
+// each one, so they can use them wherever they like. Staff keep the carrier
+// link, because looking the box up is part of answering the phone.
 
 // One number, big enough to read down a phone line and one tap to copy.
 // Copying can fail -- an old browser, a page served over plain http, a
@@ -52,8 +56,38 @@ function CopyNumber({ label, value }) {
   )
 }
 
-// The one tracking action: the carrier's own page, which knows about the
-// transshipment because the carrier arranged it.
+// Just the button. The number it copies is already on screen somewhere else,
+// which is what makes this safe to offer: if copying fails, nothing is lost.
+export function CopyButton({ label, value }) {
+  const [state, setState] = useState('idle')
+
+  async function copy() {
+    try {
+      if (!navigator.clipboard) throw new Error('no clipboard')
+      await navigator.clipboard.writeText(value)
+      setState('copied')
+      setTimeout(() => setState('idle'), 2000)
+    } catch {
+      setState('failed')
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      className="copynum-button copynum-button--inline"
+      onClick={copy}
+      aria-label={`Copy the ${label.toLowerCase()}`}
+      title={state === 'failed' ? 'Select the number and copy it yourself' : undefined}
+    >
+      {state === 'copied' ? 'Copied' : state === 'failed' ? 'Select it' : 'Copy'}
+    </button>
+  )
+}
+
+// The staff tracking panel: the carrier's own page, which knows about the
+// transshipment because the carrier arranged it, and the numbers to paste
+// into it. Not shown to customers -- see the note at the top of this file.
 export function TrackActions({ shipment }) {
   if (!shipment.container_tracking_url) return null
 
