@@ -72,6 +72,12 @@ jobs:
       - name: Install dependencies
         working-directory: frontend
         run: npm ci
+      # Lint before building: a build can pass on code the linter objects
+      # to, and until there are frontend tests this is the only automatic
+      # check the website gets. Warnings do not fail it today.
+      - name: Lint
+        working-directory: frontend
+        run: npm run lint
       - name: Build
         working-directory: frontend
         run: npm run build

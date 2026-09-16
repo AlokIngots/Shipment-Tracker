@@ -311,3 +311,41 @@ def test_the_header_is_ignored_when_it_is_not_to_be_trusted():
         assert deps.client_address(_request("203.0.113.9")) == "10.9.9.9"
     finally:
         deps.TRUST_PROXY_HEADER = original
+
+
+# ------------------------------------------------- what the front door sends
+
+
+def _caddyfile() -> str:
+    from pathlib import Path
+
+    return (Path(__file__).resolve().parents[2] / "deploy" / "Caddyfile").read_text(
+        encoding="utf-8"
+    )
+
+
+def test_the_front_door_sends_a_content_security_policy():
+    """The portal loads nothing from anywhere else, so the policy can be
+    'self'. This test is a reminder, not a proof: only the live server can
+    show what a browser is really sent."""
+    caddyfile = _caddyfile()
+    assert "Content-Security-Policy" in caddyfile
+    assert "default-src 'self'" in caddyfile
+    assert "frame-ancestors 'none'" in caddyfile
+    # Documents and photos are fetched with the token and handed to the
+    # browser as blob URLs; without this they do not render at all.
+    assert "img-src 'self' data: blob:" in caddyfile
+
+
+def test_the_front_door_sends_hsts_without_preload():
+    """preload is a one-way door on the whole of alokindia.co.in, and is not
+    this portal's to walk through."""
+    directive = next(
+        line for line in _caddyfile().splitlines()
+        if line.strip().startswith("Strict-Transport-Security")
+    )
+    assert "max-age=31536000" in directive
+    assert "includeSubDomains" in directive
+    # Checked on the directive rather than the file, because the comment
+    # above it explains why preload is not there.
+    assert "preload" not in directive

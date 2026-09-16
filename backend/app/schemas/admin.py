@@ -302,10 +302,28 @@ class StaffSenderOut(BaseModel):
     runs: int
     # Whether any real email can leave the building at all (SEND_EMAILS).
     sending_enabled: bool
-    # Non-empty means a pilot: only these addresses receive real mail.
+    # Non-empty means a pilot: only these addresses receive real
+    # NOTIFICATIONS. Sign-in links ignore this list -- anybody with a login
+    # is owed the link they asked for.
     pilot_addresses: list[str]
     # The shipment statuses that cause a message.
     notify_on: list[str]
+
+
+class StaffLinkFailureOut(BaseModel):
+    """A sign-in link that reached nobody.
+
+    The person who asked for it was told to check their email, because the
+    answer cannot say otherwise without telling a stranger which addresses
+    have accounts. This is where staff find out instead.
+    """
+
+    at: datetime
+    email: str
+    # "failed" (the mail server refused or could not be reached) or
+    # "suppressed" (SEND_EMAILS is off).
+    outcome: str
+    detail: str | None
 
 
 class StaffMessagesOut(BaseModel):
@@ -314,6 +332,8 @@ class StaffMessagesOut(BaseModel):
     sender: StaffSenderOut
     waiting: list[StaffMessageWaitingOut]
     messages: list[StaffMessageOut]
+    # Newest first, at most 20, and forgotten when the API restarts.
+    sign_in_link_failures: list[StaffLinkFailureOut] = []
     # True when there are older messages than the last one on this page.
     more: bool
 

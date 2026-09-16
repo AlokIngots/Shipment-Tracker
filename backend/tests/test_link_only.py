@@ -39,7 +39,7 @@ def outbox(monkeypatch):
     """Every email the portal tries to send, caught instead of sent."""
     caught = []
 
-    def catch(message):
+    def catch(message, pilot_list=True):
         caught.append(message)
         return "sent", None
 

@@ -9,8 +9,10 @@ The whole life of a link is in this file:
            only the newest ever works.
 
   email    https://portal.alokindia.co.in/#sign-in=<token>, sent through
-           the same sender and the same safety switches as order
-           notifications. The token sits after the "#", which a browser
+           the same sender as order notifications but NOT through the
+           NOTIFY_ONLY_EMAILS pilot list: a person who asked to sign in is
+           owed the email, whoever they are. SEND_EMAILS still stops it,
+           because that switch is the whole portal. The token sits after the "#", which a browser
            never sends to a server, so it cannot turn up in a web server's
            access log or be passed on in a Referer header.
 
@@ -41,6 +43,7 @@ account or not.
 import hashlib
 import logging
 import secrets
+from collections import deque
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 
@@ -52,6 +55,18 @@ from app.models import MagicLink, User
 from app.services import notifications
 
 log = logging.getLogger("portal.magic_links")
+
+# The last few sign-in links that reached nobody, so the Messages screen can
+# show a member of staff that something is wrong without anybody reading a
+# container log. In memory and lost on restart, like the rate-limit counts:
+# it is a signal that something is failing now, not a record of what
+# happened. The link itself is never kept -- only that one did not arrive.
+RECENT_FAILURES = deque(maxlen=20)
+
+
+def recent_failures() -> list[dict]:
+    """Newest first. What the staff Messages screen shows."""
+    return list(reversed(RECENT_FAILURES))
 
 # 32 bytes is 256 bits. secrets.token_urlsafe turns it into 43 characters
 # that survive being put in a URL and an email untouched.
@@ -203,11 +218,28 @@ def send(email: str, full_name: str | None, url: str) -> str:
     The outcome is logged. The link never is: anybody able to read the
     server's logs must not be able to sign in as a customer.
     """
-    outcome, detail = notifications.send(build_message(email, full_name, url))
+    outcome, detail = notifications.send(
+        build_message(email, full_name, url), pilot_list=False
+    )
     if outcome == "sent":
         log.info("sign-in link emailed to %s", email)
     else:
-        log.warning("sign-in link for %s was not delivered (%s: %s)", email, outcome, detail)
+        # ERROR, not WARNING: since the pilot list stopped applying to
+        # sign-in links there is no ordinary reason for one not to arrive.
+        # The person is looking at "Check your email" right now, and that
+        # answer cannot say otherwise without telling a stranger which
+        # addresses have accounts -- so this is the only place it shows.
+        log.error(
+            "SIGN-IN LINK NOT DELIVERED to %s (%s: %s)", email, outcome, detail
+        )
+        RECENT_FAILURES.append(
+            {
+                "at": datetime.now(timezone.utc),
+                "email": email,
+                "outcome": outcome,
+                "detail": detail,
+            }
+        )
     return outcome
 
 

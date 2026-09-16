@@ -176,3 +176,41 @@ def test_nothing_is_readable_without_signing_in(client, order):
         "/api/photos/1/thumbnail",
     ):
         assert client.get(path).status_code == 401, path
+
+
+def test_a_document_is_served_as_what_it_actually_is(
+    client, staff_auth, customer_auth, order
+):
+    """Everything used to go out as application/pdf. A mill test certificate
+    is often a photograph of a sheet of paper, and arrived labelled as a PDF
+    that would not open."""
+    shipment_id = order["shipments"][0]["id"]
+
+    for doc_type, name, content, claimed in [
+        ("Packing List", "pl.pdf", b"%PDF-1.4", "application/pdf"),
+        ("Mill Test Certificate", "mtc.jpg", png(), "image/jpeg"),
+    ]:
+        client.post(
+            f"/api/staff/shipments/{shipment_id}/documents",
+            headers=staff_auth,
+            data={"doc_type": doc_type},
+            files={"file": (name, content, claimed)},
+        )
+
+    documents = client.get(
+        f"/api/orders/{order['id']}", headers=customer_auth
+    ).json()["shipments"][0]["documents"]
+    by_type = {d["doc_type"]: d for d in documents}
+
+    pdf = client.get(
+        f"/api/documents/{by_type['Packing List']['id']}/download", headers=customer_auth
+    )
+    assert pdf.status_code == 200
+    assert pdf.headers["content-type"] == "application/pdf"
+
+    scan = client.get(
+        f"/api/documents/{by_type['Mill Test Certificate']['id']}/download",
+        headers=customer_auth,
+    )
+    assert scan.status_code == 200
+    assert scan.headers["content-type"] == "image/jpeg"

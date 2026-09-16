@@ -27,7 +27,7 @@ def delivers(monkeypatch):
     """Make sending appear to work, and record what was handed over."""
     handed_over = []
 
-    def fake_send(message):
+    def fake_send(message, pilot_list=True):
         handed_over.append(message)
         return "sent", None
 
@@ -91,14 +91,14 @@ def test_what_was_suppressed_is_tried_again(db, order, customer_auth, monkeypatc
 def test_a_retry_updates_the_one_record_rather_than_adding_another(
     db, order, customer_auth, monkeypatch, delivers
 ):
-    monkeypatch.setattr(notifications, "send", lambda m: ("suppressed", "off"))
+    monkeypatch.setattr(notifications, "send", lambda m, pilot_list=True: ("suppressed", "off"))
     notifications.run(db)
     first = notes(db)[0]
     first_attempt_at = first.last_attempt_at
     assert first.outcome == "suppressed"
 
     # Now sending works. The same message goes out for real.
-    monkeypatch.setattr(notifications, "send", lambda m: ("sent", None))
+    monkeypatch.setattr(notifications, "send", lambda m, pilot_list=True: ("sent", None))
     assert notifications.run(db) == {"sent": 1, "suppressed": 0, "failed": 0}
 
     records = notes(db)
@@ -138,7 +138,7 @@ def test_one_bad_address_does_not_stop_the_rest(
             },
         )
 
-    def picky(message):
+    def picky(message, pilot_list=True):
         if message["To"] == "one@testco.example":
             return "failed", "SMTPRecipientsRefused: no such mailbox"
         return "sent", None
@@ -194,7 +194,7 @@ def test_the_lock_is_handed_back_so_the_next_turn_works(
 def test_the_lock_is_handed_back_even_when_the_run_blows_up(
     db, order, customer_auth, monkeypatch
 ):
-    def explode(message):
+    def explode(message, pilot_list=True):
         raise RuntimeError("the mail server fell over")
 
     monkeypatch.setattr(notifications, "send", explode)
@@ -202,7 +202,7 @@ def test_the_lock_is_handed_back_even_when_the_run_blows_up(
         scheduler.send_with(db)
 
     # The lock must not be stuck, or this process never sends again.
-    monkeypatch.setattr(notifications, "send", lambda m: ("sent", None))
+    monkeypatch.setattr(notifications, "send", lambda m, pilot_list=True: ("sent", None))
     assert scheduler.send_with(db)["sent"] == 1
 
 
@@ -289,3 +289,26 @@ def test_the_timer_stays_off_when_it_is_switched_off(monkeypatch):
     scheduler.start()
     assert scheduler.status()["running"] is False
     assert scheduler.status()["every_minutes"] == 0
+
+
+def test_a_sign_in_link_that_failed_shows_on_the_messages_screen(
+    client, staff_auth, monkeypatch
+):
+    """The person who asked for it was told to check their email, because
+    the answer cannot say otherwise without telling a stranger which
+    addresses have accounts. Staff have to find out somewhere."""
+    from app.services import magic_links
+
+    magic_links.RECENT_FAILURES.clear()
+    monkeypatch.setattr(notifications, "SEND_EMAILS", True)
+    monkeypatch.setattr(notifications, "NOTIFY_ONLY_EMAILS", [])
+    monkeypatch.setattr(notifications, "SMTP_HOST", "")
+
+    magic_links.send("buyer@testco.example", None, "https://x/#sign-in=secret")
+
+    screen = client.get("/api/staff/messages", headers=staff_auth).json()
+    failures = screen["sign_in_link_failures"]
+    assert [f["email"] for f in failures] == ["buyer@testco.example"]
+    assert failures[0]["outcome"] == "failed"
+    assert "secret" not in str(failures)
+    magic_links.RECENT_FAILURES.clear()

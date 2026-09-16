@@ -16,13 +16,14 @@ from fastapi import APIRouter, Query
 from app.core import config
 from app.core.deps import DbSession, StaffUser
 from app.schemas import (
+    StaffLinkFailureOut,
     StaffMessageOut,
     StaffMessagesOut,
     StaffMessageWaitingOut,
     StaffSenderOut,
     StaffSendNowOut,
 )
-from app.services import notifications, scheduler
+from app.services import magic_links, notifications, scheduler
 
 router = APIRouter(prefix="/api/staff")
 
@@ -87,8 +88,20 @@ def staff_messages(
             for shipment, order, customer, user in notifications.pending(db)
         ]
 
+    # Like "what is waiting", this is about the whole portal rather than a
+    # slice of it, so it belongs on the first page only.
+    failures: list[StaffLinkFailureOut] = []
+    if before is None:
+        failures = [
+            StaffLinkFailureOut(**failure) for failure in magic_links.recent_failures()
+        ]
+
     return StaffMessagesOut(
-        sender=_sender(), waiting=waiting, messages=messages, more=more
+        sender=_sender(),
+        waiting=waiting,
+        messages=messages,
+        sign_in_link_failures=failures,
+        more=more,
     )
 
 

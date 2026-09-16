@@ -50,6 +50,7 @@ export default function StaffMessagesScreen() {
   const [state, setState] = useState('loading')
   const [sender, setSender] = useState(null)
   const [waiting, setWaiting] = useState([])
+  const [linkFailures, setLinkFailures] = useState([])
   const [messages, setMessages] = useState([])
   const [more, setMore] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -67,6 +68,7 @@ export default function StaffMessagesScreen() {
   function show(page) {
     setSender(page.sender)
     setWaiting(page.waiting)
+    setLinkFailures(page.sign_in_link_failures ?? [])
     setMessages(page.messages)
     setMore(page.more)
   }
@@ -177,8 +179,9 @@ export default function StaffMessagesScreen() {
 
         {sender.sending_enabled && sender.pilot_addresses.length > 0 && (
           <p className="message message--quiet">
-            Pilot: only {sender.pilot_addresses.join(', ')} receives real email.
-            Everybody else stays on the waiting list.
+            Pilot: only {sender.pilot_addresses.join(', ')} receives these
+            automatic updates. Everybody else stays on the waiting list.
+            Sign-in links are not affected — anybody with a login gets theirs.
           </p>
         )}
 
@@ -209,6 +212,34 @@ export default function StaffMessagesScreen() {
           </p>
         )}
       </div>
+
+      {/* A sign-in link that does not arrive is invisible from the outside:
+          the person is told to check their email either way, because saying
+          anything else would tell a stranger which addresses have accounts.
+          This is where somebody at Alok Ingots finds out instead. */}
+      {linkFailures.length > 0 && (
+        <div className="card">
+          <h3 className="shipment-no">Sign-in links that did not arrive</h3>
+          <p className="message message--quiet">
+            These people asked to sign in and were told to check their email,
+            but nothing reached them. Check the email settings, then ask them
+            to request a link again. This list is forgotten when the portal
+            restarts.
+          </p>
+          {linkFailures.map((row, index) => (
+            <div className="msg" key={index}>
+              <div className="activity-head">
+                <span className="activity-summary">{row.email}</span>
+                <span className="activity-when">{fmtWhen(row.at)}</span>
+              </div>
+              <span className="activity-who">
+                {row.outcome}
+                {row.detail ? ` — ${row.detail}` : ''}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {waiting.length > 0 && (
         <div className="card">

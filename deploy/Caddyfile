@@ -46,11 +46,30 @@
 		# Stops anyone framing the portal.
 		X-Frame-Options DENY
 		Referrer-Policy strict-origin-when-cross-origin
-	}
 
-	# No Content-Security-Policy is set. Adding one is worth doing, and now
-	# costs nothing to get right: the portal embeds no third-party frames and
-	# loads no third-party scripts, so 'self' covers everything it needs. The
-	# live vessel map that would have needed a frame-src exception was removed
-	# on 15 Sep 2026.
+		# Everything the portal loads, it serves itself: no third-party
+		# scripts, no third-party frames, no web fonts, no analytics. So
+		# 'self' is the whole policy, with three deliberate exceptions:
+		#
+		#   img-src data: blob:   documents and photos are fetched with the
+		#                         sign-in token and handed to the browser as
+		#                         blob URLs, because a plain <img src> or a
+		#                         plain link would go without the token
+		#   style-src 'unsafe-inline'
+		#                         React writes style attributes; there is no
+		#                         way to allow those without this
+		#   frame-ancestors 'none'
+		#                         the same thing X-Frame-Options says, for
+		#                         browsers that prefer this one
+		#
+		# The live vessel map that would have needed a frame-src exception
+		# was removed on 15 Sep 2026, so nothing here has to allow it.
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; form-action 'self'; base-uri 'self'; object-src 'none'; frame-src 'none'; frame-ancestors 'none'"
+
+		# A year, and subdomains. No preload: that is a one-way door on the
+		# whole of alokindia.co.in and is not this portal's to walk through.
+		# nginx terminates TLS in front, so this header travels through it
+		# to the browser unchanged.
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	}
 }
