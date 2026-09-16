@@ -143,9 +143,30 @@ def upsert(session, model, match: dict, values: dict):
     return row
 
 
+def demo_codes() -> set[str]:
+    """The customer codes this script owns, and nothing else."""
+    return {block["customer"]["code"] for block in DEMO_DATA}
+
+
+def customers_that_are_not_demo(session) -> list[str]:
+    """Real customers already in this database.
+
+    Demo customers are the ones in DEMO_DATA; SAMPLE- customers belong to
+    deploy/sample-data/sample-data.sql and are removable by it. Anything else
+    is somebody's actual business, and this script must not add invented
+    orders beside it.
+    """
+    codes = session.scalars(select(Customer.code)).all()
+    mine = demo_codes()
+    return sorted(
+        code for code in codes if code not in mine and not code.startswith("SAMPLE-")
+    )
+
+
 def main() -> None:
     reset = "--reset" in sys.argv
     schema_only = "--schema-only" in sys.argv
+    force = "--force" in sys.argv
 
     if reset:
         print("Dropping all tables...")
@@ -167,6 +188,19 @@ def main() -> None:
         return
 
     with SessionLocal() as session:
+        # Added 16 Sep 2026, after sample data had to be removed from the live
+        # portal by hand. Demo data has no business on a database that holds
+        # real customers, and the cheapest way to be sure is to refuse.
+        real = customers_that_are_not_demo(session)
+        if real and not force:
+            print(
+                "! Refusing to create demo data: this database already holds "
+                f"real customers ({', '.join(real)})."
+            )
+            print("  This looks like a live database. Nothing was changed.")
+            print("  Use --schema-only to bring the schema up to date instead.")
+            return
+
         for block in DEMO_DATA:
             spec = block["user"]
             if not spec["email"] or not spec["password"]:
