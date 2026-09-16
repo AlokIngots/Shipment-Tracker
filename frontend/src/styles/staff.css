@@ -380,6 +380,181 @@
   font-size: 12.5px;
 }
 
+/* ---- staff: the orders list ---- */
+
+/* Slim rows, one per order, shut until asked for. The page is a list to be
+   scanned, not a stack of opened cards to be scrolled past. */
+.orderlist {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.card--order {
+  --card-pad: 16px;
+  padding: 0;
+  overflow: hidden;
+}
+
+.card--order-open {
+  border-color: #c9d1e6;
+}
+
+/* The whole row is the button, so the target is the row and not a chevron
+   the size of a full stop. 44px is a finger on a phone. */
+.orderhead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px var(--card-pad);
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.orderhead:hover {
+  background: #f7f8fb;
+}
+
+.orderhead:focus-visible {
+  outline: 2px solid var(--navy);
+  outline-offset: -2px;
+}
+
+.orderhead--open {
+  border-bottom: 1px solid var(--line);
+}
+
+/* A triangle drawn in CSS: no icon font and no image, and it turns to point
+   down when the row is open. */
+.orderchev {
+  flex: none;
+  width: 0;
+  height: 0;
+  margin-right: 2px;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-left: 6px solid var(--muted);
+  transition: transform 0.15s ease;
+}
+
+.orderhead--open .orderchev {
+  transform: rotate(90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .orderchev {
+    transition: none;
+  }
+}
+
+.orderno {
+  flex: none;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--navy);
+}
+
+/* Takes the space that is left and gives it up first: a long customer name
+   is cut with an ellipsis rather than pushing the numbers off the row. */
+.ordercust {
+  flex: 1 1 8rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* The three right-hand columns are given widths of their own so that the
+   quantities, the statuses and the counts line up down the page. Ragged
+   columns are what makes a list something to read rather than to scan. */
+.orderqty {
+  flex: none;
+  min-width: 10.5rem;
+  text-align: right;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--navy);
+}
+
+.orderstatus {
+  flex: none;
+  min-width: 7rem;
+}
+
+.orderqty em {
+  font-style: normal;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.ordermeta {
+  flex: none;
+  min-width: 6.25rem;
+  text-align: right;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* Brand red, and it means something: this order reads Part shipped to the
+   customer only because nobody ticked the last lot. */
+.orderflag {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--bad-bg);
+  color: var(--bad);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.orderbody {
+  padding: 12px var(--card-pad) var(--card-pad);
+}
+
+.ordersub {
+  margin: 0 0 10px;
+  font-size: 12.5px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+/* The three totals, kept as tiles but sized for a row that has been opened
+   rather than for a page of its own. */
+.orderbody .totals--compact {
+  margin: 0 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.orderbody .total {
+  padding: 10px 14px;
+}
+
+.orderbody .total-value {
+  font-size: 17px;
+}
+
+.orderbody .card-actions {
+  margin-top: 8px;
+}
+
+/* Collapse all sits beside New order, and only when something is open. */
+.summary-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 /* ---- staff: the order and shipment forms ---- */
 
 .card--form {
@@ -866,6 +1041,27 @@
 /* The tabs do not fit in a row on a phone. Two by two, every one of them
    stays on the screen, instead of the last sitting off its edge. */
 @media (max-width: 700px) {
+  .orderhead {
+    padding: 10px 14px;
+  }
+
+  /* No room for columns on a phone: the parts keep their own widths and the
+     row wraps. */
+  .orderqty,
+  .orderstatus,
+  .ordermeta {
+    min-width: 0;
+  }
+
+  /* The customer takes a line of its own, so the numbers and the status keep
+     their places instead of being squeezed to nothing. */
+  .ordercust {
+    flex-basis: 100%;
+    order: 5;
+    white-space: normal;
+    overflow: visible;
+  }
+
   .tabs {
     display: grid;
     grid-template-columns: 1fr 1fr;
