@@ -102,6 +102,10 @@ class Shipment(Base):
     photos: Mapped[list["Photo"]] = relationship(
         back_populates="shipment", cascade="all, delete-orphan"
     )
+    # Live tracking, once staff have switched it on. At most one.
+    tracking: Mapped["ShipmentTracking | None"] = relationship(
+        back_populates="shipment", cascade="all, delete-orphan", uselist=False
+    )
 
     def __repr__(self) -> str:
         return f"<Shipment {self.shipment_no}>"

@@ -20,6 +20,7 @@ from app.routers import auth, documents, orders, photos
 from app.routers.admin import accounts as admin_accounts
 from app.routers.admin import activity as admin_activity
 from app.routers.admin import documents as admin_documents
+from app.routers.admin import live_tracking as admin_live_tracking
 from app.routers.admin import notifications as admin_notifications
 from app.routers.admin import orders as admin_orders
 from app.routers.admin import photos as admin_photos
@@ -31,10 +32,12 @@ from app.services import scheduler
 async def lifespan(app: FastAPI):
     """What runs for as long as the API does.
 
-    One thing so far: the timer that sends customers their notifications
-    without anybody having to remember to. NOTIFY_EVERY_MINUTES=0 turns it
-    off, and then the only ways to send are the Send now button and
-    `python -m scripts.notify`.
+    Two timers. One sends customers their notifications without anybody
+    having to remember to (NOTIFY_EVERY_MINUTES=0 turns it off, and then the
+    only ways to send are the Send now button and `python -m scripts.notify`).
+    The other reads live container tracking back from ShipsGo for shipments
+    staff have switched it on for (SHIPSGO_REFRESH_EVERY_HOURS=0 turns it
+    off). Reading is free; that timer never adds anything to ShipsGo.
     """
     scheduler.start()
     try:
@@ -64,3 +67,4 @@ app.include_router(admin_documents.router, tags=["admin"])
 app.include_router(admin_photos.router, tags=["admin"])
 app.include_router(admin_activity.router, tags=["admin"])
 app.include_router(admin_notifications.router, tags=["admin"])
+app.include_router(admin_live_tracking.router, tags=["admin"])

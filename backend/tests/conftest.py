@@ -142,6 +142,27 @@ def no_automatic_sender(monkeypatch):
     monkeypatch.setattr(config, "NOTIFY_EVERY_MINUTES", 0)
 
 
+@pytest.fixture(autouse=True)
+def no_real_shipsgo(monkeypatch):
+    """Nothing in the test suite may reach the real ShipsGo.
+
+    Adding a shipment there costs a credit, so the key is blanked, the
+    refresh timer is off, and the one function that opens a connection is
+    replaced by one that fails the test. test_live_tracking.py puts a fake
+    ShipsGo in its place where it needs one.
+    """
+    from app.core import config
+    from app.services import shipsgo
+
+    monkeypatch.setattr(config, "SHIPSGO_API_KEY", "")
+    monkeypatch.setattr(config, "SHIPSGO_REFRESH_EVERY_HOURS", 0)
+
+    def refuse(request):
+        raise AssertionError(f"a test tried to reach ShipsGo: {request.full_url}")
+
+    monkeypatch.setattr(shipsgo, "_open", refuse)
+
+
 @pytest.fixture
 def client(db):
     """The API, talking to the rolled-back session instead of the real one."""

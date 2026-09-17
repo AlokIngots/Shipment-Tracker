@@ -25,6 +25,16 @@ again later. Nothing is lost by skipping -- what is waiting stays waiting.
 
 Sending is still governed by SEND_EMAILS and NOTIFY_ONLY_EMAILS, so this
 running does not mean anybody is being emailed.
+
+Live tracking has a timer of its own here too
+---------------------------------------------
+
+A second, separate loop reads ShipsGo back for every shipment staff have
+switched live tracking on for, every SHIPSGO_REFRESH_EVERY_HOURS. It only
+reads, and reading is free: nothing in it can add a shipment to ShipsGo or
+spend a credit. It takes its own advisory lock, so two containers do not
+both read. If ShipsGo ever reports a cost for a read, the loop stops itself
+and says so on the staff screen, rather than carry on.
 """
 
 import asyncio
@@ -35,7 +45,7 @@ from sqlalchemy import text
 
 from app.core import config
 from app.core.database import SessionLocal
-from app.services import notifications
+from app.services import live_tracking, notifications, shipsgo
 
 log = logging.getLogger("portal.notify")
 
@@ -44,7 +54,12 @@ log = logging.getLogger("portal.notify")
 # "alok portal notifier" as an arbitrary but fixed 63-bit value.
 _LOCK_KEY = 8_143_220_907_551_133
 
+# The live-tracking reader's lock. Different from the sender's, so the two
+# never wait for each other.
+_TRACKING_LOCK_KEY = 8_143_220_907_551_134
+
 _task: asyncio.Task | None = None
+_tracking_task: asyncio.Task | None = None
 
 # What the Messages screen shows about the sender. In memory on purpose: it
 # describes this process's own timer, and after a restart the honest answer
@@ -55,6 +70,22 @@ _state: dict = {
     "last_error": None,
     "runs": 0,
 }
+
+
+_tracking_state: dict = {
+    "last_run_at": None,
+    "last_counts": None,
+    "last_error": None,
+    "stopped": False,
+}
+
+
+def tracking_status() -> dict:
+    """What the live-tracking reader has been doing, for the staff screen."""
+    return {
+        **_tracking_state,
+        "running": _tracking_task is not None and not _tracking_task.done(),
+    }
 
 
 def status() -> dict:
@@ -138,9 +169,88 @@ async def _loop() -> None:
         await asyncio.sleep(config.NOTIFY_EVERY_MINUTES * 60)
 
 
+def refresh_tracking_with(session, *, pause=None) -> dict[str, int]:
+    """One pass of the live-tracking reader on a session somebody else opened."""
+    got_lock = session.execute(
+        text("SELECT pg_try_advisory_lock(:key)"), {"key": _TRACKING_LOCK_KEY}
+    ).scalar()
+    if not got_lock:
+        return {"refreshed": 0, "failed": 0, "skipped": 1}
+    try:
+        kwargs = {"pause": pause} if pause is not None else {}
+        counts = live_tracking.refresh_due(session, **kwargs)
+    finally:
+        session.rollback()
+        session.execute(
+            text("SELECT pg_advisory_unlock(:key)"), {"key": _TRACKING_LOCK_KEY}
+        )
+        session.commit()
+    counts["skipped"] = 0
+    return counts
+
+
+def refresh_tracking_once() -> dict[str, int]:
+    with SessionLocal() as session:
+        return refresh_tracking_with(session)
+
+
+async def _tracking_loop() -> None:
+    """Read ShipsGo back, wait some hours, read again. Never adds anything."""
+    await asyncio.sleep(config.SHIPSGO_FIRST_REFRESH_DELAY_SECONDS)
+
+    while True:
+        try:
+            counts = await asyncio.to_thread(refresh_tracking_once)
+            _tracking_state.update(
+                last_run_at=datetime.now(timezone.utc), last_counts=counts, last_error=None
+            )
+            if counts["refreshed"] or counts["failed"]:
+                log.info(
+                    "live tracking: refreshed %s, failed %s",
+                    counts["refreshed"],
+                    counts["failed"],
+                )
+        except asyncio.CancelledError:
+            raise
+        except shipsgo.CreditTripwire as exc:
+            # Something that should have been free cost money. Stop, and
+            # leave it stopped until a person has looked.
+            _tracking_state.update(
+                last_run_at=datetime.now(timezone.utc),
+                last_error=exc.message,
+                stopped=True,
+            )
+            log.error("live tracking: %s", exc.message)
+            return
+        except Exception as exc:  # noqa: BLE001
+            _tracking_state.update(
+                last_run_at=datetime.now(timezone.utc),
+                last_error=f"{type(exc).__name__}: {exc}",
+            )
+            log.exception("live tracking: this run failed")
+
+        await asyncio.sleep(config.SHIPSGO_REFRESH_EVERY_HOURS * 3600)
+
+
+def _start_tracking() -> None:
+    global _tracking_task
+
+    if config.SHIPSGO_REFRESH_EVERY_HOURS <= 0 or not shipsgo.configured():
+        log.info("live tracking refresh is off (no ShipsGo key, or interval 0)")
+        return
+    if _tracking_task is not None and not _tracking_task.done():
+        return
+    _tracking_task = asyncio.create_task(_tracking_loop(), name="portal-tracking")
+    log.info(
+        "live tracking refresh every %s hours", config.SHIPSGO_REFRESH_EVERY_HOURS
+    )
+
+
 def start() -> None:
-    """Begin the timer, unless it is switched off or already going."""
+    """Begin the timers, unless they are switched off or already going."""
     global _task
+
+    _start_tracking()
 
     if config.NOTIFY_EVERY_MINUTES <= 0:
         log.info("automatic notifications are off (NOTIFY_EVERY_MINUTES=0)")
@@ -156,17 +266,23 @@ def start() -> None:
     )
 
 
-async def stop() -> None:
-    """Stop the timer and wait for it to actually be gone."""
-    global _task
-
-    if _task is None:
+async def _cancel(task: asyncio.Task | None) -> None:
+    if task is None:
         return
-
-    _task.cancel()
+    task.cancel()
     try:
-        await _task
+        await task
     except asyncio.CancelledError:
         pass
+
+
+async def stop() -> None:
+    """Stop the timers and wait for them to actually be gone."""
+    global _task, _tracking_task
+
+    try:
+        await _cancel(_task)
+        await _cancel(_tracking_task)
     finally:
         _task = None
+        _tracking_task = None

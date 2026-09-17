@@ -5,6 +5,8 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict
 
+from app.schemas.orders import LiveTrackingOut
+
 
 class StaffCustomerOut(BaseModel):
     """A customer, for the list staff pick from when creating an order."""
@@ -40,6 +42,32 @@ class StaffShipmentOut(BaseModel):
     missing_count: int
 
 
+class StaffLiveTrackingOut(LiveTrackingOut):
+    """The customer's tracking panel, plus what staff need to look after it."""
+
+    booking_number: str
+    external_id: int
+    # The shipment's B/L has changed since tracking was switched on, so this
+    # describes the old number and customers are not shown it.
+    stale: bool = False
+    last_error: str | None = None
+    failures: int = 0
+    # True when switching it on cost nothing, because ShipsGo already had it.
+    reused: bool = False
+    enabled_at: datetime | None = None
+    enabled_by: str | None = None
+    # ShipsGo has stopped following it (the journey is over).
+    finished: bool = False
+
+
+class StaffTrackingResultOut(BaseModel):
+    """What Enable tracking or Refresh did, and the order it left behind."""
+
+    detail: str
+    credit_spent: bool = False
+    order: "StaffOrderOut"
+
+
 class StaffOrderShipmentOut(BaseModel):
     """A part-shipment as it appears under its order on the orders page."""
 
@@ -62,6 +90,11 @@ class StaffOrderShipmentOut(BaseModel):
     container_tracking_url: str | None = None
     container_tracking_carrier: str | None = None
     container_tracking_prefilled: bool = False
+    # Live tracking from ShipsGo, the same panel the customer sees plus the
+    # housekeeping. None until staff switch it on.
+    live_tracking: StaffLiveTrackingOut | None = None
+    # Whether this server can switch it on at all (a ShipsGo key is set).
+    live_tracking_available: bool = False
     # So the page can say why a shipment refuses to be removed.
     document_count: int
 
@@ -346,3 +379,6 @@ class StaffSendNowOut(BaseModel):
     failed: int
     # 1 when another sender held the lock and this press did nothing.
     skipped: int
+
+
+StaffTrackingResultOut.model_rebuild()

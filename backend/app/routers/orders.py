@@ -19,12 +19,13 @@ from app.core.deps import DbSession, SettledUser, not_found
 from app.models import Order, Shipment
 from app.schemas import (
     DocumentOut,
+    LiveTrackingOut,
     OrderDetailOut,
     OrderOut,
     PhotoOut,
     ShipmentOut,
 )
-from app.services import tracking
+from app.services import live_tracking, tracking
 
 router = APIRouter()
 
@@ -54,6 +55,7 @@ def get_order(
         .options(
             selectinload(Order.shipments).selectinload(Shipment.documents),
             selectinload(Order.shipments).selectinload(Shipment.photos),
+            selectinload(Order.shipments).selectinload(Shipment.tracking),
         )
     )
     if order is None:
@@ -80,6 +82,10 @@ def get_order(
             )
             for d in sorted(s.documents, key=lambda d: d.id)
         ]
+        # The stored copy of ShipsGo's news. Never a live call: a customer
+        # opening this page costs nothing and waits for nobody.
+        panel = live_tracking.view(s, for_staff=False)
+        ship.live_tracking = LiveTrackingOut.model_validate(panel) if panel else None
         ship.photos = [
             PhotoOut.model_validate(p) for p in sorted(s.photos, key=lambda p: p.id)
         ]

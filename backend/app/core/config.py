@@ -198,6 +198,34 @@ CARRIER_URL_OVERRIDES = {
 }
 
 
+# ------------------------------------------------------- live tracking (ShipsGo)
+
+# ShipsGo follows the container through every port and vessel change, and
+# the portal shows what it last heard. See app/services/live_tracking.py.
+#
+# The key is read here, on the server, and nowhere else. It never reaches a
+# browser and is never committed. Blank means live tracking is not set up:
+# nothing is ever sent to ShipsGo and the Enable button says why.
+SHIPSGO_API_KEY = os.getenv("SHIPSGO_API_KEY", "").strip()
+SHIPSGO_API_URL = (
+    os.getenv("SHIPSGO_API_URL", "https://api.shipsgo.com/v2").strip().rstrip("/")
+)
+SHIPSGO_TIMEOUT_SECONDS = max(5, int(os.getenv("SHIPSGO_TIMEOUT_SECONDS", "20")))
+
+# How often the portal asks ShipsGo for news of every tracked shipment, in
+# hours. Reading costs no credits; ADDING a shipment costs one, and that only
+# ever happens when a member of staff presses Enable tracking. 0 turns the
+# timer off -- tracked shipments then change only when staff press Refresh.
+SHIPSGO_REFRESH_EVERY_HOURS = max(
+    0, int(os.getenv("SHIPSGO_REFRESH_EVERY_HOURS", "6"))
+)
+
+# How long after the API starts before the first refresh, in seconds.
+SHIPSGO_FIRST_REFRESH_DELAY_SECONDS = max(
+    0, int(os.getenv("SHIPSGO_FIRST_REFRESH_DELAY_SECONDS", "300"))
+)
+
+
 # ------------------------------------------------------------- notifications
 
 # Off by default, deliberately. With SEND_EMAILS false, messages are built

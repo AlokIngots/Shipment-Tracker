@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import axios from 'axios'
+import LiveTracking from '../components/LiveTracking'
 import PhotoGallery from '../components/PhotoGallery'
 import StatusPill from '../components/StatusPill'
 import StatusTrack from '../components/StatusTrack'
@@ -237,7 +238,7 @@ export default function OrderDetailScreen({ orderId, onBack, onSignOut, session 
                 <p className="empty-title">Nothing has shipped yet</p>
                 <p className="empty-text">
                   Each shipment will appear here as it leaves, with its
-                  documents and a link to track the container.
+                  documents and where the container has got to.
                 </p>
               </div>
             </div>
@@ -261,6 +262,10 @@ export default function OrderDetailScreen({ orderId, onBack, onSignOut, session 
               <StatusTrack status={shipment.status} />
 
               <Tracking shipment={shipment} />
+
+              {/* Where the container is now, from the stored copy of
+                  ShipsGo's news. Only there once staff have switched it on. */}
+              <LiveTracking tracking={shipment.live_tracking} />
 
               <PhotoGallery photos={shipment.photos} />
 

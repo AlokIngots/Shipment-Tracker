@@ -7,6 +7,7 @@
     notification.py  Notification
     audit.py         AuditEvent
     magic_link.py    MagicLink
+    tracking.py      ShipmentTracking
 
 Everything is re-exported here, so the rest of the app writes
 ``from app.models import Order`` and never has to know which file it is in.
@@ -21,8 +22,9 @@ from app.models.magic_link import MagicLink
 from app.models.notification import Notification
 from app.models.order import Order, Shipment
 from app.models.photo import Photo
+from app.models.tracking import ShipmentTracking
 
 __all__ = [
     "AuditEvent", "Customer", "Document", "MagicLink", "Notification", "Order",
-    "Photo", "Shipment",
+    "Photo", "Shipment", "ShipmentTracking",
 ]

@@ -8,7 +8,7 @@ disagree about what a valid order looks like.
 
 from decimal import Decimal
 
-from app.services import audit, statuses, tracking
+from app.services import audit, live_tracking, shipsgo, statuses, tracking
 from app.core.deps import DbSession, StaffUser, bad_request, not_found
 from fastapi import APIRouter
 from app.models import Customer, Order, Shipment
@@ -86,6 +86,8 @@ def staff_order_out(order: Order, customer: Customer) -> StaffOrderOut:
                 etd=s.etd,
                 eta=s.eta,
                 document_count=len(s.documents),
+                live_tracking=live_tracking.view(s, for_staff=True),
+                live_tracking_available=shipsgo.configured(),
                 **vars(tracking.links_for(s)),
             )
             for s in sorted(order.shipments, key=lambda s: s.id)
@@ -230,7 +232,10 @@ def staff_orders(staff: StaffUser, db: DbSession) -> list[StaffOrderOut]:
     rows = db.execute(
         select(Order, Customer)
         .join(Customer, Order.customer_id == Customer.id)
-        .options(selectinload(Order.shipments).selectinload(Shipment.documents))
+        .options(
+            selectinload(Order.shipments).selectinload(Shipment.documents),
+            selectinload(Order.shipments).selectinload(Shipment.tracking),
+        )
         .order_by(Order.id.desc())
     ).all()
     return [staff_order_out(order, customer) for order, customer in rows]

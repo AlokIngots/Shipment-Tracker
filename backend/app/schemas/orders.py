@@ -1,6 +1,6 @@
 """What a customer is sent: their orders, shipments and documents."""
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict
@@ -48,6 +48,51 @@ class PhotoOut(BaseModel):
     file_name: str
 
 
+class TrackingMoveOut(BaseModel):
+    """One step in the container's journey: where, what, when, on which ship."""
+
+    event: str | None
+    label: str
+    # False while it is the shipping line's estimate rather than a fact.
+    actual: bool
+    location: str | None
+    country: str | None
+    vessel: str | None
+    voyage: str | None
+    # YYYY-MM-DD as the port wrote it -- not moved into anybody's time zone.
+    date: str | None
+    timestamp: str | None
+    # The box changed vessel here. `from_vessel` is the ship it came off.
+    transshipment: bool = False
+    from_vessel: str | None = None
+    # The most recent thing that has actually happened.
+    latest: bool = False
+
+
+class LiveTrackingOut(BaseModel):
+    """What ShipsGo last told the portal about this shipment's container.
+
+    Always the stored copy: opening a page never calls ShipsGo.
+    """
+
+    # "updating" until ShipsGo has news, then "ready". ("unavailable" is
+    # only ever sent to staff; a customer is shown nothing instead.)
+    state: str
+    status: str | None
+    status_label: str
+    carrier: str | None
+    port_of_loading: str | None
+    port_of_discharge: str | None
+    loaded_on: str | None
+    eta: str | None
+    transshipments: int = 0
+    container_number: str | None
+    container_count: int = 0
+    other_containers: list[str] = []
+    movements: list[TrackingMoveOut] = []
+    updated_at: datetime | None
+
+
 class ShipmentOut(BaseModel):
     """One part-shipment against an order."""
 
@@ -77,6 +122,8 @@ class ShipmentOut(BaseModel):
     # False when the carrier's page opens empty, so the screen can tell the
     # customer to paste the number rather than implying it is already there.
     container_tracking_prefilled: bool = False
+    # Live tracking from ShipsGo, or None when it is not switched on.
+    live_tracking: LiveTrackingOut | None = None
     documents: list[DocumentOut] = []
     photos: list[PhotoOut] = []
 
