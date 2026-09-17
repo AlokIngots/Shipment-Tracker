@@ -79,8 +79,15 @@ to the next step. Never run ahead through multiple steps at once.
 
 ## Where we are now
 
-**Last worked on: 16 September 2026.** Steps 1–29 and 31–37 are built,
+**Last worked on: 17 September 2026.** Steps 1–29 and 31–43 are built,
 merged to `dev` **and deployed**. Nothing is merged and waiting to go out.
+
+**Confirmed by Alok on 17 September 2026:** steps 39, 40, 41 and 43 are
+deployed and live, and step 42's sample-data removal has been **run on the
+server** — the sample orders and customers are gone and the only order on
+the live portal is the real Bucher order, EXP-043. None of 39–43 carried a
+migration, so the schema is still **0012**. (The exact deploy date and
+backup name were not recorded here.)
 
 **The portal is live and current** at https://portal.alokindia.co.in on
 srv1427359. On **16 September 2026** `dev` at step 37 (`4a86156`) was
@@ -114,29 +121,31 @@ history: the 11 Sep sign-in link was received, and order status coming from
 the shipments rather than being typed was accepted. Nothing gates a deploy
 today except the usual: a green test run, a backup, and the user saying go.
 
-**Three steps are merged to `dev` and waiting to be deployed.** Step 41 tells
-a customer when their documents are ready — the missing half of "the portal
-chases nobody". **It does nothing for a real customer until that customer's
-address is on `NOTIFY_ONLY_EMAILS` on the server**, which still gates every
-notification and is the one line that switches this on.
+**What is live from steps 39–43.** Step 39, the pilot-readiness fixes:
+sign-in links no longer go through `NOTIFY_ONLY_EMAILS`, documents are
+served as what they really are, and the front door sends a
+Content-Security-Policy and HSTS. Step 40, the sign-in link signing people
+in by itself with no Continue button. Step 41, customers told by email when
+their documents are ready. Step 43, the customer's order page sends nobody
+to a carrier's website; the container and B/L numbers have Copy buttons
+instead. Step 42 was a one-off run on the server, not a deploy, and it is
+done.
 
- Step 40 is the
-sign-in link signing people in by itself, with no Continue button (frontend
-only, no migration). And step 39 — the pilot-readiness fixes: sign-in links no longer go through `NOTIFY_ONLY_EMAILS`,
-documents are served as what they really are, and the front door sends a
-Content-Security-Policy and HSTS. No migration. **The headers can only be
-proved on the live server** — check `curl -sI https://portal.alokindia.co.in`
-and then open a photo and download a document, because a wrong CSP breaks
-those silently.
+**Steps 33 and 41 still reach no real customer until that customer's
+address is on `NOTIFY_ONLY_EMAILS` on the server**, which gates every
+notification (but no longer sign-in links) and is the one line that
+switches them on. There is a real customer in the database, so check that
+setting before every deploy.
 
-Before that: step 38 — the staff orders list
-collapsed into slim rows — was deployed on **16 September 2026** as well
-(`safe-deploy.sh` clean, backup `2026-09-16_050439`, seen live), so the
-server and `dev` are in step on app code. It carried no migration and the
-schema stays at **0012**. The only commits on `dev` since are notes and a
-test-only fix, neither of which changes what runs. Before the next deploy,
-check `NOTIFY_ONLY_EMAILS` on the server first — there is a real customer in
-the database now, so the automatic sender has somebody it could reach.
+Two things from steps 39 and 43 could only be proved live and are **not
+recorded here as checked**: the security headers
+(`curl -sI https://portal.alokindia.co.in`, then open a photo and download a
+document, because a wrong CSP breaks those silently) and the Copy buttons
+pressed in a real browser.
+
+Before that: step 38 — the staff orders list collapsed into slim rows — was
+deployed on **16 September 2026** (`safe-deploy.sh` clean, backup
+`2026-09-16_050439`, seen live).
 
 **Step 30, "Forgot your password", is held unmerged** on
 `feature/step30-password-reset` (`a37b9b7`) on the user's decision: do not
@@ -462,7 +471,9 @@ project folder on srv1427359:
 4. Once email works again, set `PASSWORD_SIGN_IN=false` and recreate the API
    the same way. The password box goes and link-only is back.
 
-**Removing the sample data from the live server.** Four sample orders were
+**Removing the sample data from the live server** — **done**: this was run
+on the live server (confirmed 17 Sep 2026) and only the real Bucher order
+remains. Kept here for a demo database. Four sample orders were
 loaded for a demo (`deploy/sample-data/sample-data.sql`, run by hand with
 `mode=load`). **Nothing re-creates them by itself** — `safe-deploy.sh` runs
 migrations only, the API starts the notification timer and nothing else, and
@@ -621,11 +632,11 @@ the customer side needs, and a step is done when both work.
 | 36 | The map on the page, and tracking for staff (`feature/step36-live-vessel-map`) | a **Track** button on each shipment row opens the same map and the same buttons the customer sees, built by the same function, so nobody needs a customer login to follow a shipment | the vessel's live position embedded in the order detail rather than behind a link, the MarineTraffic link kept as the fallback, and Evergreen's **Track container** button now opening its search page with the B/L and container number shown beside it to copy | **Superseded by step 37**: the map and the vessel link were removed before either was ever deployed. What survives from this step is the staff Track panel and one shared `links_for()`, both **deployed 16 Sep 2026** as part of step 37 |
 | 37 | Honest tracking (`feature/step37-honest-tracking`) | the Track panel keeps the carrier link and the copyable numbers; no map, no vessel link | the vessel map and "See where the vessel is now" are gone, because a transshipped hull's position is a different voyage. What is left is the status timeline, the shipment facts, the copyable B/L and container numbers, and one clearly-worded **Track this container on <carrier>** button. Plus a light readability pass on the order detail | **Done, deployed 16 Sep 2026**, and seen live on the first real order |
 | 38 | A staff orders list you can scan (`feature/step38-compact-staff-orders`) | every order is one slim row — order number, customer and grade, dispatched of ordered, status, shipment count — shut until it is clicked. Open, it is exactly what the card held before: the three totals, the shipments with Track, Edit, Documents & photos and Remove, and Add shipment / Edit order / Remove order. Several rows can be open at once, the open ones are remembered for the browser tab, a just-saved order opens itself, and Collapse all appears while anything is open. The "no shipment ticked as the last one" warning shows on the shut row, so it cannot hide | (nothing — the customer screens are untouched, at the user's request) | **Done, deployed 16 Sep 2026** |
-| 39 | Ready for a pilot customer (`fix/pilot-readiness`) | sign-in links stop obeying `NOTIFY_ONLY_EMAILS`, which still gates the automatic notifications; a link that fails to send is an ERROR in the log **and** a "Sign-in links that did not arrive" card on the Messages screen; the pilot note on that screen says which is which; CI lints the website as well as building it | documents download as what they really are, so a mill test certificate scanned as a JPG opens; a Content-Security-Policy and HSTS on every page | **Built, not deployed** |
-| 43 | Nothing sends the customer away (`feature/remove-tracking-redirect`) | staff keep the Track panel and the carrier link: looking a box up is part of answering the phone | the **Track this container on \<carrier\>** button and the paragraph about opening the carrier's website are gone. The six shipment facts stay, and the container and B/L numbers gain a small **Copy** button each, so the numbers are still one tap away without the portal handing the customer to somebody else's site | **Built, not deployed** |
-| 42 | The sample data goes, and stays gone (`feature/remove-sample-data`) | `mode=remove` takes the four sample orders, three sample customers and their logins off the live portal, saying how many it found; the loader now refuses a database that holds real orders, and `seed.py` refuses to put demo data beside real customers | nothing — but the four sample orders stop being what a real customer might see | **Built, not deployed** (it is run on the server, not deployed) |
-| 41 | Documents announce themselves (`feature/step41-document-notifications`) | nothing new to do: uploading a document is what sends the email, and the Messages tab lists what is waiting document by document. `NOTIFY_ON_DOCUMENTS` chooses which types speak | "Your Bill of Lading is ready", by email, without asking. Everything newly ready on one order arrives in **one** email however many documents and shipments it covers; a replaced document says nothing | **Built, not deployed** |
-| 40 | The sign-in link just signs you in (`feature/auto-redeem-signin`) | (nothing — staff sign in by the same link and get the same benefit) | the link from the email redeems itself as the page opens, showing "Signing you in…" and then the portal. No Continue button. An expired link still gets the "Link expired — Request a new link" screen, and a network failure gets Try again rather than a dead end | **Built, not deployed** |
+| 39 | Ready for a pilot customer (`fix/pilot-readiness`) | sign-in links stop obeying `NOTIFY_ONLY_EMAILS`, which still gates the automatic notifications; a link that fails to send is an ERROR in the log **and** a "Sign-in links that did not arrive" card on the Messages screen; the pilot note on that screen says which is which; CI lints the website as well as building it | documents download as what they really are, so a mill test certificate scanned as a JPG opens; a Content-Security-Policy and HSTS on every page | **Done, deployed** (confirmed live 17 Sep 2026) |
+| 43 | Nothing sends the customer away (`feature/remove-tracking-redirect`) | staff keep the Track panel and the carrier link: looking a box up is part of answering the phone | the **Track this container on \<carrier\>** button and the paragraph about opening the carrier's website are gone. The six shipment facts stay, and the container and B/L numbers gain a small **Copy** button each, so the numbers are still one tap away without the portal handing the customer to somebody else's site | **Done, deployed** (confirmed live 17 Sep 2026) |
+| 42 | The sample data goes, and stays gone (`feature/remove-sample-data`) | `mode=remove` takes the four sample orders, three sample customers and their logins off the live portal, saying how many it found; the loader now refuses a database that holds real orders, and `seed.py` refuses to put demo data beside real customers | nothing — but the four sample orders stop being what a real customer might see | **Done and executed**: `mode=remove` run on the server; only the real Bucher order remains (confirmed 17 Sep 2026) |
+| 41 | Documents announce themselves (`feature/step41-document-notifications`) | nothing new to do: uploading a document is what sends the email, and the Messages tab lists what is waiting document by document. `NOTIFY_ON_DOCUMENTS` chooses which types speak | "Your Bill of Lading is ready", by email, without asking. Everything newly ready on one order arrives in **one** email however many documents and shipments it covers; a replaced document says nothing | **Done, deployed** (confirmed live 17 Sep 2026); reaches a customer only once they are on `NOTIFY_ONLY_EMAILS` |
+| 40 | The sign-in link just signs you in (`feature/auto-redeem-signin`) | (nothing — staff sign in by the same link and get the same benefit) | the link from the email redeems itself as the page opens, showing "Signing you in…" and then the portal. No Continue button. An expired link still gets the "Link expired — Request a new link" screen, and a network failure gets Try again rather than a dead end | **Done, deployed** (confirmed live 17 Sep 2026) |
 
 ### Still to build, both sides
 
@@ -747,6 +758,7 @@ Update after every step: what was done, and the commit.
 | 2026-09-16 | **Step 40 — The sign-in link just signs you in** (`feature/auto-redeem-signin`). On Alok's decision the Continue button is gone: the link redeems itself in a `useEffect` as the page opens, shows **"Signing you in…"**, and hands over to the portal. The button had a reason — a mail scanner opening the link would have spent it — and that reason has gone: the live server now runs `MAGIC_LINK_SINGLE_USE=false` with a 24-hour expiry, so a link survives being opened more than once, and the token has always travelled after the "#" where no browser sends it to a server. **The two screens that matter on failure are kept**: a 400 still gives "Link expired — Request a new link", and anything else (a dead gateway, no network) now gives **Try again** plus a way to ask for a new link, rather than the old dead end. Redeeming is guarded by a ref so React's development double-render cannot post twice — harmless while links are reusable, wrong the moment they are not. `takeSignInLinkToken()` already strips the token from the address bar before this screen is drawn, so a refresh shows the sign-in screen rather than redeeming again. **Frontend only: one file, no API change, no migration, and the password escape hatch on the sign-in card is untouched.** Proved by a clean `npm run build` and `npm run lint` (13 warnings before and after, none new) and by headless Edge over CDP against a throwaway page rendering the real component with the server's answer faked: the waiting state, the expired screen and the failure screen all drawn at 420px with nothing scrolling sideways. **Not proved: no real email link has been opened** — that needs the live server. **Not deployed** | _this commit_ |
 | 2026-09-16 | **Step 39 — Ready for a pilot customer** (`fix/pilot-readiness`, restore tag `pre-pilot-fixes`). Three fixes the pre-pilot audit called Critical or Important, and one to CI. **Sign-in links no longer go through `NOTIFY_ONLY_EMAILS`.** `notifications.send()` takes `pilot_list=True` by default and `magic_links.send()` passes `False`, so the allow-list gates the automatic shipment notifications and nothing else; `SEND_EMAILS` still stops everything, links included, because that is the switch for the whole portal. Before this, a customer who was not on the list asked to sign in, was told "Check your email", and received nothing — the portal's worst failure, because it looked exactly like success. **The answer the browser gets is unchanged, deliberately, even when sending really fails**: an error shown only for addresses that have accounts turns the sign-in page into a way to ask which addresses those are, and the route answers before sending anyway. So the failure surfaces where staff will see it instead — `log.error` with the address, and a **"Sign-in links that did not arrive"** card on the Messages screen, fed by the last 20 failures kept in memory (forgotten on restart, and the link itself is never kept). **Documents are served as what they are**: `storage.media_type_for()` reads the stored suffix, so a mill test certificate scanned as a JPG arrives as `image/jpeg` instead of being labelled `application/pdf` and refusing to open; anything unrecognised goes out as `application/octet-stream` rather than being guessed at. **The front door sends a Content-Security-Policy and HSTS**: `default-src 'self'` with three deliberate exceptions — `img-src data: blob:` because documents and photos are fetched with the token and handed over as blob URLs, `style-src 'unsafe-inline'` because React writes style attributes, and `frame-ancestors 'none'` restating `X-Frame-Options` — plus `max-age=31536000; includeSubDomains` **without `preload`**, which is not this portal's door to close on the whole domain. CI now runs `npm run lint` as well as the build. **No migration.** Proved by 5 new database-free tests (a link reaches an address that is not on the pilot list; a notification to that same address is still suppressed; `SEND_EMAILS=false` still stops a link; a failed link is recorded without its token; and the Caddyfile carries both headers, checked on the directive rather than the file so the comment explaining `preload` does not fool it) and 2 new database-backed ones (a PDF and a JPG document download with the right content type; a failed link shows on the staff Messages endpoint). Every existing stub of `notifications.send` was updated for the new keyword. Frontend build and lint clean, 13 warnings before and after. **The two headers cannot be proved from here** — no local stack — so they are checked on the live server after deploy. **Not deployed** | _this commit_ |
 | 2026-09-16 | **CI on `dev` put right: two tests had been asking for an endpoint that never existed** (`fix/staff-orders-test-url`). The `tests` workflow had been red on every push to `dev` since the step 36 merge (`34963112630`, 15 Sep); step 35 was the last green one. `gh run view --log-failed` on the step 38 run named it exactly: `272 collected, 2 failed`, both in `test_container_tracking.py` — `test_staff_and_customer_are_shown_the_same_tracking` asserting `405 == 200` on `{"detail":"Method Not Allowed"}`, and `test_neither_half_is_sent_a_vessel_link_any_more` dying on `KeyError: 'shipments'`. Both called `GET /api/staff/orders/<id>`, which **has never existed**: that path carries PUT and DELETE only, and the staff screen reads the whole list from `GET /api/staff/orders`. So it was stale tests, not a bug — the staff list already builds every shipment with `links_for()`, the same function the customer endpoint uses, which is the behaviour those two tests exist to check. Both now go through a `staff_shipment` helper that reads the list the way the screen does and **asserts the request succeeded**, so a wrong URL fails saying so instead of dying on a `KeyError`; its docstring records why that path answers 405. Tests only, no app change. Green on `dev` at run `35060264643`: **272 passed**, backend and frontend both. The bad URL entered in `7c72ed6` (step 36) and was carried through `26424b8` (step 37), which is why a heavy rewrite of that file did not clear it. **Why it went unnoticed for three steps: Docker Desktop will not start on this PC, so the ~175 database-backed tests run nowhere but CI** | _this commit_ |
+| 2026-09-17 | **Steps 39, 40, 41 and 43 confirmed deployed and live, and step 42 executed** — as reported by Alok; this PC cannot see the server. The sample orders and customers were removed on the server with `mode=remove`, and the only order on the live portal is the real Bucher order, EXP-043. None of them carried a migration, so the schema stays at **0012**. Nothing merged to `dev` is waiting to go out. Deploy date and backup name not recorded. Notes only | _this commit_ |
 
 ### Design decisions worth remembering
 
