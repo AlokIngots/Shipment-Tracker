@@ -388,28 +388,6 @@
   cursor: default;
 }
 
-.track {
-  display: inline-block;
-  margin-left: 10px;
-  padding: 3px 10px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  color: var(--navy);
-  font-size: 12px;
-  font-weight: 600;
-  text-decoration: none;
-  white-space: nowrap;
-}
-
-.track::after {
-  content: " \2197";
-}
-
-.track:hover {
-  border-color: var(--navy);
-  background: #eef0f6;
-}
-
 /* ---- change password ---- */
 
 .hint {
@@ -628,88 +606,6 @@
   line-height: 1.5;
 }
 
-.track--button {
-  margin-left: 0;
-  /* Tall enough to be a comfortable tap on a phone, where most customers
-     will open this, rather than the 3px pill the inline links use. */
-  padding: 11px 18px;
-  border-color: var(--navy);
-  font-size: 14px;
-  line-height: 1.2;
-}
-
-/* One action, so it is filled rather than outlined: nothing is competing
-   with it and there is no doubt about what to press. Brand navy; no new
-   colour enters the palette. */
-.track--primary {
-  border-color: var(--navy);
-  background: var(--navy);
-  color: #fff;
-}
-
-.track--primary:hover {
-  border-color: var(--navy-soft);
-  background: var(--navy-soft);
-}
-
-/* ---- tracking the container ---- */
-
-/* One action, set in a panel of its own so it reads as "this is the thing to
-   press" rather than as another line of detail. */
-.trackbox {
-  margin: 18px 0 0;
-  padding: 16px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: #f8f9fc;
-}
-
-.trackbox-note {
-  margin: 10px 0 0;
-  max-width: 46em;
-  font-size: 13px;
-  line-height: 1.55;
-  color: var(--muted);
-}
-
-/* A number to read out down a phone line or paste into a carrier's search
-   box. Monospaced and spaced out, because these are the strings people
-   transpose. */
-.copynums {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 14px 32px;
-  margin: 14px 0 0;
-}
-
-.copynum-label {
-  display: block;
-  margin-bottom: 4px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--muted);
-}
-
-.copynum-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-
-.copynum-value {
-  padding: 4px 8px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: #f4f5f8;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 13px;
-  letter-spacing: 0.04em;
-  color: var(--ink);
-  /* Long enough to overflow a narrow phone if it were allowed to. */
-  word-break: break-all;
-}
-
 .copynum-button {
   padding: 4px 10px;
   border: 1px solid var(--navy);
@@ -725,8 +621,8 @@
   background: #eef0f6;
 }
 
-/* The same button beside a fact rather than in the tracking panel: smaller,
-   and it sits on the line with the number instead of under a label. */
+/* The Copy button beside a container or B/L number in the shipment facts:
+   small, and on the same line as the number. */
 .copynum-button--inline {
   padding: 2px 8px;
   font-size: 11px;
@@ -746,15 +642,6 @@
   font-size: 13px;
   letter-spacing: 0.04em;
   word-break: break-all;
-}
-
-.copynum-hint {
-  display: block;
-  margin-top: 4px;
-  max-width: 34em;
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--muted);
 }
 
 /* The staff panel that the Track button opens. Set apart from the row above
@@ -901,8 +788,8 @@
 
 /* ---- live container tracking (ShipsGo) ---- */
 
-/* The same quiet panel as the staff Track box, so it reads as one block of
-   "where is it" rather than another line of detail. */
+/* A quiet panel of its own, so it reads as one block of "where is it"
+   rather than another line of detail. */
 .livebox {
   margin: 18px 0 0;
   padding: 16px;

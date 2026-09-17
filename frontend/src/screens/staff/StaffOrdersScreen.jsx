@@ -6,7 +6,6 @@ import { describeError, fmtDate, plural } from '../../lib/format'
 import OrderForm from './OrderForm'
 import ShipmentForm from './ShipmentForm'
 import LiveTracking from '../../components/LiveTracking'
-import { TrackActions } from '../../components/Tracking'
 
 // Which orders are open, kept for this browser tab only. A save reloads the
 // list, and without this every order would shut itself the moment anything
@@ -198,13 +197,13 @@ function ShipmentRow({ shipment, onEdit, onRemove, onDocuments, onTracking, busy
         </button>
       </div>
 
-      {/* The same link and the same numbers the customer gets, from the
-          same function on the server -- so staff on the phone to a customer
-          are not reading out something different. */}
+      {/* Live tracking only, the same timeline the customer sees. The old
+          "Track this container on <carrier>" box went on 17 Sep 2026: it sent
+          people off-site, and live tracking answers the same question here.
+          The B/L and container numbers are still in the line above. */}
       {tracking && (
         <div className="shiprow-tracking">
           <LiveTrackingControls shipment={shipment} onTracking={onTracking} busy={busy} />
-          <TrackActions shipment={shipment} />
         </div>
       )}
     </div>
