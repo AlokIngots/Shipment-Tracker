@@ -645,17 +645,18 @@ the customer side needs, and a step is done when both work.
 | **39 — Shipping details that have nowhere to go** | fields for what the Bill of Lading holds and the portal cannot store: customer address and EORI number, the customer contact's name and email without creating them a login, order date and Shipping Bill number, load and discharge ports, ETD/ETA where they are known, voyage number and seal number, container size, and gross weight beside net | the route and the dates on the order detail, instead of only what the carrier's page happens to show |
 | **Photos from the Bundle app** | pull photos from the existing Bundle Inspection app instead of uploading them by hand | (gallery already built in step 15) |
 | **Notifications — WhatsApp** | choose which statuses message which channel | receives the WhatsApp message |
-| **SAP/PMS auto-pull** | replace the hand-run CSV import with a scheduled pull | — |
+| **SAP auto-pull** (parked 17 Sep 2026 on the user's decision; see "SAP Business One" below) | a connector in the office reads new export sales orders and customers from SAP Business One and sends them to a staff-only endpoint; an order whose customer is not recognised waits for staff to link it | orders appear without anybody typing them |
 
 ### What blocks the ones that are blocked
 
 1. ~~A server.~~ **Done:** the portal is live at https://portal.alokindia.co.in
    on srv1427359. The user deploys it.
-2. **The SAP/PMS question, still unanswered.** How can order data leave
-   SAP/PMS — a spreadsheet export, a readable database, an API, or not at
-   all? And does SAP/PMS hold the vessel name, IMO and container number, or
-   does that sit with the CHA / freight forwarder and the Bill of Lading?
-   The importer is finished and waiting; only the mapping depends on this.
+2. **The SAP question — answered 17 Sep 2026, and the build is parked.**
+   Orders leave SAP Business One through its Service Layer, read directly
+   rather than through the PMS. SAP does **not** hold the vessel, container
+   or B/L details in practice, and does not link invoices to orders. See
+   "SAP Business One — what the look-only check found" below. **Do not
+   build the SAP import until the user brings it back.**
 3. ~~Real SMTP credentials.~~ **Done 11 Sep 2026:** AWS SES SMTP
    (ap-south-1), sending from enquiries@alokindia.com, `SEND_EMAILS=true` on
    the server, and a real sign-in link received and used. Order
@@ -663,6 +664,76 @@ the customer side needs, and a step is done when both work.
 4. **The Bundle Inspection app.** Material photos may be better pulled from
    it than uploaded by hand — but that needs to know what it stores and
    whether anything can read it.
+
+### SAP Business One — what the look-only check found
+
+On **17 September 2026** SAP was read, and nothing in it was changed, to
+find out what an automatic order import could carry. **The user then parked
+the import: do not build it until they bring it back.**
+
+**The system.** SAP Business One, read directly through its Service Layer
+(its web interface for other programs), not through the PMS. **The server
+address, company database and security notes are deliberately not in this
+repo**; they are kept with the login on the office PC (below).
+
+**The hard rule: SAP credentials never go on the portal server or into
+this repo.** The internet-facing portal must hold nothing that opens SAP.
+An import, when built, is a small connector on the office side that signs
+in with a **read-only** SAP user and sends only export orders to a
+staff-only portal endpoint. The login and the look-only scripts live in
+`%USERPROFILE%\.alok-sap\` on the office PC (`sap.env`,
+`sap_lookonly.py`, `sap_fillrate.py`, and `NOTES.txt` for the connection
+and security details), readable by the user's account only. The data those scripts saved is under `lookonly\` there and holds
+customer details: it stays there. The first check used the user's own
+login; a read-only user is being asked of the SAP partner.
+
+**The connection needs care.** The scripts accept exactly one known
+server certificate and refuse any other; if the SAP partner changes the
+certificate, the scripts must be updated. Two security fixes have been
+raised with the user for the SAP partner; the details are in `NOTES.txt`,
+not here.
+
+**What SAP holds:**
+
+- **Export sales orders are document series 416**, with a customer
+  reference like `AIMPL/S.O/EXP/047/2026-27` (also in `U_SO`). The
+  customer's group ("Sundry debtors -Expo…"), the export tick
+  (`TaxExtension.ImportOrExport`) and a foreign country agree with it.
+- **Export invoices are series 419**, numbered `EXP-058/2026-27` in
+  `U_InvNo`.
+- **Customers** are matched on SAP's customer code (Bucher is `C00574`).
+  The portal's `customers.code` can hold exactly that. Name, country,
+  currency and bill-to/ship-to addresses are there.
+- **Order header:** date, due date, currency, total, customer PO number
+  and date (`U_POR`, `U_PORD`), payment terms (`U_PT`), Incoterm and port
+  (`U_IN`), delivery (`U_Delivery`), shipment (`U_Ship`), packing
+  (`U_Packing`).
+- **Order lines:** item, description with grade and size, quantity in
+  tons, open quantity, ship date, length (`U_Length`), heat treatment
+  (`U_HT`), tolerance (`U_Tol`).
+
+**Three problems:**
+
+1. **No shipping details in practice.** Invoices have custom fields for
+   container number and type, B/L number and date, vessel, seal, ports of
+   loading and discharge, final destination, shipping bill, and gross and
+   net weight. **They were empty on all 61 export invoices from April to
+   September 2026.** Shipment details keep coming from staff through the
+   Admin Console unless the team starts filling those fields in SAP.
+2. **Invoices are not linked to sales orders.** Export invoices are raised
+   directly rather than copied from the order, and there are no delivery
+   notes. So SAP cannot say which order a shipment belongs to, 48 of the
+   last 50 export orders still show fully open, and dispatched/balance
+   cannot be read from SAP. Creating invoices with "Copy From" the sales
+   order would fix it.
+3. **What is the portal's EXP-043?** Bucher's SAP **sales order**
+   `EXP/043/2026-27` and Bucher's **invoice** `EXP-043/2026-27` (27 July
+   2026) both exist; the two series happen to meet at 043. Which one the
+   portal's order was entered from is **still to be confirmed with the
+   user**. If it was the invoice, the portal holds a shipment as an order.
+
+**Open questions for the user:** the EXP-043 question above, and whether
+the team would raise export invoices with "Copy From" the sales order.
 
 ---
 
@@ -759,6 +830,7 @@ Update after every step: what was done, and the commit.
 | 2026-09-16 | **Step 39 — Ready for a pilot customer** (`fix/pilot-readiness`, restore tag `pre-pilot-fixes`). Three fixes the pre-pilot audit called Critical or Important, and one to CI. **Sign-in links no longer go through `NOTIFY_ONLY_EMAILS`.** `notifications.send()` takes `pilot_list=True` by default and `magic_links.send()` passes `False`, so the allow-list gates the automatic shipment notifications and nothing else; `SEND_EMAILS` still stops everything, links included, because that is the switch for the whole portal. Before this, a customer who was not on the list asked to sign in, was told "Check your email", and received nothing — the portal's worst failure, because it looked exactly like success. **The answer the browser gets is unchanged, deliberately, even when sending really fails**: an error shown only for addresses that have accounts turns the sign-in page into a way to ask which addresses those are, and the route answers before sending anyway. So the failure surfaces where staff will see it instead — `log.error` with the address, and a **"Sign-in links that did not arrive"** card on the Messages screen, fed by the last 20 failures kept in memory (forgotten on restart, and the link itself is never kept). **Documents are served as what they are**: `storage.media_type_for()` reads the stored suffix, so a mill test certificate scanned as a JPG arrives as `image/jpeg` instead of being labelled `application/pdf` and refusing to open; anything unrecognised goes out as `application/octet-stream` rather than being guessed at. **The front door sends a Content-Security-Policy and HSTS**: `default-src 'self'` with three deliberate exceptions — `img-src data: blob:` because documents and photos are fetched with the token and handed over as blob URLs, `style-src 'unsafe-inline'` because React writes style attributes, and `frame-ancestors 'none'` restating `X-Frame-Options` — plus `max-age=31536000; includeSubDomains` **without `preload`**, which is not this portal's door to close on the whole domain. CI now runs `npm run lint` as well as the build. **No migration.** Proved by 5 new database-free tests (a link reaches an address that is not on the pilot list; a notification to that same address is still suppressed; `SEND_EMAILS=false` still stops a link; a failed link is recorded without its token; and the Caddyfile carries both headers, checked on the directive rather than the file so the comment explaining `preload` does not fool it) and 2 new database-backed ones (a PDF and a JPG document download with the right content type; a failed link shows on the staff Messages endpoint). Every existing stub of `notifications.send` was updated for the new keyword. Frontend build and lint clean, 13 warnings before and after. **The two headers cannot be proved from here** — no local stack — so they are checked on the live server after deploy. **Not deployed** | _this commit_ |
 | 2026-09-16 | **CI on `dev` put right: two tests had been asking for an endpoint that never existed** (`fix/staff-orders-test-url`). The `tests` workflow had been red on every push to `dev` since the step 36 merge (`34963112630`, 15 Sep); step 35 was the last green one. `gh run view --log-failed` on the step 38 run named it exactly: `272 collected, 2 failed`, both in `test_container_tracking.py` — `test_staff_and_customer_are_shown_the_same_tracking` asserting `405 == 200` on `{"detail":"Method Not Allowed"}`, and `test_neither_half_is_sent_a_vessel_link_any_more` dying on `KeyError: 'shipments'`. Both called `GET /api/staff/orders/<id>`, which **has never existed**: that path carries PUT and DELETE only, and the staff screen reads the whole list from `GET /api/staff/orders`. So it was stale tests, not a bug — the staff list already builds every shipment with `links_for()`, the same function the customer endpoint uses, which is the behaviour those two tests exist to check. Both now go through a `staff_shipment` helper that reads the list the way the screen does and **asserts the request succeeded**, so a wrong URL fails saying so instead of dying on a `KeyError`; its docstring records why that path answers 405. Tests only, no app change. Green on `dev` at run `35060264643`: **272 passed**, backend and frontend both. The bad URL entered in `7c72ed6` (step 36) and was carried through `26424b8` (step 37), which is why a heavy rewrite of that file did not clear it. **Why it went unnoticed for three steps: Docker Desktop will not start on this PC, so the ~175 database-backed tests run nowhere but CI** | _this commit_ |
 | 2026-09-17 | **Steps 39, 40, 41 and 43 confirmed deployed and live, and step 42 executed** — as reported by Alok; this PC cannot see the server. The sample orders and customers were removed on the server with `mode=remove`, and the only order on the live portal is the real Bucher order, EXP-043. None of them carried a migration, so the schema stays at **0012**. Nothing merged to `dev` is waiting to go out. Deploy date and backup name not recorded. Notes only | _this commit_ |
+| 2026-09-17 | **SAP read for the first time, look-only, and the import parked.** SAP Business One was read through its Service Layer with a script that refuses any request other than GET plus sign-in and sign-out, and accepts only the server's known certificate. It read the latest 50 sales orders, their customers, the custom field list, and 61 export invoices; **nothing in SAP was changed.** Found: export orders are series 416 and export invoices series 419; customers match on SAP's customer code; the shipping fields exist in SAP but were empty on every export invoice; and invoices are not linked to orders. Details in "SAP Business One — what the look-only check found". The SAP login and scripts stay on the office PC, never in this repo or on the portal server. **On the user's decision the import is not built.** No application code touched. Notes only | _this commit_ |
 
 ### Design decisions worth remembering
 
