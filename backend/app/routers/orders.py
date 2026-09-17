@@ -19,6 +19,7 @@ from app.core.deps import DbSession, SettledUser, not_found
 from app.models import Order, Shipment
 from app.schemas import (
     DocumentOut,
+    LiveTrackingOut,
     OrderDetailOut,
     OrderOut,
     PhotoOut,
@@ -83,7 +84,8 @@ def get_order(
         ]
         # The stored copy of ShipsGo's news. Never a live call: a customer
         # opening this page costs nothing and waits for nobody.
-        ship.live_tracking = live_tracking.view(s, for_staff=False)
+        panel = live_tracking.view(s, for_staff=False)
+        ship.live_tracking = LiveTrackingOut.model_validate(panel) if panel else None
         ship.photos = [
             PhotoOut.model_validate(p) for p in sorted(s.photos, key=lambda p: p.id)
         ]
