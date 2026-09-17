@@ -48,6 +48,7 @@ __all__ = [
     "ShipmentLinks",
     "carrier_key",
     "carrier_name",
+    "carrier_scac",
     "container_tracking",
     "known_carriers",
     "links_for",
@@ -151,6 +152,9 @@ class Carrier:
     # Spellings a person might actually type, normalised the same way as the
     # stored value. The key itself is always matched and need not be here.
     aliases: tuple[str, ...] = ()
+    # The line's SCAC code, which is how ShipsGo names a carrier. Optional:
+    # without it ShipsGo works the line out from the B/L number itself.
+    scac: str | None = None
 
 
 # One entry per carrier. Adding a line is an entry here and nothing else.
@@ -175,6 +179,7 @@ _CARRIER_LIST = (
         name="Evergreen Line",
         home="https://www.shipmentlink.com/servlet/TDB1_CargoTracking.do",
         aliases=("EVERGREENLINE", "EVERGREENMARINE", "EGLV"),
+        scac="EGLV",
     ),
 )
 
@@ -221,6 +226,12 @@ def carrier_name(value: str | None) -> str | None:
     """The carrier's proper name if we know it, else the name as given."""
     key = carrier_key(value)
     return CARRIERS[key].name if key else tidy_carrier(value)
+
+
+def carrier_scac(value: str | None) -> str | None:
+    """The SCAC code for a typed carrier name, or None if we do not know it."""
+    key = carrier_key(value)
+    return CARRIERS[key].scac if key else None
 
 
 def known_carriers() -> list[str]:

@@ -24,7 +24,7 @@ from app.schemas import (
     PhotoOut,
     ShipmentOut,
 )
-from app.services import tracking
+from app.services import live_tracking, tracking
 
 router = APIRouter()
 
@@ -54,6 +54,7 @@ def get_order(
         .options(
             selectinload(Order.shipments).selectinload(Shipment.documents),
             selectinload(Order.shipments).selectinload(Shipment.photos),
+            selectinload(Order.shipments).selectinload(Shipment.tracking),
         )
     )
     if order is None:
@@ -80,6 +81,9 @@ def get_order(
             )
             for d in sorted(s.documents, key=lambda d: d.id)
         ]
+        # The stored copy of ShipsGo's news. Never a live call: a customer
+        # opening this page costs nothing and waits for nobody.
+        ship.live_tracking = live_tracking.view(s, for_staff=False)
         ship.photos = [
             PhotoOut.model_validate(p) for p in sorted(s.photos, key=lambda p: p.id)
         ]

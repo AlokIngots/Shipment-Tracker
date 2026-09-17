@@ -5,6 +5,7 @@ import StatusPill, { PART_SHIPPED } from '../../components/StatusPill'
 import { describeError, fmtDate, plural } from '../../lib/format'
 import OrderForm from './OrderForm'
 import ShipmentForm from './ShipmentForm'
+import LiveTracking from '../../components/LiveTracking'
 import { TrackActions } from '../../components/Tracking'
 
 // Which orders are open, kept for this browser tab only. A save reloads the
@@ -45,11 +46,110 @@ function needsFinalTick(order) {
   )
 }
 
-function ShipmentRow({ shipment, onEdit, onRemove, onDocuments, busy }) {
+// Live tracking for one shipment, as staff look after it.
+//
+// Enable tracking is the one button in the portal that can spend a ShipsGo
+// credit, so it asks first, says what it will cost, and the server spends at
+// most one credit per B/L however often it is pressed. Refresh and Stop cost
+// nothing.
+function LiveTrackingControls({ shipment, onTracking, busy }) {
+  const live = shipment.live_tracking
+
+  if (!live) {
+    const blocked = !shipment.live_tracking_available
+      ? 'Live tracking is not set up on this server yet (no ShipsGo key).'
+      : !shipment.bl_number
+        ? 'Add the Bill of Lading number first — tracking follows the B/L.'
+        : null
+
+    function enable() {
+      const ok = window.confirm(
+        `Turn on live tracking for B/L ${shipment.bl_number}?\n\n` +
+          'This uses 1 ShipsGo credit — or none, if ShipsGo is already ' +
+          'following this B/L. It is done once for this shipment; after that ' +
+          'the portal only reads updates, which are free.',
+      )
+      if (ok) onTracking(shipment, 'enable')
+    }
+
+    return (
+      <div className="livecontrols">
+        <p className="livecontrols-text">
+          Live tracking is off. Customers see the timeline only once it is on.
+        </p>
+        <button
+          type="button"
+          className="minibutton"
+          onClick={enable}
+          disabled={busy || Boolean(blocked)}
+          title={blocked ?? undefined}
+        >
+          Enable tracking (1 credit)
+        </button>
+        {blocked && <p className="livecontrols-hint">{blocked}</p>}
+      </div>
+    )
+  }
+
+  function stop() {
+    const ok = window.confirm(
+      `Stop live tracking for ${shipment.shipment_no}?\n\n` +
+        'The customer stops seeing the timeline. It stays in ShipsGo, so ' +
+        'turning it on again for the same B/L uses no credit.',
+    )
+    if (ok) onTracking(shipment, 'stop')
+  }
+
+  const housekeeping = [
+    `B/L ${live.booking_number}`,
+    `ShipsGo #${live.external_id}`,
+    live.enabled_by && `turned on by ${live.enabled_by}`,
+    live.reused ? 'no credit used' : '1 credit used',
+    live.finished && 'journey finished, ShipsGo no longer updates it',
+  ].filter(Boolean)
+
+  return (
+    <div className="livecontrols">
+      <p className="livecontrols-text">{housekeeping.join(' · ')}</p>
+      {live.stale && (
+        <p className="message message--error" role="alert">
+          The shipment’s B/L number has changed since tracking was turned on,
+          so customers are not shown this. Stop tracking, then enable it again
+          for the new number.
+        </p>
+      )}
+      {live.last_error && (
+        <p className="livecontrols-hint" role="status">
+          Last refresh failed: {live.last_error}
+        </p>
+      )}
+      <div className="livecontrols-actions">
+        <button
+          type="button"
+          className="minibutton"
+          onClick={() => onTracking(shipment, 'refresh')}
+          disabled={busy}
+        >
+          Refresh now (free)
+        </button>
+        <button
+          type="button"
+          className="minibutton minibutton--quiet"
+          onClick={stop}
+          disabled={busy}
+        >
+          Stop tracking
+        </button>
+      </div>
+      <LiveTracking tracking={live} staff />
+    </div>
+  )
+}
+
+function ShipmentRow({ shipment, onEdit, onRemove, onDocuments, onTracking, busy }) {
   // Shut by default: a staff list is a list, and an order can hold many
   // lots. Open, it gives the numbers to read down a phone line.
   const [tracking, setTracking] = useState(false)
-  const canTrack = Boolean(shipment.container_tracking_url)
   // Only what is known, joined into one line. A row of dashes before a vessel
   // is booked reads as broken, when all it means is "not yet".
   const facts = [
@@ -73,16 +173,15 @@ function ShipmentRow({ shipment, onEdit, onRemove, onDocuments, busy }) {
       </div>
       <StatusPill status={shipment.status} />
       <div className="docrow-actions">
-        {canTrack && (
-          <button
-            type="button"
-            className="minibutton"
-            onClick={() => setTracking((open) => !open)}
-            aria-expanded={tracking}
-          >
-            {tracking ? 'Hide tracking' : 'Track'}
-          </button>
-        )}
+        {/* Always offered: live tracking is switched on from inside it. */}
+        <button
+          type="button"
+          className="minibutton"
+          onClick={() => setTracking((open) => !open)}
+          aria-expanded={tracking}
+        >
+          {tracking ? 'Hide tracking' : shipment.live_tracking ? 'Track (live)' : 'Track'}
+        </button>
         <button type="button" className="minibutton" onClick={onEdit} disabled={busy}>
           Edit
         </button>
@@ -104,6 +203,7 @@ function ShipmentRow({ shipment, onEdit, onRemove, onDocuments, busy }) {
           are not reading out something different. */}
       {tracking && (
         <div className="shiprow-tracking">
+          <LiveTrackingControls shipment={shipment} onTracking={onTracking} busy={busy} />
           <TrackActions shipment={shipment} />
         </div>
       )}
@@ -122,6 +222,7 @@ function OrderRow({
   onEdit,
   onRemoveOrder,
   onRemoveShipment,
+  onTracking,
   onSaved,
   onGo,
   busy,
@@ -232,6 +333,7 @@ function OrderRow({
                 onEdit={() => setShipmentForm(shipment)}
                 onDocuments={() => onGo('documents', { shipmentId: shipment.id })}
                 onRemove={() => onRemoveShipment(shipment)}
+                onTracking={onTracking}
               />
             ),
           )}
@@ -375,6 +477,31 @@ export default function StaffOrdersScreen({ startWith, onGo }) {
     }
   }
 
+  // Enable, refresh or stop live tracking. The server answers with the order
+  // as it now stands, so only that order is replaced -- the rest of the list
+  // and whatever is open stay exactly where they were.
+  async function trackingAction(shipment, kind) {
+    const url = `/api/staff/shipments/${shipment.id}/tracking`
+    setBusy(true)
+    setError(null)
+    setNotice(null)
+    try {
+      const res =
+        kind === 'enable'
+          ? await axios.post(url, { confirm: true })
+          : kind === 'refresh'
+            ? await axios.post(`${url}/refresh`)
+            : await axios.delete(url)
+      const updated = res.data.order
+      setOrders((list) => list.map((o) => (o.id === updated.id ? updated : o)))
+      setNotice(res.data.detail)
+    } catch (err) {
+      setError(describeError(err, 'Could not change live tracking for that shipment.'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   if (state === 'loading') {
     return (
       <div className="card">
@@ -493,6 +620,7 @@ export default function StaffOrdersScreen({ startWith, onGo }) {
               onSaved={load}
               onRemoveOrder={() => removeOrder(order)}
               onRemoveShipment={removeShipment}
+              onTracking={trackingAction}
             />
           ),
         )}
