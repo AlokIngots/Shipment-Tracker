@@ -141,7 +141,14 @@ def create_token(
     to replace it would lock them out. See must_choose_password in deps.py.
     """
     issued = int(time.time()) if issued_at is None else int(issued_at)
-    body = {"uid": user_id, "iat": issued, "exp": issued + TOKEN_TTL_SECONDS}
+    body = {
+        "uid": user_id,
+        "iat": issued,
+        "exp": issued + TOKEN_TTL_SECONDS,
+        # A random id, so Sign out can end this one token on the server
+        # without touching the owner's other devices. See SignedOutToken.
+        "jti": secrets.token_urlsafe(16),
+    }
     if by_password:
         body["pwd"] = 1
     payload = _b64encode(json.dumps(body, separators=(",", ":")).encode())
@@ -151,7 +158,8 @@ def create_token(
 def read_token(token: str) -> dict | None:
     """Return the contents of a valid, unexpired token, else None.
 
-    The caller gets {"uid": ..., "iat": ..., "pwd": ...}. Nothing in here is trusted
+    The caller gets {"uid", "iat", "exp", "jti", "pwd"}; "jti" is None on a
+    token issued before tokens had one. Nothing in here is trusted
     until the signature has been checked, which is the first thing done.
     """
     try:
@@ -178,5 +186,7 @@ def read_token(token: str) -> dict | None:
     return {
         "uid": body["uid"],
         "iat": int(body.get("iat", 0)),
+        "exp": int(body["exp"]),
+        "jti": body["jti"] if isinstance(body.get("jti"), str) else None,
         "pwd": bool(body.get("pwd")),
     }

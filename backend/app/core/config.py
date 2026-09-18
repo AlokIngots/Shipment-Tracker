@@ -76,6 +76,17 @@ LOGIN_MAX_ATTEMPTS = int(os.getenv("LOGIN_MAX_ATTEMPTS", "5"))
 # The same address failing against many different accounts.
 LOGIN_ADDRESS_MAX_ATTEMPTS = int(os.getenv("LOGIN_ADDRESS_MAX_ATTEMPTS", "20"))
 
+# One account failing from ANY number of addresses (18 Sep 2026). The two
+# limits above both count per address, so somebody with many addresses got
+# five guesses at one account from each. This caps an account at ten wrong
+# passwords per window, however they arrive -- forty an hour at most.
+#
+# The cost: a stranger who knows a customer's email can keep that
+# customer's PASSWORD sign-in locked by typing wrong ones. Their email link
+# still works, and so does waiting out the window. Higher than the
+# per-address limit so a person's own typos never reach it first.
+LOGIN_ACCOUNT_MAX_ATTEMPTS = int(os.getenv("LOGIN_ACCOUNT_MAX_ATTEMPTS", "10"))
+
 LOGIN_WINDOW_SECONDS = int(os.getenv("LOGIN_WINDOW_SECONDS", "900"))     # 15 min
 LOGIN_LOCKOUT_SECONDS = int(os.getenv("LOGIN_LOCKOUT_SECONDS", "900"))   # 15 min
 

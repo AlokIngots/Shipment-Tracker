@@ -48,6 +48,7 @@ import threading
 import time
 
 from app.core.config import (
+    LOGIN_ACCOUNT_MAX_ATTEMPTS,
     LOGIN_ADDRESS_MAX_ATTEMPTS,
     LOGIN_LOCKOUT_SECONDS,
     LOGIN_MAX_ATTEMPTS,
@@ -181,6 +182,15 @@ by_email_and_address = AttemptLimiter(
     lockout_seconds=LOGIN_LOCKOUT_SECONDS,
 )
 
+# One account, from any number of machines. Never cleared by a successful
+# sign-in: that would hand whoever is guessing a fresh allowance every time
+# the real owner signs in.
+by_account = AttemptLimiter(
+    max_attempts=LOGIN_ACCOUNT_MAX_ATTEMPTS,
+    window_seconds=LOGIN_WINDOW_SECONDS,
+    lockout_seconds=LOGIN_LOCKOUT_SECONDS,
+)
+
 # One machine trying many accounts.
 by_address = AttemptLimiter(
     max_attempts=LOGIN_ADDRESS_MAX_ATTEMPTS,
@@ -207,7 +217,11 @@ magic_link_by_address = AttemptLimiter(
 def reset_all() -> None:
     """Forget everything. Only for tests."""
     for limiter in (
-        by_email_and_address, by_address, magic_link_by_email, magic_link_by_address
+        by_email_and_address,
+        by_account,
+        by_address,
+        magic_link_by_email,
+        magic_link_by_address,
     ):
         with limiter._lock:  # noqa: SLF001 - the module owns these objects
             limiter._failures.clear()

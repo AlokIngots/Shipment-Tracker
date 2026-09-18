@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from app.core import config, security
 from app.core.deps import ClientAddress, CurrentUser, DbSession, must_choose_password
 from fastapi import APIRouter, BackgroundTasks, HTTPException, status
-from app.models import Customer, User
+from app.models import Customer, SignedOutToken, User
 from app.schemas import (
     ChangePasswordRequest,
     CustomerOut,
@@ -27,7 +27,7 @@ from app.schemas import (
     MagicLinkRequest,
 )
 from app.services import audit, magic_links, ratelimit
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 router = APIRouter()
 
@@ -115,6 +115,24 @@ def login(
                 headers={"Retry-After": str(blocked.retry_after)},
             ) from blocked
 
+    # Too many wrong passwords for this one account, from anywhere. Keyed on
+    # the email as typed, account or not, so it answers nothing about
+    # whether the account exists.
+    try:
+        ratelimit.by_account.check(email)
+    except ratelimit.TooManyAttempts as blocked:
+        minutes = max(1, round(blocked.retry_after / 60))
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=(
+                "Too many wrong passwords have been tried for this email "
+                f"address. Please wait about {minutes} minute"
+                f"{'' if minutes == 1 else 's'}, or press Sign in with email "
+                "link instead."
+            ),
+            headers={"Retry-After": str(blocked.retry_after)},
+        ) from blocked
+
     user = db.scalar(select(User).where(User.email == email))
 
     # Always run a hash comparison, even when the email is unknown, so a
@@ -126,6 +144,7 @@ def login(
         # A deactivated account counts too: it is still a wrong answer, and
         # not counting it would leave a way to guess without limit.
         ratelimit.by_email_and_address.record_failure(f"{email}|{address}")
+        ratelimit.by_account.record_failure(email)
         ratelimit.by_address.record_failure(address)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -235,6 +254,35 @@ def redeem_magic_link(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=LINK_EXPIRED)
 
     return signed_in(user, db)
+
+
+@router.post("/api/logout")
+def logout(current_user: CurrentUser, db: DbSession) -> dict[str, str]:
+    """End this sign-in on the server, not only in the browser.
+
+    Writes the token's id to signed_out_tokens, after which the token is
+    refused everywhere -- including a copy somebody else is holding. Only
+    this token: the same person signed in on another device stays signed
+    in. Sign-in bookkeeping, like the magic-link routes, so it may sit
+    outside /api/staff without breaking the read-only rule.
+
+    Rows for tokens that have expired by themselves are cleared here too;
+    a dead token needs no entry to stay dead.
+    """
+    now = datetime.now(timezone.utc)
+    db.execute(delete(SignedOutToken).where(SignedOutToken.expires_at < now))
+    token_id = getattr(current_user, "token_id", None)
+    if token_id and db.get(SignedOutToken, token_id) is None:
+        db.add(
+            SignedOutToken(
+                token_id=token_id,
+                user_id=current_user.id,
+                signed_out_at=now,
+                expires_at=datetime.fromtimestamp(current_user.token_expires, timezone.utc),
+            )
+        )
+    db.commit()
+    return {"detail": "Signed out."}
 
 
 @router.get("/api/me", response_model=LoginResponse | dict)
