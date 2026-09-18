@@ -1,10 +1,15 @@
 // Where the sign-in token is kept between page loads.
 //
-// sessionStorage, not localStorage, on purpose. sessionStorage survives a
-// refresh and a link opened in the same tab, and is thrown away when the tab
-// is closed. localStorage would survive the browser being closed and
-// reopened, which is convenient on your own laptop and wrong on the shared
-// machine in a shipping office.
+// localStorage, since 18 Sep 2026: somebody who signs in stays signed in
+// for SESSION_TTL_DAYS (30 by default), through closing the browser, so a
+// customer who looks in once a week is not asked to sign in every time.
+// The server decides how long the token lasts; this only keeps it. Sign out
+// removes it at once -- from every tab, see App.jsx -- which is what to
+// press on a shared machine in a shipping office.
+//
+// Until then it was sessionStorage, thrown away when the tab closed. A
+// token left there by the old site is still read once, moved here, and
+// removed, so nobody already signed in is signed out by the change.
 //
 // Every read and write is wrapped, because a browser set to block site data
 // throws rather than returning nothing, and being unable to remember a token
@@ -12,11 +17,11 @@
 
 import axios from 'axios'
 
-const TOKEN_KEY = 'alok.portal.token'
+export const TOKEN_KEY = 'alok.portal.token'
 
 export function rememberToken(token) {
   try {
-    sessionStorage.setItem(TOKEN_KEY, token)
+    localStorage.setItem(TOKEN_KEY, token)
   } catch {
     // Nothing to do: the portal still works, it just forgets on refresh.
   }
@@ -24,17 +29,26 @@ export function rememberToken(token) {
 
 export function recallToken() {
   try {
-    return sessionStorage.getItem(TOKEN_KEY)
+    const kept = localStorage.getItem(TOKEN_KEY)
+    if (kept) return kept
+    const old = sessionStorage.getItem(TOKEN_KEY)
+    if (old) {
+      sessionStorage.removeItem(TOKEN_KEY)
+      localStorage.setItem(TOKEN_KEY, old)
+    }
+    return old
   } catch {
     return null
   }
 }
 
 export function forgetToken() {
-  try {
-    sessionStorage.removeItem(TOKEN_KEY)
-  } catch {
-    // Nothing to do.
+  for (const store of [() => localStorage, () => sessionStorage]) {
+    try {
+      store().removeItem(TOKEN_KEY)
+    } catch {
+      // Nothing to do.
+    }
   }
 }
 
@@ -59,7 +73,7 @@ export function takeSignInLinkToken() {
 }
 
 // Start using a token: send it with every later request, and remember it for
-// this tab. Not a React hook, despite what the old name (useToken) suggested.
+// this browser. Not a React hook, despite what the old name (useToken) suggested.
 export function applyToken(token) {
   axios.defaults.headers.common.Authorization = `Bearer ${token}`
   rememberToken(token)

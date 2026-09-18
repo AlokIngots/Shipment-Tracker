@@ -57,8 +57,9 @@ srv1427359 (beside AlokCRM, behind its nginx).
 9. **The customer side is strictly read-only.** Only the Admin Console adds
    or changes data, and that is enforced in the backend, not just the UI.
    No customer-facing router gets a POST, PUT or DELETE — the exceptions
-   are signing in (by email link; the password sign-in is kept but dormant)
-   and changing your own password, none of which touch customer data. See
+   are signing in (by password or by email link, side by side since
+   18 Sep 2026) and changing your own password, none of which touch
+   customer data. See
    "The two halves".
 10. **Every step covers both halves.** A customer feature needs the admin
     screen that feeds it. "Documents" means the upload page *and* the
@@ -78,6 +79,29 @@ to the next step. Never run ahead through multiple steps at once.
 ---
 
 ## Where we are now
+
+**Step 46, password sign-in beside the email link (18 September 2026),**
+is on `feature/password-login` (restore tag `pre-password-login`), pushed,
+**waiting for Alok's OK to merge, not deployed.** No migration: the
+`password_hash` column has existed since 0001. Why: AWS SES started
+refusing its credentials and, with sign-in by email link only, nobody could
+get in. What it does: `PASSWORD_SIGN_IN` is on by default, so the sign-in
+screen offers email + password and still the email link; staff press
+**Set password** on any login in Customers & logins and hand the password
+over themselves (the customer is not made to change it);
+`python -m scripts.set_password --email EMAIL` does the same on the server,
+typed without echo; a session lasts `SESSION_TTL_DAYS` (30) and survives
+closing the browser (the token moved from sessionStorage to localStorage),
+and Sign out ends it in every tab. `TOKEN_TTL_SECONDS` is no longer read.
+A temporary password now holds back only somebody who signed in WITH it,
+never somebody who came by link (the token says which) — before, switching
+passwords on would have stuck every link-only customer on a "choose your
+password" screen asking for a password they never had.
+
+**On the server, when it is deployed:** the server's `.env` was copied from
+the old example, so it very likely says `PASSWORD_SIGN_IN=false` and
+`TOKEN_TTL_SECONDS=43200`. Change the first to `true` (the second is now
+ignored; `SESSION_TTL_DAYS=30` can be added but is the default).
 
 **Last worked on: 17 September 2026.** Steps 1–29 and 31–43 are built,
 merged to `dev` **and deployed**. Nothing is merged and waiting to go out.
@@ -350,6 +374,7 @@ after. They also run on GitHub for every push.
 | `python -m scripts.manage_users --add-customer CODE --name N` | add a customer |
 | `python -m scripts.manage_users --add-user EMAIL --customer CODE` | give somebody a login; they sign in with an email link (it still prints a temporary password, which opens nothing while password sign-in is off) |
 | `python -m scripts.manage_users --add-staff EMAIL` | give an Alok Ingots colleague a staff login |
+| `python -m scripts.set_password --email EMAIL` | set somebody's password, typed twice and never shown; not temporary; signs them out everywhere. Staff can use it on their own account — the admin console refuses that |
 | `python -m scripts.manage_users --reset-password EMAIL` | issue a new temporary password; signs them out everywhere, and is the way back in during an email failure with `PASSWORD_SIGN_IN` on (see "If email fails") |
 | `python -m scripts.manage_users --deactivate EMAIL` | stop somebody signing in, at once |
 | `python -m scripts.manage_users --activate EMAIL` | let them back in |
@@ -442,8 +467,8 @@ What enforcement means in this repo, concretely:
 - The one exception is `POST /api/change-password`, which changes nothing
   but the caller's own password. Signing in is not an exception so much as
   not data: `POST /api/magic-link` and `/api/magic-link/redeem` for email
-  links write only sign-in bookkeeping, and `POST /api/login` (dormant while
-  `PASSWORD_SIGN_IN` is off) writes nothing.
+  links write only sign-in bookkeeping, and `POST /api/login` writes
+  nothing.
   `test_the_customer_half_of_the_api_has_no_writes` names all four.
 - Staff is a flag that only `scripts/manage_users.py --add-staff` can set, on the
   server. There is no way to become staff through the portal, and no
@@ -484,8 +509,17 @@ to prove it really is a picture, and saved again without its hidden details
 Set `PORTAL_DOMAIN` in `.env`: a real domain makes Caddy obtain HTTPS
 automatically; `:80` serves plain HTTP for testing on your own machine.
 
-**If email fails: getting back in with a password** (step 32). In the
-project folder on srv1427359:
+**If email fails: getting back in with a password.** Since step 46
+password sign-in is on by default and a password is set with
+`scripts.set_password`, so the quickest way in is, on srv1427359:
+
+```bash
+docker compose -f docker-compose.prod.yml -f docker-compose.server.yml exec api python -m scripts.set_password --email you@alokindia.com
+```
+
+— then sign in with that email and password. The older route below (step
+32) still works where step 46 is not deployed. In the project folder on
+srv1427359:
 
 1. Add `PASSWORD_SIGN_IN=true` to `.env`, then recreate the API so it reads
    it (a plain `restart` does not re-read `.env`):
@@ -862,6 +896,8 @@ Update after every step: what was done, and the commit.
 | 2026-09-17 | **SAP read for the first time, look-only, and the import parked.** SAP Business One was read through its Service Layer with a script that refuses any request other than GET plus sign-in and sign-out, and accepts only the server's known certificate. It read the latest 50 sales orders, their customers, the custom field list, and 61 export invoices; **nothing in SAP was changed.** Found: export orders are series 416 and export invoices series 419; customers match on SAP's customer code; the shipping fields exist in SAP but were empty on every export invoice; and invoices are not linked to orders. Details in "SAP Business One — what the look-only check found". The SAP login and scripts stay on the office PC, never in this repo or on the portal server. **On the user's decision the import is not built.** No application code touched. Notes only | _this commit_ |
 | 2026-09-17 | **Step 44 — Live container tracking from ShipsGo** (`feature/shipsgo-tracking`, restore tag `pre-shipsgo-tracking`, **migration 0013**). ShipsGo API v2 (`https://api.shipsgo.com/v2`, header `X-Shipsgo-User-Token`, read from the official OpenAPI spec): `POST /ocean/shipments` adds a shipment by `booking_number` and **costs 1 credit**; `GET /ocean/shipments/{id}` and the list are free. **How credits are protected:** (1) only one function, `shipsgo.add_shipment`, can POST, and `_call` refuses every other write; a test proves it is called only from `live_tracking.enable`, which is called only from the staff Enable route, which demands `confirm: true`; (2) enable locks the shipment row, and if tracking already exists it returns without contacting ShipsGo at all; (3) a second shipment on the same B/L copies the first one's ShipsGo id without asking ShipsGo; (4) otherwise it looks the B/L up in the account first (free) and reuses what it finds; (5) the POST sends no `reference`, because ShipsGo counts the reference in its duplicate check; (6) a 409 ALREADY_EXISTS is reused, which ShipsGo documents as free; (7) the id is committed the moment ShipsGo answers, and Stop tracking only removes our row, so re-enabling finds it again for nothing; (8) every answer's `X-Shipsgo-Credits-Cost` is read, and a read that ever reports a cost raises `CreditTripwire`, which stops the refresh timer. Nothing is on by default: no save, no customer page and no timer run adds anything. **Refresh:** a second loop in `scheduler.py` with its own advisory lock reads every tracked shipment that has not been read for `SHIPSGO_REFRESH_EVERY_HOURS` (default 6), pausing between reads (ShipsGo allows 100 a minute), skipping journeys ShipsGo has finished and shipments that failed 20 times. **Storage:** `shipment_tracking`, one row per shipment (unique), holding ShipsGo's id, the B/L added, status, carrier, ports, loading date, ETA, transshipment count and each container's movements as JSON. If staff change the B/L afterwards, customers stop seeing the panel and Enable refuses until tracking is stopped. **Screens:** `LiveTracking.jsx`, shared by both halves; the customer view has no link out, keeping step 43. Proved by 31 new tests in `test_live_tracking.py` against a fake ShipsGo that counts every call — **17 need no database and passed here; 14 need PostgreSQL and run only in CI** — by the migration rendering cleanly in both directions (`alembic upgrade 0012:0013 --sql`), by a clean `npm run build` and `npm run lint` (13 warnings before and after, none new), and by headless Edge over CDP rendering the real customer and staff screens with a faked order at 390, 900 and 1100px: timeline drawn, both transshipment tags and the vessel-change note present, "Tracking is updating…" shown for a shipment with no news, nothing scrolls sideways, no console errors. **Not proved: no call to the real ShipsGo has been made** — there is no key on this PC. Run `scripts.shipsgo_check` on the server first. The mock-up discussed earlier was not available in this session; the panel follows the portal's existing style. CI green on `6cc4406` (325 passed). **Merged to `dev` on Alok's OK (`374abf0`); not deployed** | `248009d`, `6cc4406` |
 | 2026-09-17 | **Step 45 — No carrier redirect anywhere** (`feature/remove-carrier-redirect-box`, restore tag `pre-remove-carrier-box`). On Alok's decision, with live tracking in the portal the external "Track this container on <carrier> ↗" box is redundant and is the off-site redirect that was not wanted. It survived only in the staff Track panel — step 43 had already taken it off the customer view — so `TrackActions` and its boxed `CopyNumber` are deleted from `Tracking.jsx`, which now holds only the `CopyButton` the customer's shipment facts use, and the styles only that box used (`.track`, `.track--button`, `.track--primary`, `.trackbox`, `.trackbox-note`, `.copynums`, `.copynum-label`, `.copynum-row`, `.copynum-value`, `.copynum-hint`) are removed. The staff Track button is still always there and opens live tracking alone. **The backend is untouched:** `tracking.links_for()` still builds `container_tracking_url` and both APIs still send it, unused by any screen — removing it means changing two schemas and the step 35–37 tests, which is a bigger change than this one and was not asked for. No migration. Proved by a clean `npm run build` and `npm run lint` (13 warnings before and after, none new), and by headless Edge over CDP rendering the real customer and staff screens with a faked order whose API data still carries a carrier URL, at 390, 900 and 1100px, one shipment tracked and one not: no `<a href>` anywhere on either page, no "Track this container", "carrier's website" or shipmentlink text, the customer's four Copy buttons (B/L and container on each shipment) still there, the untracked shipment shown with its facts and no timeline, staff offered Enable tracking on it, nothing scrolling sideways, no console errors. CI green (325 passed). **Merged to `dev` on Alok's OK; not deployed** | `19cf3a4` |
+| 2026-09-18 | **Step 46 — Password sign-in beside the email link** (`feature/password-login`, restore tag `pre-password-login`, **no migration**). SES refusing credentials had locked everybody out. `PASSWORD_SIGN_IN` defaults to true; `.env.example` says so. Admin Console: **Set password** on every login (customer and team) → `POST /api/staff/logins/{id}/set-password`, `StaffUser` only, refuses your own account and weak passwords, stores only the PBKDF2 hash, `must_change_password` false, stamps `password_changed_at` (signs them out everywhere, retires links already sent), activity record `login.password_set` without the password; a "Suggest one" button makes a readable 12-letter one. Server: `scripts/set_password.py --email`, prompts twice via `getpass`, refuses without a terminal, prints usage with no `--email`, warns if the login is disabled or `PASSWORD_SIGN_IN` is off. Sessions: `SESSION_TTL_DAYS` (30) replaces `TOKEN_TTL_SECONDS`; the token is kept in localStorage (an old sessionStorage one is moved across), and Sign out clears it everywhere and signs out other tabs. The token now records `pwd` when it came from a password, and `must_choose_password` applies only then, so link sign-ins are never held back by a temporary password. Two old tests that expected a link sign-in to be held back were changed to expect the opposite; 16 new tests in `test_password_login.py`. **Waiting for Alok's OK to merge; not deployed** | _this commit_ |
+| 2026-09-18 | **Step 46 fix — a reset in the same second as a password change left the old sign-in open.** The PR check (run #108) failed where the push check (#107) had passed, on the same code: `test_setting_a_password_signs_them_out_everywhere` got 200 instead of 401. Not a merge problem (PR #24's base is `main`, and nothing there conflicts). Cause: changing your own password hands back a token stamped one second after the change, and a Set password or Reset password in that same second was stamped earlier than that token, so it survived. `accounts.signing_out_stamp` now stamps a reset at least one second after the previous change. A new test forces the same-second case instead of relying on timing | _this commit_ |
 
 ### Design decisions worth remembering
 

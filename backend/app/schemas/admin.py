@@ -242,6 +242,12 @@ class ActiveIn(BaseModel):
     active: bool
 
 
+class SetPasswordIn(BaseModel):
+    """A password staff chose for somebody. Hashed on arrival, never stored."""
+
+    password: str
+
+
 class TemporaryPasswordOut(BaseModel):
     """A new login or a reset, with the one-time password.
 

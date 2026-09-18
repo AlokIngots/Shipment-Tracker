@@ -1,6 +1,7 @@
-"""The portal as it ships: signed in by email link only.
+"""The portal with PASSWORD_SIGN_IN=false: signed in by email link only.
 
-PASSWORD_SIGN_IN is off unless the server's .env says otherwise. Held to
+That was how it shipped from 11 to 18 Sep 2026; password sign-in is on by
+default now (test_password_login.py), and false still means this. Held to
 account here: an email and a password open nothing, and the refusal is the
 same whether either was right; a brand-new login -- still carrying the
 temporary password the server made for it -- signs in by link and sees its
@@ -18,7 +19,6 @@ in with a password once the switch is on.
 
 import re
 from datetime import timedelta
-from pathlib import Path
 
 import pytest
 
@@ -62,12 +62,11 @@ def sign_in_by_link(client, outbox, email, ip="10.7.0.1"):
     return body, {"Authorization": f"Bearer {body['token']}"}
 
 
-def test_password_sign_in_is_off_unless_the_server_says_otherwise(monkeypatch):
-    monkeypatch.delenv("PASSWORD_SIGN_IN", raising=False)
-    assert config._flag("PASSWORD_SIGN_IN") is False
-
-    example = Path(__file__).resolve().parents[2] / ".env.example"
-    assert "PASSWORD_SIGN_IN=false" in example.read_text(encoding="utf-8")
+def test_the_switch_can_still_turn_password_sign_in_off(monkeypatch):
+    """On by default since 18 Sep 2026 (test_password_login.py); the switch
+    still reads false as off."""
+    monkeypatch.setenv("PASSWORD_SIGN_IN", "false")
+    assert config._flag("PASSWORD_SIGN_IN", "true") is False
 
 
 def test_a_right_password_opens_nothing_and_says_nothing(client, db, customer, link_only):
@@ -166,13 +165,15 @@ def test_the_sign_in_email_offers_no_password(client, db, customer, outbox, link
     assert "password" not in outbox[0].get_content().lower()
 
 
-def test_switched_back_on_the_temporary_password_rule_returns(client, db, customer, outbox):
-    """No link_only here: conftest has password sign-in on, as a server with
-    PASSWORD_SIGN_IN=true would. The rule the switch put to sleep is awake."""
+def test_with_the_switch_on_a_link_still_is_not_held_back(client, db, customer, outbox):
+    """No link_only here: conftest has password sign-in on, as the portal
+    ships since 18 Sep 2026. The temporary-password rule is awake, but only
+    for somebody who signed in WITH that password -- this person came by
+    link, never saw it, and would be locked out by a screen asking for it."""
     accounts.create_login(db, customer, "back@testco.example", None)
     body, auth = sign_in_by_link(client, outbox, "back@testco.example")
-    assert body["must_change_password"] is True
-    assert client.get("/api/orders", headers=auth).status_code == 403
+    assert body["must_change_password"] is False
+    assert client.get("/api/orders", headers=auth).status_code == 200
 
 
 # ------------------------------------------------- the way back in

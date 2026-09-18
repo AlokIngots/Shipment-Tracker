@@ -26,6 +26,7 @@ from app.schemas import (
     CustomerEditIn,
     CustomerIn,
     LoginIn,
+    SetPasswordIn,
     StaffAccountsOut,
     StaffCustomerAccountOut,
     StaffLoginOut,
@@ -152,6 +153,24 @@ def staff_reset_password(
         email=user.email,
         temporary_password=password,
     )
+
+
+@router.post("/logins/{user_id}/set-password", response_model=StaffAccountsOut)
+def staff_set_password(
+    user_id: int, body: SetPasswordIn, staff: StaffUser, db: DbSession
+) -> StaffAccountsOut:
+    """Give a login a password staff chose, to hand over themselves.
+
+    The way a customer gets in without email. It signs that login out
+    everywhere, and the password is never sent back or written down: only
+    its hash is kept.
+    """
+    user = load_login(user_id, db)
+    try:
+        accounts.set_password(db, user, body.password, actor=staff)
+    except accounts.AccountProblem as problem:
+        raise refuse(problem) from problem
+    return accounts_response(db)
 
 
 @router.post("/logins/{user_id}/active", response_model=StaffAccountsOut)

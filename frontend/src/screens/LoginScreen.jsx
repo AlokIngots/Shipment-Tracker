@@ -8,17 +8,20 @@ import { applyToken } from '../lib/session'
 const DEMO_EMAIL = import.meta.env.VITE_DEMO_EMAIL ?? ''
 const DEMO_PASSWORD = import.meta.env.VITE_DEMO_PASSWORD ?? ''
 
-// Normally one way in: a link sent to the inbox.
+// Two ways in: email and password, or a link sent to the inbox. The
+// password needs no email, so a mail outage locks nobody out; staff set it
+// in the admin console and hand it over.
 //
-// The password box comes back only while the server's PASSWORD_SIGN_IN
-// switch is on -- the way back in if email ever fails. The screen asks the
-// server every time it loads, so turning the switch on or off needs no new
-// build of the website. If the question cannot be answered, the screen stays
-// link-only: the normal state is the safe one to fall back to.
+// The password box shows while the server's PASSWORD_SIGN_IN switch is on,
+// which is the default. The screen asks every time it loads, so turning the
+// switch needs no new build. If the question cannot be answered the screen
+// shows the password box anyway: a sign-in that is switched off is refused
+// by the server with a sentence saying so, and hiding the box would leave
+// somebody with only email when email may be what is broken.
 export default function LoginScreen({ onSignedIn }) {
   const [email, setEmail] = useState(DEMO_EMAIL)
   const [password, setPassword] = useState(DEMO_PASSWORD)
-  const [passwordSignIn, setPasswordSignIn] = useState(false)
+  const [passwordSignIn, setPasswordSignIn] = useState(true)
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(false)
   // Once a link has been asked for: what the server said, and to which address.
@@ -33,7 +36,7 @@ export default function LoginScreen({ onSignedIn }) {
       .get('/api/sign-in-options')
       .then((res) => {
         if (cancelled) return
-        setPasswordSignIn(res.data?.password_sign_in === true)
+        setPasswordSignIn(res.data?.password_sign_in !== false)
         // How long a link lasts, and whether it may be reused, are decided
         // on the server. The page used to state them itself and was wrong
         // the moment either was changed.
@@ -45,7 +48,7 @@ export default function LoginScreen({ onSignedIn }) {
         }
       })
       .catch(() => {
-        // Stay link-only.
+        // Keep both ways: see the note at the top.
       })
     return () => {
       cancelled = true
@@ -60,7 +63,7 @@ export default function LoginScreen({ onSignedIn }) {
     try {
       const res = await axios.post('/api/login', { email, password })
       // Every later request carries the token, which is how the server knows
-      // who is asking. Kept for the tab, so a refresh does not sign them out.
+      // who is asking. Kept in this browser, so they stay signed in.
       applyToken(res.data.token)
       onSignedIn(res.data)
     } catch (err) {
@@ -171,6 +174,10 @@ export default function LoginScreen({ onSignedIn }) {
             <button type="submit" className="button" disabled={busy}>
               {busy ? 'Please wait…' : 'Sign in'}
             </button>
+            <p className="login-hint">
+              No password yet, or forgotten it? Use the email link below, or ask
+              your contact at Alok Ingots to set one for you.
+            </p>
           </form>
 
           <div className="login-or" role="separator">

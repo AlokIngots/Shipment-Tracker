@@ -7,7 +7,7 @@ import OrderDetailScreen from './screens/OrderDetailScreen'
 import OrdersScreen from './screens/OrdersScreen'
 import SignInLinkScreen from './screens/SignInLinkScreen'
 import StaffScreen from './screens/staff/StaffScreen'
-import { dropToken, recallToken, takeSignInLinkToken } from './lib/session'
+import { TOKEN_KEY, dropToken, recallToken, takeSignInLinkToken } from './lib/session'
 
 // A token from a sign-in link, read once when the portal first loads and
 // wiped from the address bar in the same moment. Read out here rather than
@@ -28,7 +28,7 @@ export default function App() {
   const [openOrderId, setOpenOrderId] = useState(null)
   const [passwordChanged, setPasswordChanged] = useState(false)
 
-  // On load, see whether this tab already holds a token and whether the
+  // On load, see whether this browser already holds a token and whether the
   // server still accepts it. A token can be refused for good reasons —
   // expired, password changed elsewhere, account deactivated — and all of
   // them mean the same thing here: show the login screen.
@@ -62,6 +62,17 @@ export default function App() {
     }
   }, [])
 
+  // Signing out in one tab signs out every other tab of the portal too. The
+  // token is shared by the whole browser now, so a tab left open would
+  // otherwise go on showing orders to whoever sits down next.
+  useEffect(() => {
+    function onStorage(event) {
+      if (event.key === TOKEN_KEY && !event.newValue) signOut()
+    }
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
+  }, [])
+
   function signedInByLink(data) {
     setLinkToken(null)
     setSession(data)
@@ -75,9 +86,9 @@ export default function App() {
   }
 
   // Nothing but the password screen is reachable until a temporary password
-  // has been replaced. The server only ever says so while its password
-  // sign-in is switched on (PASSWORD_SIGN_IN) -- in normal running it is off
-  // and people sign in by email link, so this is the recovery path only.
+  // has been replaced. The server only says so to somebody who signed in
+  // WITH a temporary password; a password staff chose, or an email link,
+  // goes straight through.
   const mustChangePassword = Boolean(session?.must_change_password)
 
   function passwordWasChanged() {

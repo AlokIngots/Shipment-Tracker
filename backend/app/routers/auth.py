@@ -1,12 +1,11 @@
 """Signing in, checking a remembered token, and changing a password.
 
-The portal signs people in with a link sent by email: POST /api/magic-link
-to ask for one and POST /api/magic-link/redeem to spend it.
-
-An email and a password, POST /api/login, is the older way in. It is kept
-but dormant: while PASSWORD_SIGN_IN is off, which is how the portal ships,
-it refuses everybody before looking anything up. Switched on, it works
-exactly as it did, and both ways end in the same place.
+Two ways in, side by side, ending in the same place: an email and a
+password, POST /api/login, and a link sent by email, POST /api/magic-link to
+ask for one and POST /api/magic-link/redeem to spend it. The password needs
+no email to work, which is the point of it. PASSWORD_SIGN_IN=false takes it
+away and leaves the link alone; /api/login then refuses everybody before
+looking anything up.
 
 None of these change a customer's data. What they write is sign-in
 bookkeeping -- a link issued, a link spent -- which is why they may sit
@@ -40,15 +39,15 @@ PASSWORD_SIGN_IN_OFF = (
 )
 
 
-def signed_in(user: User, db) -> LoginResponse:
+def signed_in(user: User, db, *, by_password: bool = False) -> LoginResponse:
     """What a successful sign-in returns, however the person proved who they are."""
     customer = db.get(Customer, user.customer_id) if user.customer_id else None
     return LoginResponse(
-        token=security.create_token(user.id),
+        token=security.create_token(user.id, by_password=by_password),
         email=user.email,
         full_name=user.full_name,
         customer=CustomerOut.model_validate(customer) if customer else None,
-        must_change_password=must_choose_password(user),
+        must_change_password=must_choose_password(user, by_password),
         is_staff=user.is_staff,
     )
 
@@ -87,7 +86,7 @@ def login(
 ) -> LoginResponse:
     """Sign in against the users table and return a signed token.
 
-    Dormant while PASSWORD_SIGN_IN is off: refused before the rate limiter,
+    While PASSWORD_SIGN_IN is off it is refused before the rate limiter,
     the users table or the password is looked at, so the answer is the same
     for every email and every password and says nothing about either.
     """
@@ -137,7 +136,7 @@ def login(
     # count: one good password does not excuse nineteen bad ones.
     ratelimit.by_email_and_address.clear(f"{email}|{address}")
 
-    return signed_in(user, db)
+    return signed_in(user, db, by_password=True)
 
 
 @router.post("/api/magic-link", status_code=status.HTTP_202_ACCEPTED)
@@ -314,5 +313,6 @@ def change_password(
         "token": security.create_token(
             current_user.id,
             issued_at=int(current_user.password_changed_at.timestamp()) + 1,
+            by_password=getattr(current_user, "signed_in_with_password", False),
         ),
     }

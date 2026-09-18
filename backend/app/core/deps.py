@@ -9,8 +9,8 @@ this file, and the difference between them is the whole access-control story:
     StaffUser    — signed in, not held back by a temporary password, is Alok Ingots
 
 A temporary password only holds anybody back while password sign-in is on
-(PASSWORD_SIGN_IN). The portal ships with it off: people sign in by emailed
-link, and have no password to replace.
+(PASSWORD_SIGN_IN), and only when they signed in with it. Somebody who came
+in by emailed link has no password to replace.
 
 Keeping them in one small file means the rules can be read in one sitting,
 rather than being inferred from whichever route happens to be on screen.
@@ -85,15 +85,20 @@ MUST_CHANGE_PASSWORD_ERROR = HTTPException(
 )
 
 
-def must_choose_password(user: User) -> bool:
+def must_choose_password(user: User, by_password: bool | None = None) -> bool:
     """Whether this person is held back until they replace a temporary password.
 
-    Only while password sign-in is on. With it off, nobody signs in with a
-    password, so a temporary one that staff once saw opens nothing -- and a
-    person who arrived by email link has no password to replace. Asking them
-    for one would lock them out of their own orders.
+    Only while password sign-in is on, and only in a session that began with
+    a password. Somebody who arrived by email link never typed the temporary
+    password -- most never saw it -- and the change screen asks for it, so
+    holding them back would lock them out of their own orders.
+
+    `by_password` is how this session began. Left out, it is read from the
+    token, which get_current_user notes on the user it returns.
     """
-    return config.PASSWORD_SIGN_IN and user.must_change_password
+    if by_password is None:
+        by_password = getattr(user, "signed_in_with_password", False)
+    return config.PASSWORD_SIGN_IN and by_password and user.must_change_password
 
 
 def get_current_user(
@@ -132,6 +137,9 @@ def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    # For this request only: the session is per request, so this never
+    # outlives it. Read by must_choose_password.
+    user.signed_in_with_password = token["pwd"]
     return user
 
 
