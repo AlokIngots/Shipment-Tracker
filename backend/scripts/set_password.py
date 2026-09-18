@@ -37,7 +37,7 @@ EXAMPLE = (
     "on the server:\n"
     "  docker compose -f docker-compose.prod.yml -f docker-compose.server.yml \\\n"
     "      exec api python -m scripts.set_password --email you@alokindia.com\n\n"
-    f"The password must be at least {security.PASSWORD_MIN_LENGTH} characters. "
+    f"The password needs {security.PASSWORD_RULE}. "
     "You are asked for it twice and nothing shows as you type."
 )
 

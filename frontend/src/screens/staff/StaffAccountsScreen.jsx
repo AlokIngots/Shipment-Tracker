@@ -3,6 +3,7 @@ import axios from 'axios'
 import StartHere from '../../components/StartHere'
 import { Field, TextField } from '../../components/Field'
 import { describeError, plural } from '../../lib/format'
+import { PASSWORD_RULE, passwordShortfall, suggestPassword } from '../../lib/passwordRule'
 
 // Said once a login has been made. The server also makes a random temporary
 // password, as it always did; it is not shown, because Set password is the
@@ -239,16 +240,6 @@ function LoginForm({ customer, onCreated, onCancel }) {
   )
 }
 
-// Same letters as the server's temporary passwords: no 0/O or 1/l/I, so it
-// survives being read out over the phone. Three groups of four.
-const READABLE = 'abcdefghjkmnpqrstuvwxyz23456789'
-
-function suggestPassword() {
-  const picks = crypto.getRandomValues(new Uint32Array(12))
-  const raw = Array.from(picks, (n) => READABLE[n % READABLE.length]).join('')
-  return `${raw.slice(0, 4)}-${raw.slice(4, 8)}-${raw.slice(8)}`
-}
-
 // Staff choose a password for somebody and hand it over themselves: the way
 // in that needs no email. Shown in plain text on purpose -- the point is to
 // read it out or copy it -- and never sent back by the server.
@@ -259,8 +250,8 @@ function SetPasswordForm({ login, onSaved, onCancel }) {
 
   async function submit(event) {
     event.preventDefault()
-    if (password.trim().length < 12) {
-      setError('Use at least 12 characters, or press Suggest one.')
+    if (passwordShortfall(password)) {
+      setError(`${PASSWORD_RULE}, please — or press Suggest one.`)
       return
     }
     setBusy(true)
@@ -285,7 +276,7 @@ function SetPasswordForm({ login, onSaved, onCancel }) {
           autoComplete="off"
           spellCheck={false}
           autoFocus
-          hint="At least 12 characters. They can sign in with it straight away; anywhere they were already signed in is signed out."
+          hint={`${PASSWORD_RULE}. They can sign in with it straight away; anywhere they were already signed in is signed out.`}
         />
       </div>
       {error && (

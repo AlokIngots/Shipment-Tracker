@@ -207,7 +207,7 @@ def _settled_login(db, client, customer, email):
     from app.services import accounts
 
     user, temporary = accounts.create_login(db, customer, email, "Test Person")
-    password = "a-password-they-chose-themselves"
+    password = "a-password-they-chose-in-2026"
     token = client.post(
         "/api/login", json={"email": email, "password": temporary}
     ).json()["token"]
@@ -250,7 +250,7 @@ def staff_auth(db, client):
         headers={"Authorization": f"Bearer {token}"},
         json={
             "current_password": temporary,
-            "new_password": "staff-password-chosen",
+            "new_password": "staff-password-chosen-7",
         },
     ).json()["token"]
     return {"Authorization": f"Bearer {replaced}"}

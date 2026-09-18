@@ -214,7 +214,7 @@ def test_if_email_fails_staff_get_back_in_with_the_switch_on(client, db):
     changed = client.post(
         "/api/change-password",
         headers=auth,
-        json={"current_password": temporary, "new_password": "a-real-password-after-rescue"},
+        json={"current_password": temporary, "new_password": "a-real-password-after-rescue-4"},
     )
     assert changed.status_code == 200
     settled = {"Authorization": f"Bearer {changed.json()['token']}"}

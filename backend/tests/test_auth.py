@@ -42,7 +42,7 @@ def test_a_temporary_password_buys_only_the_right_to_replace_it(
     replaced = client.post(
         "/api/change-password",
         headers=headers,
-        json={"current_password": temporary, "new_password": "chosen-by-them-now"},
+        json={"current_password": temporary, "new_password": "chosen-by-them-now-2"},
     )
     assert replaced.status_code == 200
     new_headers = {"Authorization": f"Bearer {replaced.json()['token']}"}
@@ -62,7 +62,7 @@ def test_changing_a_password_signs_out_everywhere_else(client, db, customer):
     changed = client.post(
         "/api/change-password",
         headers={"Authorization": f"Bearer {second}"},
-        json={"current_password": temporary, "new_password": "a-brand-new-password"},
+        json={"current_password": temporary, "new_password": "a-brand-new-password-3"},
     )
     assert changed.status_code == 200
 
