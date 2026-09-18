@@ -151,6 +151,31 @@ def test_setting_a_password_signs_them_out_everywhere(client, db, customer_auth,
     assert client.get("/api/orders", headers=customer_auth).status_code == 401
 
 
+def test_a_reset_in_the_same_second_as_a_password_change_still_signs_out(
+    client, db, customer
+):
+    """Changing your own password hands back a token stamped one second
+    after the change. A reset or Set password in that same second used to be
+    stamped earlier than that token and leave it signed in -- CI run #108
+    caught it by chance. Forced here, so it does not depend on timing."""
+    from datetime import datetime, timezone
+
+    user, _ = accounts.create_login(db, customer, "quick@testco.example", None)
+    changed = datetime.now(timezone.utc).replace(microsecond=0) + timedelta(seconds=30)
+    user.password_changed_at = changed
+    db.commit()
+    # Exactly what change-password hands back: one second after the change.
+    token = security.create_token(user.id, issued_at=int(changed.timestamp()) + 1)
+    auth = {"Authorization": f"Bearer {token}"}
+    assert client.get("/api/me", headers=auth).status_code == 200
+
+    accounts.set_password(db, user, CHOSEN)
+    assert client.get("/api/me", headers=auth).status_code == 401
+
+    accounts.reset_password(db, user)
+    assert user.password_changed_at > changed + timedelta(seconds=1)
+
+
 def test_a_weak_password_is_refused_in_plain_words(client, db, customer, staff_auth):
     user, _ = accounts.create_login(db, customer, "weak@testco.example", None)
     answer = client.post(
