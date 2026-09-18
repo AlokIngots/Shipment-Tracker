@@ -258,6 +258,46 @@ def reset_password(session, user: User, *, actor: User | None = None) -> str:
     return password
 
 
+def set_password(
+    session, user: User, password: str, *, actor: User | None = None
+) -> None:
+    """Give an account a password somebody chose, and sign it out everywhere.
+
+    How staff let a customer in without email: they choose the password in
+    the admin console (or on the server, scripts/set_password.py) and hand
+    it over themselves. It is not temporary -- the person is not made to
+    replace it -- because staff chose it on purpose, and "easy for the
+    customer" was the brief. Only the hash is stored, and the activity
+    record says that it happened, never what it was.
+
+    Staff may not set their own here: stamping the change signs out every
+    session including the one asking, mid-request. The server script can.
+    """
+    if actor is not None and user.id == actor.id:
+        raise AccountProblem(
+            "You cannot set the password of the account you are signed in "
+            "with. Ask a colleague to set it, or run scripts.set_password on "
+            "the server."
+        )
+    problem = security.password_problem(password or "")
+    if problem:
+        raise AccountProblem(problem.replace("Your password", "The password"))
+
+    user.password_hash = security.hash_password(password)
+    user.must_change_password = False
+    # Signs out anything already holding a token for this account, and
+    # retires any sign-in link already in their inbox.
+    user.password_changed_at = datetime.now(timezone.utc).replace(microsecond=0)
+    audit.record(
+        session,
+        "login.password_set",
+        f"Set a new password for {user.email}, "
+        "signing out every session they had open",
+        actor=actor,
+    )
+    session.commit()
+
+
 def set_active(session, user: User, active: bool, *, acting_user: User | None = None):
     """Let somebody in, or lock them out at once. Returns whether it changed.
 

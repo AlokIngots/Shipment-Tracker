@@ -105,7 +105,9 @@ def _sign(payload: str) -> str:
     return _b64encode(signature)
 
 
-def create_token(user_id: int, issued_at: int | None = None) -> str:
+def create_token(
+    user_id: int, issued_at: int | None = None, *, by_password: bool = False
+) -> str:
     """Issue a signed token for a user.
 
     "iat" is when it was issued. Because a token cannot be taken back once
@@ -118,9 +120,16 @@ def create_token(user_id: int, issued_at: int | None = None) -> str:
     so a replacement stamped from the clock could land on the very same
     second as the change and be indistinguishable from a token issued a
     moment before it.
+
+    `by_password` marks a session that began with a password rather than
+    an email link. Only such a session is held back by a temporary
+    password: somebody who came in by link never typed one, so asking them
+    to replace it would lock them out. See must_choose_password in deps.py.
     """
     issued = int(time.time()) if issued_at is None else int(issued_at)
     body = {"uid": user_id, "iat": issued, "exp": issued + TOKEN_TTL_SECONDS}
+    if by_password:
+        body["pwd"] = 1
     payload = _b64encode(json.dumps(body, separators=(",", ":")).encode())
     return f"{payload}.{_sign(payload)}"
 
@@ -128,7 +137,7 @@ def create_token(user_id: int, issued_at: int | None = None) -> str:
 def read_token(token: str) -> dict | None:
     """Return the contents of a valid, unexpired token, else None.
 
-    The caller gets {"uid": ..., "iat": ...}. Nothing in here is trusted
+    The caller gets {"uid": ..., "iat": ..., "pwd": ...}. Nothing in here is trusted
     until the signature has been checked, which is the first thing done.
     """
     try:
@@ -152,4 +161,8 @@ def read_token(token: str) -> dict | None:
     # Tokens issued before "iat" existed have no business being accepted
     # now: treat a missing one as the beginning of time, which every
     # password change is later than.
-    return {"uid": body["uid"], "iat": int(body.get("iat", 0))}
+    return {
+        "uid": body["uid"],
+        "iat": int(body.get("iat", 0)),
+        "pwd": bool(body.get("pwd")),
+    }

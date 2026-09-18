@@ -330,13 +330,16 @@ def test_deactivating_an_account_stops_its_link(client, db, outbox, buyer):
     assert redeem(client, token).status_code == 400
 
 
-def test_a_temporary_password_must_still_be_replaced(client, db, outbox, customer):
-    """A link proves the inbox; the rule about temporary passwords stays."""
+def test_a_link_is_not_held_back_by_a_temporary_password(client, db, outbox, customer):
+    """A link proves the inbox. The temporary password was never typed --
+    usually never even sent -- and the change screen asks for it, so the
+    rule about replacing it applies only to a password sign-in (18 Sep 2026;
+    test_password_login.py holds that side)."""
     accounts.create_login(db, customer, "new@testco.example", None)
     ask(client, "new@testco.example")
     body = redeem(client, token_from(outbox[0])).json()
-    assert body["must_change_password"] is True
-    assert client.get("/api/orders", headers=bearer(body)).status_code == 403
+    assert body["must_change_password"] is False
+    assert client.get("/api/orders", headers=bearer(body)).status_code == 200
 
 
 def test_nonsense_is_refused_the_same_way(client):

@@ -4,20 +4,22 @@ import StartHere from '../../components/StartHere'
 import { Field, TextField } from '../../components/Field'
 import { describeError, plural } from '../../lib/format'
 
-// Said once a login has been made. There is nothing secret to hand over:
-// the person signs in with a link the portal emails them, so all they need
-// is where the portal is. The server still makes a temporary password, as
-// it always did, but with password sign-in off it opens nothing, so it is
-// not shown.
+// Said once a login has been made. The server also makes a random temporary
+// password, as it always did; it is not shown, because Set password is the
+// simpler thing to hand over -- a password staff chose is not one the
+// customer is then made to replace.
 function LoginCreated({ result, onDone }) {
   return (
     <div className="card card--password" role="status">
       <h3 className="form-title">Login created for {result.email}</h3>
       <p className="lead">
-        They can sign in now. Tell them to open{' '}
+        They can sign in now with an email link: tell them to open{' '}
         <strong>{window.location.origin}</strong>, type {result.email} and
-        press <strong>Sign in with email link</strong>. The portal emails them
-        a link that signs them in. There is no password to send.
+        press <strong>Sign in with email link</strong>.
+      </p>
+      <p className="lead">
+        To let them in without email, press <strong>Set password</strong> next
+        to their login below and share the password with them directly.
       </p>
       <div className="form-actions">
         <button type="button" className="button" onClick={onDone}>
@@ -237,7 +239,114 @@ function LoginForm({ customer, onCreated, onCancel }) {
   )
 }
 
-function LoginRow({ login, busy, onSetActive }) {
+// Same letters as the server's temporary passwords: no 0/O or 1/l/I, so it
+// survives being read out over the phone. Three groups of four.
+const READABLE = 'abcdefghjkmnpqrstuvwxyz23456789'
+
+function suggestPassword() {
+  const picks = crypto.getRandomValues(new Uint32Array(12))
+  const raw = Array.from(picks, (n) => READABLE[n % READABLE.length]).join('')
+  return `${raw.slice(0, 4)}-${raw.slice(4, 8)}-${raw.slice(8)}`
+}
+
+// Staff choose a password for somebody and hand it over themselves: the way
+// in that needs no email. Shown in plain text on purpose -- the point is to
+// read it out or copy it -- and never sent back by the server.
+function SetPasswordForm({ login, onSaved, onCancel }) {
+  const [password, setPassword] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(null)
+
+  async function submit(event) {
+    event.preventDefault()
+    if (password.trim().length < 12) {
+      setError('Use at least 12 characters, or press Suggest one.')
+      return
+    }
+    setBusy(true)
+    setError(null)
+    try {
+      await axios.post(`/api/staff/logins/${login.id}/set-password`, { password })
+      await onSaved({ email: login.email, password })
+    } catch (err) {
+      setError(describeError(err, 'Could not set that password.'))
+      setBusy(false)
+    }
+  }
+
+  return (
+    <form className="card--form card--form-inner" onSubmit={submit} noValidate>
+      <h4 className="form-title">Set a password for {login.email}</h4>
+      <div className="formgrid">
+        <TextField
+          label="New password"
+          value={password}
+          onChange={setPassword}
+          autoComplete="off"
+          spellCheck={false}
+          autoFocus
+          hint="At least 12 characters. They can sign in with it straight away; anywhere they were already signed in is signed out."
+        />
+      </div>
+      {error && (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      )}
+      <div className="form-actions">
+        <button type="submit" className="button" disabled={busy}>
+          {busy ? 'Saving…' : 'Set password'}
+        </button>
+        <button
+          type="button"
+          className="button button--outline"
+          onClick={() => setPassword(suggestPassword())}
+          disabled={busy}
+        >
+          Suggest one
+        </button>
+        <button
+          type="button"
+          className="button button--ghost"
+          onClick={onCancel}
+          disabled={busy}
+        >
+          Cancel
+        </button>
+      </div>
+    </form>
+  )
+}
+
+// Said once, straight after Set password. The password is only here because
+// staff typed it a moment ago; the server never sends it back.
+function PasswordSet({ result, onDone }) {
+  return (
+    <div className="card card--password" role="status">
+      <h3 className="form-title">Password set for {result.email}</h3>
+      <p className="lead">
+        Share it with them directly — by phone or WhatsApp, not in the same
+        email as the portal address:
+      </p>
+      <p className="lead">
+        <strong className="mono">{result.password}</strong>
+      </p>
+      <p className="lead">
+        They open <strong>{window.location.origin}</strong>, type{' '}
+        {result.email} and this password, and press <strong>Sign in</strong>.
+        They stay signed in on that device, even after closing the browser,
+        until they press Sign out.
+      </p>
+      <div className="form-actions">
+        <button type="button" className="button" onClick={onDone}>
+          Done
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function LoginRow({ login, busy, onSetActive, onSetPassword }) {
   return (
     <div className="docrow">
       <span
@@ -250,12 +359,24 @@ function LoginRow({ login, busy, onSetActive }) {
           {login.full_name ? ` · ${login.full_name}` : ''}
         </span>
         <span className="docrow-file">
-          {login.is_active
-            ? 'Can sign in with an email link'
-            : 'Disabled — cannot sign in'}
+          {!login.is_active
+            ? 'Disabled — cannot sign in'
+            : login.must_change_password
+              ? 'Signs in with an email link · no password set yet'
+              : 'Signs in with a password or an email link'}
         </span>
       </div>
       <div className="docrow-actions">
+        {onSetPassword && (
+          <button
+            type="button"
+            className="minibutton"
+            onClick={onSetPassword}
+            disabled={busy}
+          >
+            Set password
+          </button>
+        )}
         <button
           type="button"
           className="minibutton minibutton--quiet"
@@ -269,10 +390,9 @@ function LoginRow({ login, busy, onSetActive }) {
   )
 }
 
-// Customers & logins: add a customer, give somebody there a login, disable a
-// login. The server decides every one of these in app/services/accounts.py;
-// this screen only asks. There is no Reset password button: people sign in
-// by emailed link, so a new temporary password would open nothing.
+// Customers & logins: add a customer, give somebody there a login, set their
+// password, disable a login. The server decides every one of these in
+// app/services/accounts.py; this screen only asks.
 export default function StaffAccountsScreen({ startWith, onGo }) {
   const [state, setState] = useState('loading')
   const [data, setData] = useState({ customers: [], staff: [] })
@@ -286,6 +406,9 @@ export default function StaffAccountsScreen({ startWith, onGo }) {
   const [picking, setPicking] = useState(startWith?.action === 'new-login')
   // The login just created, until the note about it is closed.
   const [created, setCreated] = useState(null)
+  // The login whose password is being set, and the note once it is.
+  const [passwordFor, setPasswordFor] = useState(null)
+  const [passwordSet, setPasswordSet] = useState(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
 
@@ -337,6 +460,34 @@ export default function StaffAccountsScreen({ startWith, onGo }) {
     }
   }
 
+  // One row, with the Set password form under it while that login is chosen.
+  function loginRow(login) {
+    return (
+      <div key={login.id}>
+        <LoginRow
+          login={login}
+          busy={busy}
+          onSetActive={() => setActive(login)}
+          onSetPassword={
+            passwordFor === login.id ? null : () => setPasswordFor(login.id)
+          }
+        />
+        {passwordFor === login.id && (
+          <SetPasswordForm
+            login={login}
+            onSaved={async (result) => {
+              setPasswordFor(null)
+              setPasswordSet(result)
+              window.scrollTo(0, 0)
+              await load()
+            }}
+            onCancel={() => setPasswordFor(null)}
+          />
+        )}
+      </div>
+    )
+  }
+
   if (state === 'loading') {
     return (
       <div className="card">
@@ -362,6 +513,9 @@ export default function StaffAccountsScreen({ startWith, onGo }) {
   return (
     <>
       {created && <LoginCreated result={created} onDone={() => setCreated(null)} />}
+      {passwordSet && (
+        <PasswordSet result={passwordSet} onDone={() => setPasswordSet(null)} />
+      )}
 
       {(data.customers.length === 0 || loginCount === 0) && <StartHere onGo={onGo} />}
 
@@ -433,14 +587,7 @@ export default function StaffAccountsScreen({ startWith, onGo }) {
               </p>
             )}
 
-            {customer.logins.map((login) => (
-              <LoginRow
-                key={login.id}
-                login={login}
-                busy={busy}
-                onSetActive={() => setActive(login)}
-              />
-            ))}
+            {customer.logins.map(loginRow)}
 
             {loginFor?.id === customer.id && (
               <LoginForm
@@ -489,14 +636,7 @@ export default function StaffAccountsScreen({ startWith, onGo }) {
           </div>
         </div>
 
-        {data.staff.map((login) => (
-          <LoginRow
-            key={login.id}
-            login={login}
-            busy={busy}
-            onSetActive={() => setActive(login)}
-          />
-        ))}
+        {data.staff.map(loginRow)}
       </div>
     </>
   )

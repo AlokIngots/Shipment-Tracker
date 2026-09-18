@@ -53,7 +53,17 @@ if not SECRET_KEY or len(SECRET_KEY) < 32:
         'Generate one with: python -c "import secrets; print(secrets.token_urlsafe(48))"'
     )
 
-TOKEN_TTL_SECONDS = int(os.getenv("TOKEN_TTL_SECONDS", "43200"))  # 12 hours
+# How long somebody stays signed in, however they signed in -- password or
+# email link. 30 days since 18 Sep 2026, replacing 12 hours: customers look
+# in now and then, and asking them to sign in every morning was friction
+# for nothing. Sign out still ends it at once in that browser, and changing
+# or resetting a password ends it everywhere.
+#
+# TOKEN_TTL_SECONDS, the old setting, is no longer read: a server .env
+# copied from the old example still says 43200, and honouring it would
+# quietly keep everybody on 12 hours.
+SESSION_TTL_DAYS = max(1, int(os.getenv("SESSION_TTL_DAYS", "30")))
+TOKEN_TTL_SECONDS = SESSION_TTL_DAYS * 24 * 60 * 60
 
 
 # --------------------------------------------------------------- rate limits
@@ -152,13 +162,16 @@ MAGIC_LINK_WINDOW_SECONDS = int(os.getenv("MAGIC_LINK_WINDOW_SECONDS", "900"))  
 
 # --------------------------------------------------- sign-in with a password
 
-# Off by default: the portal signs people in by emailed link only (decided
-# 11 Sep 2026). The password code is kept, dormant, not deleted -- POST
-# /api/login, temporary passwords and the "choose your own password" rule.
-# True switches them back on without a code change, and the sign-in screen,
-# which asks GET /api/sign-in-options each time it loads, shows the password
-# box again. That is the way back in if email ever fails.
-PASSWORD_SIGN_IN = _flag("PASSWORD_SIGN_IN")
+# On by default since 18 Sep 2026: the sign-in screen offers email and
+# password AND the emailed link. Sign-in had depended on email alone, and
+# when the mail service refused its credentials nobody could get in. Staff
+# set a customer's password from the admin console (Set password) and hand
+# it over themselves; scripts/set_password.py does the same on the server.
+#
+# False takes the password box away again and leaves the link as the only
+# way in (11 Sep 2026 to 18 Sep 2026). The sign-in screen asks GET
+# /api/sign-in-options each time it loads, so switching needs no rebuild.
+PASSWORD_SIGN_IN = _flag("PASSWORD_SIGN_IN", "true")
 
 
 # ------------------------------------------------------------------- storage
