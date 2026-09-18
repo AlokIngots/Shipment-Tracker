@@ -147,6 +147,8 @@ def test_the_customer_half_of_the_api_has_no_writes():
         # Sign-in bookkeeping, not customer data: a link issued, a link spent.
         "/api/magic-link",
         "/api/magic-link/redeem",
+        # Ends the caller's own sign-in and nothing else.
+        "/api/logout",
     }
     offenders = [
         f"{method} {path}"

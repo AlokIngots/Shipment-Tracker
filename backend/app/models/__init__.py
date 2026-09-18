@@ -7,6 +7,7 @@
     notification.py  Notification
     audit.py         AuditEvent
     magic_link.py    MagicLink
+    signed_out_token.py  SignedOutToken
     tracking.py      ShipmentTracking
 
 Everything is re-exported here, so the rest of the app writes
@@ -22,9 +23,10 @@ from app.models.magic_link import MagicLink
 from app.models.notification import Notification
 from app.models.order import Order, Shipment
 from app.models.photo import Photo
+from app.models.signed_out_token import SignedOutToken
 from app.models.tracking import ShipmentTracking
 
 __all__ = [
     "AuditEvent", "Customer", "Document", "MagicLink", "Notification", "Order",
-    "Photo", "Shipment", "ShipmentTracking",
+    "Photo", "Shipment", "ShipmentTracking", "SignedOutToken",
 ]

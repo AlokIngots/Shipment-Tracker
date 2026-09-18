@@ -22,7 +22,7 @@ from app.core import config, security
 from app.core.config import TRUST_PROXY_HEADER, TRUSTED_PROXY_HOPS
 from app.core.database import SessionLocal
 from fastapi import Depends, Header, HTTPException, Request, status
-from app.models import User
+from app.models import SignedOutToken, User
 from sqlalchemy.orm import Session
 
 
@@ -121,6 +121,11 @@ def get_current_user(
     if user is None or not user.is_active:
         raise CREDENTIALS_ERROR
 
+    # Ended with Sign out. Same answer as any other dead token: the person
+    # holding a copy learns nothing from it but that it no longer works.
+    if token["jti"] and db.get(SignedOutToken, token["jti"]) is not None:
+        raise CREDENTIALS_ERROR
+
     # A token handed out before the password was last changed is finished.
     # This is what makes changing a password mean something: whoever else
     # was signed in with the old one is signed out by it, including on a
@@ -140,6 +145,9 @@ def get_current_user(
     # For this request only: the session is per request, so this never
     # outlives it. Read by must_choose_password.
     user.signed_in_with_password = token["pwd"]
+    # For POST /api/logout, which ends exactly this token and no other.
+    user.token_id = token["jti"]
+    user.token_expires = token["exp"]
     return user
 
 

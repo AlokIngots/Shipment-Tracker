@@ -79,6 +79,18 @@ export default function App() {
   }
 
   function signOut() {
+    // End the sign-in on the server too, so a copy of the token taken from
+    // this machine stops working at once rather than lasting 30 days. The
+    // token is passed explicitly because dropToken() below removes the
+    // shared header before the request would get round to reading it. Not
+    // waited for: signing out on screen must never hang on the network. A
+    // tab signed out by another tab finds no token here and sends nothing.
+    const token = recallToken()
+    if (token) {
+      axios
+        .post('/api/logout', null, { headers: { Authorization: `Bearer ${token}` } })
+        .catch(() => {})
+    }
     dropToken()
     setOpenOrderId(null)
     setPasswordChanged(false)
