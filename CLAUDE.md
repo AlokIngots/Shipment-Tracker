@@ -80,49 +80,59 @@ to the next step. Never run ahead through multiple steps at once.
 
 ## Where we are now
 
-**Step 48, Sign out ends the sign-in on the server, and password guessing
-is capped per account (18 September 2026),** is on
-`feature/signout-and-account-limit` (restore tag
-`pre-signout-and-account-limit`), **waiting for Alok's OK to merge, not
-deployed. It carries migration 0014** (a new `signed_out_tokens` table), so
-its deploy is a schema change; `safe-deploy.sh` backs up and runs it.
+**Last worked on: 18 September 2026.** Steps 1–29 and 31–43 are deployed.
+**Steps 44–48 are merged to `dev` and NOT deployed** — Alok deploys them.
+The live server's schema is **0012**; the next deploy runs **two
+migrations, 0013 and 0014**, and `safe-deploy.sh` backs up first.
 
-**Steps 46 and 47 are merged to `dev`** (PR #24 `cd221ec`, PR #25
-`080d880`, 18 Sep 2026, CI green), **not deployed.**
+| Step | What | Merged | Migration |
+| ---- | ---- | ------ | --------- |
+| 44 | Live container tracking from ShipsGo | `374abf0`, 17 Sep | 0013 `shipment_tracking` |
+| 45 | No carrier redirect anywhere | `202b9ad`, 17 Sep | none |
+| 46 | Password sign-in beside the email link; staff Set password; `scripts.set_password`; 30-day sessions | PR #24 `cd221ec`, 18 Sep | none |
+| 47 | Password rule: at least 8 characters, a letter and a number | PR #25 `080d880`, 18 Sep | none |
+| 48 | Sign out ends the sign-in on the server; wrong passwords capped per account | PR #26 `c4f1480`, 18 Sep | 0014 `signed_out_tokens` |
 
-**Step 46, password sign-in beside the email link (18 September 2026).**
-Restore tag `pre-password-login`. No migration: the
-`password_hash` column has existed since 0001. Why: AWS SES started
-refusing its credentials and, with sign-in by email link only, nobody could
-get in. What it does: `PASSWORD_SIGN_IN` is on by default, so the sign-in
-screen offers email + password and still the email link; staff press
-**Set password** on any login in Customers & logins and hand the password
-over themselves (the customer is not made to change it);
-`python -m scripts.set_password --email EMAIL` does the same on the server,
-typed without echo; a session lasts `SESSION_TTL_DAYS` (30) and survives
-closing the browser (the token moved from sessionStorage to localStorage),
-and Sign out ends it in every tab. `TOKEN_TTL_SECONDS` is no longer read.
-A temporary password now holds back only somebody who signed in WITH it,
-never somebody who came by link (the token says which) — before, switching
-passwords on would have stuck every link-only customer on a "choose your
-password" screen asking for a password they never had.
+**Why 46–48 exist:** on 18 Sep 2026 AWS SES started refusing the portal's
+SMTP credentials, and with sign-in by email link only, nobody could get in.
+Passwords are now a way in that needs no email; the link is kept beside it.
 
-**On the server, when it is deployed:** the server's `.env` was copied from
-the old example, so it very likely says `PASSWORD_SIGN_IN=false` and
-`TOKEN_TTL_SECONDS=43200`. Change the first to `true` (the second is now
-ignored; `SESSION_TTL_DAYS=30` can be added but is the default).
+**Before the next deploy, on the server's `.env`:**
 
-**Last worked on: 17 September 2026.** Steps 1–29 and 31–43 are built,
-merged to `dev` **and deployed**. Nothing is merged and waiting to go out.
+- `PASSWORD_SIGN_IN=true`. The `.env` was copied from the old example and
+  very likely says `false`, which wins over the new default — without this
+  the password box does not appear.
+- `NOTIFY_ONLY_EMAILS` still holds only the owner's address (a real
+  customer is in the database).
+- `SHIPSGO_API_KEY`, if live tracking is wanted (step 44), then
+  `python -m scripts.shipsgo_check` in the api container (read-only, spends
+  nothing).
+- `TOKEN_TTL_SECONDS` is no longer read; `SESSION_TTL_DAYS` (default 30)
+  replaces it. `LOGIN_ACCOUNT_MAX_ATTEMPTS` (default 10) is new.
 
-**Step 44, live container tracking from ShipsGo, is merged to `dev`
-(`374abf0`, 17 Sep 2026) and NOT deployed** — Alok deploys it. It
-carries **migration 0013** (a new `shipment_tracking` table), so its
-deploy is a schema change: `safe-deploy.sh` backs up and runs it. Before
-or after that deploy, put `SHIPSGO_API_KEY` in the server's `.env` and run
-`python -m scripts.shipsgo_check` in the api container (read-only, spends
-nothing) to prove the key works and reads cost nothing. Restore tag
-`pre-shipsgo-tracking`.
+**After it, Alok sets his own password** (in the project folder on
+srv1427359; it asks twice and shows nothing as he types):
+
+```bash
+docker compose -f docker-compose.prod.yml -f docker-compose.server.yml exec api python -m scripts.set_password --email exports@alokindia.com
+```
+
+Staff then set customers' passwords with **Set password** in Customers &
+logins and hand them over by phone or WhatsApp. **Set one for Bucher**
+before telling them passwords work: every existing login still carries the
+random temporary password printed when it was made, and with password
+sign-in on, that would open it (it must be replaced on first use).
+
+**What 46–48 do, in short.** The sign-in screen offers email + password and
+the email link. A password staff set is not temporary. Sign-ins last 30 days
+and survive closing the browser; Sign out ends that sign-in on the server
+(only that device) and in every tab. An account takes at most 10 wrong
+passwords per 15 minutes from anywhere; its email link keeps working. A
+temporary password holds back only somebody who signed in with it, never
+somebody who came by link. Details in the progress log.
+
+**Still not built:** customers cannot change their own password (no button,
+and a link sign-in does not know the current one). Staff set it for them.
 
 **Confirmed by Alok on 17 September 2026:** steps 39, 40, 41 and 43 are
 deployed and live, and step 42's sample-data removal has been **run on the
@@ -151,6 +161,8 @@ waiting for.
 Email works there: on 11 Sep 2026 the server's `.env` was set to
 `SEND_EMAILS=true` with AWS SES SMTP (region ap-south-1, sending from
 enquiries@alokindia.com), and a real sign-in link was received and used.
+**On 18 Sep 2026 SES began refusing those credentials** — that is what
+steps 46–48 answer. Whether it has been fixed is not recorded here.
 **`NOTIFY_ONLY_EMAILS` is set to the owner's address on the server**, so
 step 33's automatic sender — which is live — can reach nobody else however
 many customers are in the database. Leave it that way until a real customer
@@ -327,6 +339,22 @@ removed). Undo it on `dev` with
 `git revert --no-edit pre-remove-carrier-box..dev`. Frontend only: no
 migration, no API change.
 
+**Restore point:** tag `pre-password-login` is `dev` after step 45, before
+steps 46 and 47 (password sign-in, Set password, 30-day sessions, the
+8-character rule). Everything since, step 48 included, is undone on `dev`
+with `git revert --no-edit pre-password-login..dev`; revert step 48 first
+(below) if it was deployed. No migration in 46 or 47. Faster, and needing no
+deploy: `PASSWORD_SIGN_IN=false` in the server's `.env` and recreate the api
+container takes the password box away again.
+
+**Restore point:** tag `pre-signout-and-account-limit` is `dev` after step
+47, before step 48. Undo it on `dev` with
+`git revert --no-edit pre-signout-and-account-limit..dev`. If it was already
+deployed, first take the database back with
+`docker compose -f docker-compose.prod.yml exec api python -m alembic downgrade 0013`
+— that drops `signed_out_tokens`, and tokens signed out before then work
+again until they expire (at most 30 days).
+
 **`dev` is the branch to work from.** **`main` is still the empty anchor
 commit, deliberately** — it gets its first real content only when the portal
 has actually been deployed to a real server and proved to work there.
@@ -370,7 +398,7 @@ cd backend
 .venv/Scripts/python.exe -m pytest
 ```
 
-213 tests, about a minute, with the dev database up. They build their own
+369 tests (18 Sep 2026), about a minute, with the dev database up. They build their own
 database beside the development one and drop it afterwards, so the
 development data is untouched — the row counts are identical before and
 after. They also run on GitHub for every push.
@@ -381,7 +409,7 @@ after. They also run on GitHub for every push.
 | ------- | ------------ |
 | `python -m scripts.manage_users --list` | every customer, and who can sign in for them |
 | `python -m scripts.manage_users --add-customer CODE --name N` | add a customer |
-| `python -m scripts.manage_users --add-user EMAIL --customer CODE` | give somebody a login; they sign in with an email link (it still prints a temporary password, which opens nothing while password sign-in is off) |
+| `python -m scripts.manage_users --add-user EMAIL --customer CODE` | give somebody a login; it prints a temporary password once, which they must replace on first use. Simpler: set one with `scripts.set_password` or Set password in the portal |
 | `python -m scripts.manage_users --add-staff EMAIL` | give an Alok Ingots colleague a staff login |
 | `python -m scripts.set_password --email EMAIL` | set somebody's password, typed twice and never shown; not temporary; signs them out everywhere. Staff can use it on their own account — the admin console refuses that |
 | `python -m scripts.manage_users --reset-password EMAIL` | issue a new temporary password; signs them out everywhere, and is the way back in during an email failure with `PASSWORD_SIGN_IN` on (see "If email fails") |
@@ -413,12 +441,15 @@ python -m scripts.manage_users --add-customer HANSA --name "Hansa Stahl GmbH" --
 python -m scripts.manage_users --add-user einkauf@hansa-stahl.de --customer HANSA --full-name "Petra Baumann"
 ```
 
-That person then opens the portal, types their email and presses **Sign in
-with email link**; nothing needs sending but the portal address. The second
-command still prints a temporary password once, as it always did, but while
-`PASSWORD_SIGN_IN` is off (the default) it opens nothing, so do not send it.
-Staff can do both from the portal instead, with the Add customer and Add
-customer login quick actions.
+That person can then sign in with an email link (type their email, press
+**Sign in with email link**), or with a password: set one with
+`python -m scripts.set_password --email einkauf@hansa-stahl.de`, or with
+**Set password** on their login in the portal, and hand it over by phone or
+WhatsApp, not in the same email as the portal address. The second command
+also prints a random temporary password once; it works, but must be replaced
+on first use, so a password staff set is easier for the customer. Staff can
+do all of this from the portal instead, with the Add customer and Add
+customer login quick actions and Set password.
 
 On the server the same commands run inside the API container:
 
@@ -704,6 +735,9 @@ the customer side needs, and a step is done when both work.
 | 37 | Honest tracking (`feature/step37-honest-tracking`) | the Track panel keeps the carrier link and the copyable numbers; no map, no vessel link | the vessel map and "See where the vessel is now" are gone, because a transshipped hull's position is a different voyage. What is left is the status timeline, the shipment facts, the copyable B/L and container numbers, and one clearly-worded **Track this container on <carrier>** button. Plus a light readability pass on the order detail | **Done, deployed 16 Sep 2026**, and seen live on the first real order |
 | 38 | A staff orders list you can scan (`feature/step38-compact-staff-orders`) | every order is one slim row — order number, customer and grade, dispatched of ordered, status, shipment count — shut until it is clicked. Open, it is exactly what the card held before: the three totals, the shipments with Track, Edit, Documents & photos and Remove, and Add shipment / Edit order / Remove order. Several rows can be open at once, the open ones are remembered for the browser tab, a just-saved order opens itself, and Collapse all appears while anything is open. The "no shipment ticked as the last one" warning shows on the shut row, so it cannot hide | (nothing — the customer screens are untouched, at the user's request) | **Done, deployed 16 Sep 2026** |
 | 39 | Ready for a pilot customer (`fix/pilot-readiness`) | sign-in links stop obeying `NOTIFY_ONLY_EMAILS`, which still gates the automatic notifications; a link that fails to send is an ERROR in the log **and** a "Sign-in links that did not arrive" card on the Messages screen; the pilot note on that screen says which is which; CI lints the website as well as building it | documents download as what they really are, so a mill test certificate scanned as a JPG opens; a Content-Security-Policy and HSTS on every page | **Done, deployed** (confirmed live 17 Sep 2026) |
+| 48 | Sign out that really signs out; guessing capped per account (`feature/signout-and-account-limit`) | Sign out from the staff screens ends that sign-in on the server too. Wrong passwords for one login are capped at 10 per 15 minutes from anywhere | the same: Sign out ends the sign-in on the server, so a copy of it stops working; a customer whose password sign-in is locked by somebody guessing is told to wait or use the email link | **Merged to `dev` 18 Sep 2026, not deployed. Migration 0014** |
+| 47 | Password rule: 8 characters, a letter and a number (`feature/password-min-8`) | Set password states the rule and Suggest one always meets it | the change-password screen states the rule and says what is still missing as you type | **Merged to `dev` 18 Sep 2026, not deployed. No migration** |
+| 46 | Password sign-in beside the email link (`feature/password-login`) | **Set password** on every login in Customers & logins, handed over by staff; `scripts.set_password --email` on the server | the sign-in screen offers email + password and still the email link; signed in for 30 days, through closing the browser | **Merged to `dev` 18 Sep 2026, not deployed. No migration** |
 | 45 | No carrier redirect anywhere (`feature/remove-carrier-redirect-box`) | the staff **Track** panel loses the "Track this container on <carrier> ↗" button, the paragraph about opening the carrier's website, and the boxed B/L / container numbers with Copy. It now holds live tracking only (Enable, or Refresh / Stop and the timeline). The B/L and container numbers stay in the shipment's one-line summary | unchanged: the box was already gone for customers (step 43). The B/L and container numbers stay in the shipment facts with their Copy buttons; a shipment without live tracking shows its facts and no timeline, and nothing links off-site | **Merged to `dev` 17 Sep 2026, not deployed. No migration** |
 | 44 | Live container tracking from ShipsGo (`feature/shipsgo-tracking`) | inside each shipment's **Track** panel: **Enable tracking (1 credit)**, asked for with a warning and done once per shipment; then the ShipsGo reference, who turned it on and whether a credit was used, **Refresh now (free)**, **Stop tracking**, and the same timeline the customer sees. A timer reads every tracked shipment back every `SHIPSGO_REFRESH_EVERY_HOURS` (6). `scripts/shipsgo_check.py` checks the key read-only | a **Live tracking** panel under the shipment facts: status, from, to, loaded on, expected arrival, transshipment, container, and the container's movements (place · move · date · vessel), with a transshipment marked and both vessels named. "Tracking is updating…" until ShipsGo has news. Drawn from the stored copy; no page view calls ShipsGo | **Merged to `dev` 17 Sep 2026, not deployed. Migration 0013** |
 | 43 | Nothing sends the customer away (`feature/remove-tracking-redirect`) | staff keep the Track panel and the carrier link: looking a box up is part of answering the phone | the **Track this container on \<carrier\>** button and the paragraph about opening the carrier's website are gone. The six shipment facts stay, and the container and B/L numbers gain a small **Copy** button each, so the numbers are still one tap away without the portal handing the customer to somebody else's site | **Done, deployed** (confirmed live 17 Sep 2026) |
@@ -909,7 +943,8 @@ Update after every step: what was done, and the commit.
 | 2026-09-18 | **Step 46 — Password sign-in beside the email link** (`feature/password-login`, restore tag `pre-password-login`, **no migration**). SES refusing credentials had locked everybody out. `PASSWORD_SIGN_IN` defaults to true; `.env.example` says so. Admin Console: **Set password** on every login (customer and team) → `POST /api/staff/logins/{id}/set-password`, `StaffUser` only, refuses your own account and weak passwords, stores only the PBKDF2 hash, `must_change_password` false, stamps `password_changed_at` (signs them out everywhere, retires links already sent), activity record `login.password_set` without the password; a "Suggest one" button makes a readable 12-letter one. Server: `scripts/set_password.py --email`, prompts twice via `getpass`, refuses without a terminal, prints usage with no `--email`, warns if the login is disabled or `PASSWORD_SIGN_IN` is off. Sessions: `SESSION_TTL_DAYS` (30) replaces `TOKEN_TTL_SECONDS`; the token is kept in localStorage (an old sessionStorage one is moved across), and Sign out clears it everywhere and signs out other tabs. The token now records `pwd` when it came from a password, and `must_choose_password` applies only then, so link sign-ins are never held back by a temporary password. Two old tests that expected a link sign-in to be held back were changed to expect the opposite; 16 new tests in `test_password_login.py`. **Merged to `dev` (PR #24, `cd221ec`); not deployed** | `802a4da` |
 | 2026-09-18 | **Step 46 fix — a reset in the same second as a password change left the old sign-in open.** The PR check (run #108) failed where the push check (#107) had passed, on the same code: `test_setting_a_password_signs_them_out_everywhere` got 200 instead of 401. Not a merge problem (PR #24's base is `main`, and nothing there conflicts). Cause: changing your own password hands back a token stamped one second after the change, and a Set password or Reset password in that same second was stamped earlier than that token, so it survived. `accounts.signing_out_stamp` now stamps a reset at least one second after the previous change. A new test forces the same-second case instead of relying on timing | _this commit_ |
 | 2026-09-18 | **Step 47 — Password rule: 8 characters with a letter and a number** (`feature/password-min-8`, off `dev` at `cd221ec`; not the older, held `fix/password-min-8`, which is untouched). `PASSWORD_MIN_LENGTH` 12 → 8; `password_problem` also requires a letter and a digit, and too short, no letter and no number all get one sentence stating the whole rule: "Your password needs at least 8 characters, including a letter and a number." The space and too-few-different-characters refusals stay. Temporary passwords and the admin console's Suggest one are drawn again until they pass (twelve random picks lack a digit about 1 time in 35). Screens: the change-password hint and the Set password hint and error use `PASSWORD_RULE` from `frontend/src/lib/passwordRule.js`, and the change screen says what is still missing as you type. Test passwords without a digit were given one. 15 new tests in `test_password_rule.py`, no database needed. No migration: existing passwords keep working, the rule applies only when a password is next set. **Merged to `dev` (PR #25, `080d880`); not deployed** | `78b1eda` |
-| 2026-09-18 | **Step 48 — Sign out ends the sign-in on the server; guessing capped per account** (`feature/signout-and-account-limit`, restore tag `pre-signout-and-account-limit`, **migration 0014**). From the audit after step 47. (1) Sign out only made the browser forget its token, so a copy lasted up to 30 days. Every token now carries a random id (`jti`); `POST /api/logout` (any signed-in user, sign-in bookkeeping like the magic-link routes) writes it to `signed_out_tokens` with the token's expiry, and `get_current_user` refuses a token whose id is there. Only that token: the person's other devices stay signed in. Rows past their expiry are deleted on each sign-out. The website's Sign out calls it (token passed explicitly, not waited for) before clearing the browser; a tab signed out by another tab sends nothing. Tokens issued before this deploy carry no id, keep working until they expire (at most 12 h) and are still cleared from the browser. (2) Every guessing limit counted per address. New `ratelimit.by_account`, keyed on the email as typed (so unknown emails are capped identically), `LOGIN_ACCOUNT_MAX_ATTEMPTS` = 10 per 15-minute window from anywhere, then 429 "…wait about N minutes, or press Sign in with email link"; never reset by a successful sign-in. Cost, accepted: a stranger can keep one account's password sign-in locked; its email link still works. 12 new tests in `test_signout_and_account_limit.py`; the no-writes test allows `/api/logout`. Migration rendered clean both ways (`alembic upgrade 0013:0014 --sql`, `downgrade 0014:0013 --sql`). **Waiting for Alok's OK to merge; not deployed** | _this commit_ |
+| 2026-09-18 | **Step 48 — Sign out ends the sign-in on the server; guessing capped per account** (`feature/signout-and-account-limit`, restore tag `pre-signout-and-account-limit`, **migration 0014**). From the audit after step 47. (1) Sign out only made the browser forget its token, so a copy lasted up to 30 days. Every token now carries a random id (`jti`); `POST /api/logout` (any signed-in user, sign-in bookkeeping like the magic-link routes) writes it to `signed_out_tokens` with the token's expiry, and `get_current_user` refuses a token whose id is there. Only that token: the person's other devices stay signed in. Rows past their expiry are deleted on each sign-out. The website's Sign out calls it (token passed explicitly, not waited for) before clearing the browser; a tab signed out by another tab sends nothing. Tokens issued before this deploy carry no id, keep working until they expire (at most 12 h) and are still cleared from the browser. (2) Every guessing limit counted per address. New `ratelimit.by_account`, keyed on the email as typed (so unknown emails are capped identically), `LOGIN_ACCOUNT_MAX_ATTEMPTS` = 10 per 15-minute window from anywhere, then 429 "…wait about N minutes, or press Sign in with email link"; never reset by a successful sign-in. Cost, accepted: a stranger can keep one account's password sign-in locked; its email link still works. 12 new tests in `test_signout_and_account_limit.py`; the no-writes test allows `/api/logout`. Migration rendered clean both ways (`alembic upgrade 0013:0014 --sql`, `downgrade 0014:0013 --sql`). CI green (369 passed). **Merged to `dev` (PR #26, `c4f1480`); not deployed** | `5d562e1` |
+| 2026-09-18 | **Notes brought up to date after steps 46–48 merged** (`docs/steps-46-48-merged`). "Where we are now" rewritten: 44–48 merged and not deployed, two migrations waiting (0013, 0014), the `.env` changes the deploy needs, and the command Alok runs to set his own password. Restore points for `pre-password-login` and `pre-signout-and-account-limit` added; stale lines about password sign-in being off, the test count and where the sign-in token is kept corrected. Notes only | _this commit_ |
 
 ### Design decisions worth remembering
 
@@ -1358,14 +1393,15 @@ Update after every step: what was done, and the commit.
   the server each time it loads, so a page already open keeps what it
   showed until it is reloaded.
 - **Most people will not know a password.** Logins made since step 31 never
-  chose one, so in an email failure each person needs `--reset-password`
-  first (step 2 of "If email fails").
+  chose one. Since step 46 staff give them one with Set password (or
+  `scripts.set_password` on the server).
 - **Email sign-in makes a staff inbox a key to the admin console.**
   Whoever can read a staff member's email can now sign in as them. Worth a
   second factor for staff if more than a few people hold staff logins.
 - **The create-login answer still carries a temporary password.** The staff
   screen no longer shows it, but it still travels to the staff member's
-  browser. With password sign-in off it opens nothing.
+  browser. With password sign-in on (the default since step 46) it opens
+  the account until it is replaced, which the portal forces on first use.
 - **Link-request counts live in memory**, like the sign-in counts, and are
   lost on every restart and deploy.
 
@@ -1626,7 +1662,8 @@ Update after every step: what was done, and the commit.
   not be at two hundred; a filter by customer or status is the obvious next
   thing when it starts to hurt.
 - **Which rows are open is remembered per browser tab, and only there.**
-  `sessionStorage`, like the sign-in token: a refresh or a save keeps the
+  `sessionStorage` (the sign-in token moved to `localStorage` in step 46;
+  this did not): a refresh or a save keeps the
   list as it was, closing the tab forgets it, and a browser that refuses
   site data simply starts with everything shut. Nothing about it reaches the
   server or another device.
