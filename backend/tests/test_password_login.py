@@ -184,7 +184,7 @@ def test_a_weak_password_is_refused_in_plain_words(client, db, customer, staff_a
         json={"password": "short"},
     )
     assert answer.status_code == 400
-    assert "at least 12 characters" in answer.json()["detail"]
+    assert "at least 8 characters, including a letter and a number" in answer.json()["detail"]
 
 
 def test_staff_cannot_set_their_own_password_from_the_console(client, db, staff_auth):

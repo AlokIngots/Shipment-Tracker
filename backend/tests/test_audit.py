@@ -226,7 +226,7 @@ def test_account_changes_are_recorded_and_no_password_ever_is(client, staff_auth
     for secret in (
         login["temporary_password"],
         reset["temporary_password"],
-        "staff-password-chosen",
+        "staff-password-chosen-7",
         "pbkdf2",
     ):
         assert secret not in everything

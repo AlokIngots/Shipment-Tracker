@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import axios from 'axios'
+import { PASSWORD_RULE, passwordShortfall } from '../lib/passwordRule'
 import { applyToken } from '../lib/session'
 
 // Shown two ways: forced, when staff have just handed over a temporary
@@ -20,7 +21,7 @@ export default function ChangePasswordScreen({
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(false)
 
-  const longEnough = next.length >= 12
+  const shortfall = passwordShortfall(next)
 
   async function handleSubmit(event) {
     event.preventDefault()
@@ -99,11 +100,9 @@ export default function ChangePasswordScreen({
         {/* Say what is needed while it is being typed, rather than refusing
             it afterwards. The server still decides; this only stops the
             rule being a surprise. */}
-        <p className={longEnough ? 'hint hint--met' : 'hint'}>
-          {longEnough
-            ? 'Long enough.'
-            : `At least 12 characters — ${next.length} so far.`}{' '}
-          Longer is better than complicated.
+        <p className={shortfall ? 'hint' : 'hint hint--met'}>
+          {PASSWORD_RULE}.{' '}
+          {next && (shortfall ? `Still needs ${shortfall}.` : 'That will do.')}
         </p>
 
         {error && (
