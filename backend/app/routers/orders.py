@@ -17,6 +17,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.deps import DbSession, SettledUser, not_found
 from app.models import Order, Shipment
+from app.models.document import EXPECTED_DOCUMENTS
 from app.schemas import (
     DocumentOut,
     LiveTrackingOut,
@@ -25,7 +26,7 @@ from app.schemas import (
     PhotoOut,
     ShipmentOut,
 )
-from app.services import live_tracking, tracking
+from app.services import live_tracking, statuses, tracking
 
 router = APIRouter()
 
@@ -82,6 +83,12 @@ def get_order(
             )
             for d in sorted(s.documents, key=lambda d: d.id)
         ]
+        attached = {d.doc_type for d in s.documents}
+        ship.documents_to_come = (
+            []
+            if s.status == statuses.CANCELLED
+            else [t for t in EXPECTED_DOCUMENTS if t not in attached]
+        )
         # The stored copy of ShipsGo's news. Never a live call: a customer
         # opening this page costs nothing and waits for nobody.
         panel = live_tracking.view(s, for_staff=False)

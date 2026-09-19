@@ -23,6 +23,18 @@ export const ALL_STATUSES = [...SEQUENCE, CANCELLED]
 // order's status out (order_status in statuses.py); the portal only draws it.
 export const PART_SHIPPED = 'Part shipped'
 
+// What a status reads as on screen, where that differs from the word the
+// server stores. "Part shipped" left a buyer reading in a second language
+// unsure whether more was coming (audit, 16 Sep 2026).
+const SHOWN_AS = {
+  'part shipped': 'Partly shipped',
+}
+
+function statusLabel(status) {
+  if (!status) return status
+  return SHOWN_AS[status.trim().toLowerCase()] ?? status
+}
+
 // Which step a status is, 1-based. Null for unset and for Cancelled, which
 // is reachable from anywhere and is not part of the progression.
 export function statusStep(status) {
@@ -47,5 +59,5 @@ export default function StatusPill({ status, emptyLabel = 'Not set' }) {
   if (!status) return <span className="pill pill--neutral">{emptyLabel}</span>
 
   const tone = STATUS_CLASS[status.trim().toLowerCase()] ?? 'pill--neutral'
-  return <span className={`pill ${tone}`}>{status}</span>
+  return <span className={`pill ${tone}`}>{statusLabel(status)}</span>
 }

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import axios from 'axios'
 import LiveTracking from '../components/LiveTracking'
 import PhotoGallery from '../components/PhotoGallery'
-import StatusPill from '../components/StatusPill'
+import StatusPill, { PART_SHIPPED } from '../components/StatusPill'
 import StatusTrack from '../components/StatusTrack'
 import Toolbar from '../components/Toolbar'
 import { CopyButton } from '../components/Tracking'
@@ -201,6 +201,11 @@ export default function OrderDetailScreen({ orderId, onBack, onChangePassword, o
               <span className="status-label">Order status</span>
               <StatusPill status={order.status} emptyLabel="Awaiting update" />
             </div>
+            {order.status === PART_SHIPPED && (
+              <p className="status-note">
+                Some of this order has shipped. More is still to come.
+              </p>
+            )}
             {order.description && <p className="detail-desc">{order.description}</p>}
 
             <dl className="facts">
@@ -268,7 +273,7 @@ export default function OrderDetailScreen({ orderId, onBack, onChangePassword, o
                     {shipment.dispatched_qty} {shipment.unit}
                     {/* Explains an order that says Delivered with a few
                         tonnes of balance left: this was the last lot. */}
-                    {shipment.is_final && ' · final shipment'}
+                    {shipment.is_final && ' · final shipment, nothing more to follow on this order'}
                   </span>
                 </div>
                 <StatusPill status={shipment.status} emptyLabel="Awaiting update" />
@@ -297,6 +302,11 @@ export default function OrderDetailScreen({ orderId, onBack, onChangePassword, o
                       <DocumentRow key={doc.id} doc={doc} />
                     ))}
                   </ul>
+                )}
+                {shipment.documents.length > 0 && shipment.documents_to_come?.length > 0 && (
+                  <p className="docs-none">
+                    Still to come: {shipment.documents_to_come.join(', ')}.
+                  </p>
                 )}
               </div>
             </div>

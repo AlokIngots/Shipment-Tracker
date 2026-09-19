@@ -152,7 +152,7 @@ export default function ShipmentForm({ orderId, shipment, onSaved, onCancel }) {
             <span>This is the last shipment for this order</span>
           </label>
           <small className="field-hint">
-            Tick it on the final lot. Until then the order shows “Part shipped”.
+            Tick it on the final lot. Until then the order shows “Partly shipped”.
           </small>
         </div>
 

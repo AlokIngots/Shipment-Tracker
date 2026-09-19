@@ -8,6 +8,8 @@ from app.services import audit, storage
 from app.core.deps import DbSession, StaffUser, bad_request, not_found
 from fastapi import APIRouter, File, Form, UploadFile
 from app.models import Customer, Document, Order, Shipment
+# Beside the model, because the customer is told which are still to come.
+from app.models.document import EXPECTED_DOCUMENTS
 from app.schemas import StaffDocumentOut, StaffShipmentOut
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -15,14 +17,6 @@ from typing import Annotated
 
 router = APIRouter(prefix="/api/staff")
 
-# The documents a shipment is expected to have. A shipment is "complete"
-# when all four are attached.
-EXPECTED_DOCUMENTS = [
-    "Packing List",
-    "Commercial Invoice",
-    "Bill of Lading",
-    "Mill Test Certificate",
-]
 
 
 @router.get("/shipments", response_model=list[StaffShipmentOut])

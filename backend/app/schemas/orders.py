@@ -134,6 +134,10 @@ class ShipmentOut(BaseModel):
     # Live tracking from ShipsGo, or None when it is not switched on.
     live_tracking: LiveTrackingOut | None = None
     documents: list[DocumentOut] = []
+    # The expected documents not attached yet, so the customer knows what is
+    # coming rather than guessing from what is there. Empty on a cancelled
+    # shipment, which will get none.
+    documents_to_come: list[str] = []
     photos: list[PhotoOut] = []
 
 
