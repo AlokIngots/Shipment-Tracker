@@ -311,7 +311,7 @@ function OrderRow({
             <p className="guide" role="status">
               {order.dispatched_qty} of {order.ordered_qty} {order.unit} has been
               dispatched, but no shipment is ticked as the last one, so the
-              customer sees “Part shipped”. If nothing more is going on this
+              customer sees “Partly shipped”. If nothing more is going on this
               order, edit its final shipment and tick “Last shipment”.
             </p>
           )}

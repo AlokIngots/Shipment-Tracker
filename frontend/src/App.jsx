@@ -7,6 +7,7 @@ import OrderDetailScreen from './screens/OrderDetailScreen'
 import OrdersScreen from './screens/OrdersScreen'
 import SignInLinkScreen from './screens/SignInLinkScreen'
 import StaffScreen from './screens/staff/StaffScreen'
+import { CONTACT_EMAIL } from './lib/contact'
 import { TOKEN_KEY, dropToken, recallToken, takeSignInLinkToken } from './lib/session'
 
 // A token from a sign-in link, read once when the portal first loads and
@@ -194,6 +195,12 @@ export default function App() {
       </main>
       <footer className="footer">
         Stainless steel bright bars · Mumbai, India
+        {/* On every screen, the sign-in page included, so a buyer with a
+            question never has to leave the portal to find out who to ask. */}
+        <span className="footer-contact">
+          Questions? Write to{' '}
+          <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
+        </span>
       </footer>
     </div>
   )

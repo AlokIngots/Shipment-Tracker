@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import axios from 'axios'
+import { CONTACT_EMAIL } from '../lib/contact'
 import { applyToken } from '../lib/session'
 
 // Pre-fills the form during development so the demo is easy to try. Read
@@ -111,7 +112,9 @@ export default function LoginScreen({ onSignedIn }) {
         <p className="login-hint login-hint--left">
           Sent to <strong>{linkSent.email}</strong>. Nothing there after a
           minute or two? Look in your spam folder, or go back and check the
-          address.
+          address. Still nothing? Write to{' '}
+          <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a> and we will
+          get you in.
         </p>
         <button
           type="button"

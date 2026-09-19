@@ -128,6 +128,17 @@ code {
   color: var(--muted);
 }
 
+/* On its own line under the company line, so it wraps cleanly on a phone. */
+.footer-contact {
+  display: block;
+  margin-top: 4px;
+}
+
+.footer-contact a {
+  color: inherit;
+  font-weight: 600;
+}
+
 /* ---- login form ---- */
 
 .card--login {

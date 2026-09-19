@@ -581,6 +581,13 @@
   gap: 10px;
 }
 
+/* Says in words what Partly shipped means: more is coming. */
+.status-note {
+  margin: 8px 0 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+
 .status-label {
   font-size: 11px;
   font-weight: 700;

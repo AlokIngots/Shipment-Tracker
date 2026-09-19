@@ -21,6 +21,17 @@ from app.core.database import Base
 
 
 
+# The documents a shipment is expected to have. A shipment is "complete"
+# when all four are attached. Staff see which are missing; since step 51 the
+# customer is told which are still to come.
+EXPECTED_DOCUMENTS = [
+    "Packing List",
+    "Commercial Invoice",
+    "Bill of Lading",
+    "Mill Test Certificate",
+]
+
+
 class Document(Base):
     """A document attached to a shipment (Packing List, Invoice, BL, MTC...)."""
 
