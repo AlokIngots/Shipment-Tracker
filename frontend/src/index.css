@@ -1,0 +1,38 @@
+:root {
+  /* Alok Ingots brand */
+  --navy: #000C2E;
+  --navy-soft: #1a2547;
+  --ink: #16203d;
+  --muted: #5b6785;
+  --line: #dfe3ec;
+  --surface: #ffffff;
+  --page: #f5f6fa;
+  --ok: #0f7b4f;
+  --ok-bg: #e6f4ec;
+  /* Alok Ingots red. A signal colour only -- errors, a cancelled order, a
+     balance that needs attention -- and never decoration, so that when it
+     does appear it means something. */
+  --bad: #BC0300;
+  --bad-bg: #fdecec;
+
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  font-family: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial,
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
