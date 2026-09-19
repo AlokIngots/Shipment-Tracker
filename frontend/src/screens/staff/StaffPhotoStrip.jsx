@@ -14,6 +14,8 @@ export default function StaffPhotoStrip({ shipment }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
   const [caption, setCaption] = useState('')
+  // "3 of 8" while a batch is going in, so a long upload visibly moves.
+  const [progress, setProgress] = useState(null)
 
   async function load() {
     try {
@@ -38,23 +40,41 @@ export default function StaffPhotoStrip({ shipment }) {
     setBusy(true)
     setError(null)
 
-    const form = new FormData()
-    // The field is named "files" and repeated, which is what the server
-    // reads as a list.
-    chosen.forEach((file) => form.append('files', file))
-    if (caption.trim()) form.append('caption', caption.trim())
+    // One photo per request. They all used to go in one, and the live
+    // server's front door (nginx) refuses a request over 25 MB, which a
+    // handful of phone photos passes: the whole batch failed with nothing
+    // but "Could not upload" (health check, 19 Sep 2026). One at a time,
+    // each stays far under it, and a photo that is refused is refused on
+    // its own -- the rest still go in.
+    const refused = []
+    for (const [index, file] of chosen.entries()) {
+      setProgress(`${index + 1} of ${chosen.length}`)
+      const form = new FormData()
+      form.append('files', file)
+      if (caption.trim()) form.append('caption', caption.trim())
+      try {
+        const res = await axios.post(`/api/staff/shipments/${shipment.id}/photos`, form)
+        setPhotos(res.data.photos)
+      } catch (err) {
+        refused.push(
+          `${file.name}: ${
+            err.response?.status === 413
+              ? 'larger than the server accepts (25 MB).'
+              : describeError(err, 'could not be uploaded.')
+          }`,
+        )
+      }
+    }
 
-    try {
-      const res = await axios.post(
-        `/api/staff/shipments/${shipment.id}/photos`,
-        form,
-      )
-      setPhotos(res.data.photos)
+    setProgress(null)
+    setBusy(false)
+    if (refused.length === 0) {
       setCaption('')
-    } catch (err) {
-      setError(describeError(err, 'Could not upload those photos.'))
-    } finally {
-      setBusy(false)
+    } else {
+      const added = chosen.length - refused.length
+      setError(
+        `${added} of ${chosen.length} added. Not added: ${refused.join(' ')}`,
+      )
     }
   }
 
@@ -92,7 +112,7 @@ export default function StaffPhotoStrip({ shipment }) {
             onChange={(e) => setCaption(e.target.value)}
           />
           <label className={busy ? 'minibutton minibutton--off' : 'minibutton'}>
-            {busy ? 'Uploading…' : 'Add photos'}
+            {busy ? (progress ? `Uploading ${progress}…` : 'Working…') : 'Add photos'}
             <input
               type="file"
               accept=".jpg,.jpeg,.png"
