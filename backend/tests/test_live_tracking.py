@@ -777,7 +777,7 @@ def test_a_cancelled_shipment_is_left_alone(client, db, staff_auth, order, fake)
 
 
 def test_news_about_an_old_bl_moves_nothing(client, db, staff_auth, order, fake):
-    shipment_id = put_shipment(client, staff_auth, order, status="Packed")
+    shipment_id = put_shipment(client, staff_auth, order)  # Shipped
     enable(client, staff_auth, shipment_id)  # SAILING -> In transit
     put_shipment(client, staff_auth, order, bl_number="EGLV999999999999", status="In transit")
     _now_says(db, fake, shipment_id, "DISCHARGED")
