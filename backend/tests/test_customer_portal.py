@@ -215,4 +215,6 @@ def test_a_document_is_served_as_what_it_actually_is(
         headers=customer_auth,
     )
     assert scan.status_code == 200
-    assert scan.headers["content-type"] == "image/jpeg"
+    # The scan is a PNG that was named .jpg. Since step 52 it is stored and
+    # served as what its bytes say it is, not as what its name claimed.
+    assert scan.headers["content-type"] == "image/png"

@@ -54,6 +54,29 @@
   padding: 36px 32px;
 }
 
+/* The skip-to-content link: off screen until a keyboard lands on it. */
+.skip-link {
+  position: absolute;
+  left: 12px;
+  top: -48px;
+  z-index: 100;
+  padding: 10px 14px;
+  background: #fff;
+  color: var(--navy);
+  font-weight: 600;
+  border: 2px solid var(--navy);
+  border-radius: 6px;
+}
+
+.skip-link:focus {
+  top: 12px;
+}
+
+/* Focus is sent here by the skip link; the page itself needs no ring. */
+.main:focus {
+  outline: none;
+}
+
 /* --card-pad is also used by what reaches out to the card's edges -- the
    order table and the Ordered / Dispatched / Balance strip -- so it can
    shrink on a phone without them coming loose from the edge. */

@@ -69,7 +69,11 @@ def add(shipment_no: str, doc_type: str, file_path: Path) -> int:
             print(f"Error: no shipment called {shipment_no!r}")
             return 1
 
-        stored_name = storage.store_file(file_path)
+        try:
+            stored_name = storage.store_file(file_path)
+        except storage.UploadRejected as rejected:
+            print(f"Error: {rejected}")
+            return 1
 
         document = session.scalar(
             select(Document).where(
