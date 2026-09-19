@@ -1,0 +1,420 @@
+"""What the admin console is sent, and what it submits back."""
+
+from datetime import date, datetime
+from decimal import Decimal
+
+from pydantic import BaseModel, ConfigDict
+
+from app.schemas.orders import LiveTrackingOut
+
+
+class StaffCustomerOut(BaseModel):
+    """A customer, for the list staff pick from when creating an order."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    code: str
+    name: str
+    country: str | None
+
+
+class CustomerDetails(BaseModel):
+    """What the Bill of Lading needs about a customer. Staff only."""
+
+    address: str | None = None
+    eori_number: str | None = None
+    # A person to write to, who need not have a login.
+    contact_name: str | None = None
+    contact_email: str | None = None
+
+
+class StaffDocumentOut(BaseModel):
+    """One document slot on a shipment, as staff see it."""
+
+    doc_type: str
+    document_id: int | None
+    file_name: str | None
+    uploaded: bool
+
+
+class StaffShipmentOut(BaseModel):
+    """A shipment on the documents page, with what is and is not attached."""
+
+    id: int
+    shipment_no: str
+    status: str | None
+    vessel_name: str | None
+    customer_name: str
+    customer_code: str
+    sales_order_no: str
+    documents: list[StaffDocumentOut]
+    missing_count: int
+
+
+class StaffLiveTrackingOut(LiveTrackingOut):
+    """The customer's tracking panel, plus what staff need to look after it."""
+
+    booking_number: str
+    external_id: int
+    # The shipment's B/L has changed since tracking was switched on, so this
+    # describes the old number and customers are not shown it.
+    stale: bool = False
+    last_error: str | None = None
+    failures: int = 0
+    # True when switching it on cost nothing, because ShipsGo already had it.
+    reused: bool = False
+    enabled_at: datetime | None = None
+    enabled_by: str | None = None
+    # ShipsGo has stopped following it (the journey is over).
+    finished: bool = False
+
+
+class StaffTrackingResultOut(BaseModel):
+    """What Enable tracking or Refresh did, and the order it left behind."""
+
+    detail: str
+    credit_spent: bool = False
+    order: "StaffOrderOut"
+
+
+class StaffOrderShipmentOut(BaseModel):
+    """A part-shipment as it appears under its order on the orders page."""
+
+    id: int
+    shipment_no: str
+    dispatched_qty: Decimal | None
+    unit: str | None
+    status: str | None
+    # Ticked on the last lot of the order.
+    is_final: bool
+    vessel_name: str | None
+    imo_number: str | None
+    container_no: str | None
+    bl_number: str | None
+    carrier: str | None
+    etd: date | None
+    eta: date | None
+    port_of_loading: str | None = None
+    port_of_discharge: str | None = None
+    voyage_no: str | None = None
+    seal_no: str | None = None
+    container_size: str | None = None
+    gross_weight: Decimal | None = None
+    # The same tracking the customer gets, built by the same function, so
+    # staff can follow a shipment without borrowing a customer login.
+    container_tracking_url: str | None = None
+    container_tracking_carrier: str | None = None
+    container_tracking_prefilled: bool = False
+    # Live tracking from ShipsGo, the same panel the customer sees plus the
+    # housekeeping. None until staff switch it on.
+    live_tracking: StaffLiveTrackingOut | None = None
+    # Whether this server can switch it on at all (a ShipsGo key is set).
+    live_tracking_available: bool = False
+    # So the page can say why a shipment refuses to be removed.
+    document_count: int
+
+
+class StaffOrderOut(BaseModel):
+    """An order on the staff orders page, with its shipments and balance."""
+
+    id: int
+    customer_id: int
+    customer_code: str
+    customer_name: str
+    sales_order_no: str
+    customer_po: str | None
+    grade: str | None
+    description: str | None
+    ordered_qty: Decimal | None
+    unit: str | None
+    order_date: date | None = None
+    shipping_bill_no: str | None = None
+    # Worked out from the shipments; see statuses.order_status.
+    status: str
+    cancelled: bool
+    dispatched_qty: Decimal
+    balance_qty: Decimal
+    shipments: list[StaffOrderShipmentOut]
+
+
+class OrderIn(BaseModel):
+    """An order as staff submit it, creating or editing.
+
+    There is no status. An order's status is worked out from its shipments,
+    and one sent anyway is ignored.
+    """
+
+    customer_id: int
+    sales_order_no: str
+    customer_po: str | None = None
+    grade: str | None = None
+    description: str | None = None
+    ordered_qty: Decimal
+    unit: str | None = None
+    order_date: date | None = None
+    shipping_bill_no: str | None = None
+    cancelled: bool = False
+    # Taking an order back out of Cancelled is refused unless this says it
+    # is deliberate. The screen sets it after asking; a CSV never can.
+    allow_backwards: bool = False
+
+
+class ShipmentIn(BaseModel):
+    """A part-shipment as staff submit it, creating or editing."""
+
+    shipment_no: str
+    dispatched_qty: Decimal
+    unit: str | None = None
+    status: str | None = None
+    # The last shipment against its order. Until one is ticked, an order
+    # that has started shipping says Part shipped.
+    is_final: bool = False
+    vessel_name: str | None = None
+    imo_number: str | None = None
+    container_no: str | None = None
+    bl_number: str | None = None
+    # The shipping line. Free text: it is matched loosely against the
+    # carriers the portal can link to, and an unknown one is still stored.
+    carrier: str | None = None
+    etd: date | None = None
+    eta: date | None = None
+    port_of_loading: str | None = None
+    port_of_discharge: str | None = None
+    voyage_no: str | None = None
+    seal_no: str | None = None
+    container_size: str | None = None
+    # In the shipment's unit. Never less than the net quantity.
+    gross_weight: Decimal | None = None
+    # Moving a status back down the sequence is refused unless this says it
+    # is deliberate. The screen sets it after asking; a CSV never does.
+    allow_backwards: bool = False
+
+
+class StaffPhotoOut(BaseModel):
+    """One material photo, as staff see it."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    caption: str | None
+    file_name: str
+
+
+class StaffShipmentPhotosOut(BaseModel):
+    """Every photo on one shipment, newest last."""
+
+    shipment_id: int
+    shipment_no: str
+    photos: list[StaffPhotoOut]
+
+
+class StaffLoginOut(BaseModel):
+    """One person who can sign in, as the admin console lists them."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    email: str
+    full_name: str | None
+    is_active: bool
+    is_staff: bool
+    # True while they are still on the temporary password staff gave them.
+    must_change_password: bool
+
+
+class StaffCustomerAccountOut(CustomerDetails):
+    """A customer company, who signs in for it, and how much work it has."""
+
+    id: int
+    code: str
+    name: str
+    country: str | None
+    order_count: int
+    logins: list[StaffLoginOut]
+
+
+class StaffAccountsOut(BaseModel):
+    """The whole Customers & logins screen in one response."""
+
+    customers: list[StaffCustomerAccountOut]
+    staff: list[StaffLoginOut]
+
+
+class CustomerIn(CustomerDetails):
+    """A customer company as staff submit it."""
+
+    code: str
+    name: str
+    country: str | None = None
+
+
+class CustomerEditIn(CustomerDetails):
+    """Editing a customer. The code is not here: it is the join to SAP/PMS.
+
+    Every field is replaced, the details included: the form sends them all.
+    """
+
+    name: str
+    country: str | None = None
+
+
+class LoginIn(BaseModel):
+    """A new login for a customer."""
+
+    email: str
+    full_name: str | None = None
+
+
+class ActiveIn(BaseModel):
+    """Letting somebody in, or locking them out."""
+
+    active: bool
+
+
+class SetPasswordIn(BaseModel):
+    """A password staff chose for somebody. Hashed on arrival, never stored."""
+
+    password: str
+
+
+class TemporaryPasswordOut(BaseModel):
+    """A new login or a reset, with the one-time password.
+
+    The password is in this response and nowhere else, ever again: only its
+    hash is stored, so nobody, including the server, can read it back.
+    """
+
+    detail: str
+    email: str
+    temporary_password: str
+
+
+class StaffActivityChangeOut(BaseModel):
+    """One field of one change: what it was, and what it became."""
+
+    field: str
+    before: str | None
+    after: str | None
+
+
+class StaffActivityEventOut(BaseModel):
+    """One change on the Activity page."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    happened_at: datetime
+    # None when the change came from a command run on the server.
+    actor_email: str | None
+    source: str
+    action: str
+    summary: str
+    changes: list[StaffActivityChangeOut] | None
+
+
+class StaffActivityOut(BaseModel):
+    """A page of the activity record, newest first."""
+
+    events: list[StaffActivityEventOut]
+    # True when there are older events than the last one on this page.
+    more: bool
+
+
+# ------------------------------------------------------- messages to customers
+
+
+class StaffMessageOut(BaseModel):
+    """One message the portal has tried to send a customer."""
+
+    id: int
+    # When it was last tried. Older rows, written before the portal recorded
+    # attempts, fall back to when the row was made.
+    attempted_at: datetime
+    attempts: int
+    # "sent", "suppressed" or "failed".
+    outcome: str
+    detail: str | None
+    # The shipment status that triggered it, e.g. "Shipped".
+    event: str
+    channel: str
+    to_email: str
+    to_name: str | None
+    customer_name: str
+    sales_order_no: str
+    shipment_no: str
+
+
+class StaffMessageWaitingOut(BaseModel):
+    """A message that has not gone out yet, and who it is for."""
+
+    to_email: str
+    customer_name: str
+    sales_order_no: str
+    shipment_no: str
+    event: str
+    # False when SEND_EMAILS is off or this address is not on the pilot list:
+    # the next run will record it as suppressed rather than send it.
+    would_send: bool
+
+
+class StaffSenderOut(BaseModel):
+    """How the automatic sender is configured, and what it last did."""
+
+    # 0 means the automatic sender is off and only the button and the
+    # command-line tool send anything.
+    every_minutes: int
+    running: bool
+    last_run_at: datetime | None
+    last_counts: dict[str, int] | None
+    last_error: str | None
+    runs: int
+    # Whether any real email can leave the building at all (SEND_EMAILS).
+    sending_enabled: bool
+    # Non-empty means a pilot: only these addresses receive real
+    # NOTIFICATIONS. Sign-in links ignore this list -- anybody with a login
+    # is owed the link they asked for.
+    pilot_addresses: list[str]
+    # The shipment statuses that cause a message.
+    notify_on: list[str]
+
+
+class StaffLinkFailureOut(BaseModel):
+    """A sign-in link that reached nobody.
+
+    The person who asked for it was told to check their email, because the
+    answer cannot say otherwise without telling a stranger which addresses
+    have accounts. This is where staff find out instead.
+    """
+
+    at: datetime
+    email: str
+    # "failed" (the mail server refused or could not be reached) or
+    # "suppressed" (SEND_EMAILS is off).
+    outcome: str
+    detail: str | None
+
+
+class StaffMessagesOut(BaseModel):
+    """The Messages screen, in one reply."""
+
+    sender: StaffSenderOut
+    waiting: list[StaffMessageWaitingOut]
+    messages: list[StaffMessageOut]
+    # Newest first, at most 20, and forgotten when the API restarts.
+    sign_in_link_failures: list[StaffLinkFailureOut] = []
+    # True when there are older messages than the last one on this page.
+    more: bool
+
+
+class StaffSendNowOut(BaseModel):
+    """What one press of Send now actually did."""
+
+    sent: int
+    suppressed: int
+    failed: int
+    # 1 when another sender held the lock and this press did nothing.
+    skipped: int
+
+
+StaffTrackingResultOut.model_rebuild()
