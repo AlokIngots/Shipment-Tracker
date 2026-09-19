@@ -172,16 +172,18 @@ export default function StaffMessagesScreen() {
         {!sender.sending_enabled && (
           <p className="message message--quiet">
             Email is switched off on this server, so messages are written down
-            here but not delivered to anybody. They stay on the waiting list and
-            go out the first time it is switched on — nothing is lost.
+            here but not delivered to anybody. They are not sent later: once it
+            is switched on, customers hear about what happens from then on.
           </p>
         )}
 
         {sender.sending_enabled && sender.pilot_addresses.length > 0 && (
           <p className="message message--quiet">
             Pilot: only {sender.pilot_addresses.join(', ')} receives these
-            automatic updates. Everybody else stays on the waiting list.
-            Sign-in links are not affected — anybody with a login gets theirs.
+            automatic updates. Nobody else is emailed, and adding somebody to
+            the list later sends them what happens from then on, not the
+            updates they missed. Sign-in links are not affected — anybody with
+            a login gets theirs.
           </p>
         )}
 

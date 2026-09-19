@@ -46,7 +46,9 @@ class Notification(Base):
     # The shipment status that triggered this, e.g. "Shipped" or "Delivered".
     event: Mapped[str] = mapped_column(String(50))
     channel: Mapped[str] = mapped_column(String(20), default="email")
-    # "sent", "suppressed" (dry run or not on the pilot allow-list), or "failed"
+    # "sent", "suppressed" (dry run or not on the pilot allow-list), "failed",
+    # or "known" (already true when the login was made; never sent, never
+    # shown). Only "failed" is tried again; see notifications.SETTLED.
     outcome: Mapped[str] = mapped_column(String(20))
     detail: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(

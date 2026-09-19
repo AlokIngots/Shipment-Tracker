@@ -45,6 +45,7 @@ __all__ = [
     "build_document_message",
     "build_message",
     "document_event",
+    "mark_known",
     "pending",
     "pending_documents",
     "recent",
@@ -70,6 +71,23 @@ SUBJECTS = {
 # 2026: a corrected invoice arriving as "your Commercial Invoice is ready" a
 # second time only asks the customer which one is right.
 DOCUMENT_EVENT_PREFIX = "Document: "
+
+# What settles a message, so it is never tried again.
+#
+#   sent        it went out
+#   suppressed  held back on purpose: SEND_EMAILS off, or the address is not
+#               on NOTIFY_ONLY_EMAILS. Settled since the health check of
+#               19 Sep 2026. It used to stay owed, which meant that adding a
+#               customer to the pilot list (or switching sending on) emailed
+#               them every "Shipped", "arrived" and "document ready" held
+#               back since the day they got a login, all at once. Now it
+#               tells them what happens from then on.
+#   known       already true when the login was created or let back in
+#               (mark_known), so a new person is not sent the history.
+#
+# Only "failed" stays owed: the mail server refused or could not be
+# reached, and the customer should still hear once it can.
+SETTLED = ("sent", "suppressed", "known")
 
 
 def document_event(doc_type: str) -> str:
@@ -261,15 +279,12 @@ def pending(session):
         .order_by(Shipment.id, User.id)
     ).all()
 
-    # Only a message that genuinely went out counts as done. An attempt that
-    # was suppressed (SEND_EMAILS off, or not on the pilot list) or that
-    # failed must be tried again on the next run - otherwise switching
-    # SEND_EMAILS on would silently skip every shipment recorded while it
-    # was off, and a bounced email would never be retried.
+    # Sent, held back on purpose, or already known: settled. Only a failed
+    # attempt is tried again; see SETTLED.
     already = {
         (n.shipment_id, n.event, n.user_id)
         for n in session.scalars(
-            select(Notification).where(Notification.outcome == "sent")
+            select(Notification).where(Notification.outcome.in_(SETTLED))
         )
     }
 
@@ -306,12 +321,11 @@ def pending_documents(session):
         .order_by(Shipment.id, Document.id, User.id)
     ).all()
 
-    # Same rule as the status half: only a message that genuinely went out
-    # counts as done, so anything suppressed or failed is tried again.
+    # Same rule as the status half: only a failed attempt is tried again.
     already = {
         (n.shipment_id, n.event, n.user_id)
         for n in session.scalars(
-            select(Notification).where(Notification.outcome == "sent")
+            select(Notification).where(Notification.outcome.in_(SETTLED))
         )
     }
 
@@ -358,6 +372,70 @@ def record_outcome(
     record.attempts = (record.attempts or 0) + 1
     record.last_attempt_at = datetime.now(timezone.utc)
     return record
+
+
+def mark_known(session, user) -> int:
+    """Record everything already true for this login as known, not news.
+
+    Called when a login is created or let back in. Without it the next run
+    would email a new person every "Shipped", "arrived" and "document ready"
+    in their company's history, and a login switched back on everything that
+    happened while it was off. What happens after this is news, and is sent.
+
+    Adds to the session; the caller commits. A message already sent stays
+    as it is. Returns how many were marked.
+    """
+    if user.customer_id is None or not user.is_active:
+        return 0
+
+    owed: set[tuple[int, str]] = set()
+    for shipment in session.scalars(
+        select(Shipment)
+        .join(Order, Shipment.order_id == Order.id)
+        .where(
+            Order.customer_id == user.customer_id,
+            Shipment.status.in_(NOTIFIABLE_STATUSES),
+        )
+    ):
+        owed.add((shipment.id, shipment.status))
+    if NOTIFIABLE_DOCUMENTS:
+        for document in session.scalars(
+            select(Document)
+            .join(Shipment, Document.shipment_id == Shipment.id)
+            .join(Order, Shipment.order_id == Order.id)
+            .where(
+                Order.customer_id == user.customer_id,
+                Document.stored_path.is_not(None),
+                Document.doc_type.in_(NOTIFIABLE_DOCUMENTS),
+            )
+        ):
+            owed.add((document.shipment_id, document_event(document.doc_type)))
+    if not owed:
+        return 0
+
+    existing = {
+        (n.shipment_id, n.event): n
+        for n in session.scalars(
+            select(Notification).where(Notification.user_id == user.id)
+        )
+    }
+    now = datetime.now(timezone.utc)
+    marked = 0
+    for shipment_id, event in owed:
+        row = existing.get((shipment_id, event))
+        if row is not None and row.outcome == "sent":
+            continue
+        if row is None:
+            row = Notification(
+                shipment_id=shipment_id, user_id=user.id, event=event,
+                channel="email", attempts=0,
+            )
+            session.add(row)
+        row.outcome = "known"
+        row.detail = "Already true when this login was created or let back in"
+        row.last_attempt_at = now
+        marked += 1
+    return marked
 
 
 def run(session, on_result=None) -> dict[str, int]:
@@ -481,6 +559,7 @@ def recent(session, limit: int = 100, before_id: int | None = None):
         .join(Order, Shipment.order_id == Order.id)
         .join(Customer, Order.customer_id == Customer.id)
         .join(User, Notification.user_id == User.id)
+        .where(Notification.outcome != "known")
         .order_by(Notification.id.desc())
     )
     if before_id is not None:

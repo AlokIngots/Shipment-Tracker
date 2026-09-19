@@ -70,32 +70,32 @@ def test_a_sent_message_is_never_sent_again(db, order, customer_auth, delivers):
     assert len(notes(db)) == 1
 
 
-def test_what_was_suppressed_is_tried_again(db, order, customer_auth, monkeypatch):
-    """SEND_EMAILS off must not quietly swallow the backlog.
+def test_what_was_held_back_is_not_sent_later(db, order, customer_auth, monkeypatch, delivers):
+    """Held back on purpose is settled, not owed (health check, 19 Sep 2026).
 
-    This is the failure that would only show up weeks later: sending switched
-    on at last, and every shipment that moved while it was off never
-    mentioned to anybody.
+    It used to stay owed, so putting a customer on the pilot list -- or
+    switching SEND_EMAILS on -- emailed them everything held back since
+    their login was made, all at once.
     """
-    monkeypatch.setattr(config, "SEND_EMAILS", False)
+    monkeypatch.setattr(notifications, "send", lambda m, pilot_list=True: ("suppressed", "off"))
     assert notifications.run(db) == {"sent": 0, "suppressed": 1, "failed": 0}
+    assert notes(db)[0].outcome == "suppressed"
+    assert notifications.pending(db) == []
 
-    record = notes(db)[0]
-    assert record.outcome == "suppressed"
-    assert record.attempts == 1
-
-    # Still owed, because nothing actually went out.
-    assert len(notifications.pending(db)) == 1
+    # Sending now works (they were added to the list): the old news stays old.
+    monkeypatch.setattr(notifications, "send", lambda m, pilot_list=True: ("sent", None))
+    assert notifications.run(db) == {"sent": 0, "suppressed": 0, "failed": 0}
 
 
 def test_a_retry_updates_the_one_record_rather_than_adding_another(
     db, order, customer_auth, monkeypatch, delivers
 ):
-    monkeypatch.setattr(notifications, "send", lambda m, pilot_list=True: ("suppressed", "off"))
+    # A failure -- the mail server refused -- is the one thing still owed.
+    monkeypatch.setattr(notifications, "send", lambda m, pilot_list=True: ("failed", "refused"))
     notifications.run(db)
     first = notes(db)[0]
     first_attempt_at = first.last_attempt_at
-    assert first.outcome == "suppressed"
+    assert first.outcome == "failed"
 
     # Now sending works. The same message goes out for real.
     monkeypatch.setattr(notifications, "send", lambda m, pilot_list=True: ("sent", None))
@@ -457,3 +457,79 @@ def test_the_default_document_list_matches_the_staff_screen():
     from app.routers.admin.documents import EXPECTED_DOCUMENTS
 
     assert sorted(config.NOTIFIABLE_DOCUMENTS) == sorted(EXPECTED_DOCUMENTS)
+
+
+# ------------------------------- no backlog for new logins (19 Sep 2026)
+#
+# A login made, or let back in, is told what happens from then on -- not
+# the company's history, and not what happened while it was switched off.
+
+
+def _owed_to(db, email):
+    statuses = [u.email for _, _, _, u in notifications.pending(db)]
+    documents = [u.email for *_, u in notifications.pending_documents(db)]
+    return statuses.count(email) + documents.count(email)
+
+
+def test_a_new_login_is_not_sent_the_history(db, client, staff_auth, order, customer):
+    shipment_id = order["shipments"][0]["id"]  # already Shipped
+    upload(client, staff_auth, shipment_id, "Bill of Lading")
+
+    made = client.post(
+        f"/api/staff/customers/{customer.id}/logins",
+        headers=staff_auth,
+        json={"email": "newbuyer@testco.example", "full_name": "New Buyer"},
+    )
+    assert made.status_code in (200, 201), made.text
+    assert _owed_to(db, "newbuyer@testco.example") == 0
+
+    # What happens next is news, and is owed.
+    moved = client.put(
+        f"/api/staff/shipments/{shipment_id}",
+        headers=staff_auth,
+        json={"shipment_no": order["shipments"][0]["shipment_no"],
+              "dispatched_qty": order["shipments"][0]["dispatched_qty"],
+              "status": "In transit"},
+    )
+    assert moved.status_code == 200, moved.text
+    upload(client, staff_auth, shipment_id, "Packing List")
+    assert _owed_to(db, "newbuyer@testco.example") == 2
+
+
+def test_a_login_let_back_in_is_not_sent_what_it_missed(
+    db, client, staff_auth, order, customer, customer_auth
+):
+    from app.models import User
+
+    buyer = db.scalar(select(User).where(User.email == "buyer@testco.example"))
+    assert client.post(
+        f"/api/staff/logins/{buyer.id}/active", headers=staff_auth, json={"active": False}
+    ).status_code == 200
+
+    shipment_id = order["shipments"][0]["id"]
+    upload(client, staff_auth, shipment_id, "Commercial Invoice")
+
+    assert client.post(
+        f"/api/staff/logins/{buyer.id}/active", headers=staff_auth, json={"active": True}
+    ).status_code == 200
+    assert _owed_to(db, "buyer@testco.example") == 0
+
+
+def test_already_known_is_not_listed_on_the_messages_screen(
+    db, client, staff_auth, order, customer
+):
+    client.post(
+        f"/api/staff/customers/{customer.id}/logins",
+        headers=staff_auth,
+        json={"email": "quiet@testco.example", "full_name": None},
+    )
+    assert any(n.outcome == "known" for n in notes(db))
+    body = client.get("/api/staff/messages", headers=staff_auth).json()
+    assert body["messages"] == []
+    assert body["waiting"] == []
+
+
+def test_a_failure_is_still_tried_again(db, order, customer_auth, monkeypatch):
+    monkeypatch.setattr(notifications, "send", lambda m, pilot_list=True: ("failed", "no route"))
+    notifications.run(db)
+    assert len(notifications.pending(db)) == 1

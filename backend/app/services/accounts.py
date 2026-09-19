@@ -27,7 +27,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core import security
 from app.models import Customer, Order, User
-from app.services import audit, shipping_details
+from app.services import audit, notifications, shipping_details
 
 
 class AccountProblem(Exception):
@@ -198,8 +198,14 @@ def create_login(
     full_name: str | None,
     *,
     actor: User | None = None,
+    start_from_now: bool = True,
 ) -> tuple[User, str]:
     """Give somebody a login for a customer. Returns (user, temporary password).
+
+    `start_from_now`: everything already true for the customer is recorded
+    as known, so the new person is emailed what happens from now on and not
+    the company's whole history (notifications.mark_known). Only tests that
+    are about the history pass False.
 
     The password is returned once and never again: only its hash is stored,
     so nobody, including the server, can read it back. It is not in the
@@ -233,6 +239,9 @@ def create_login(
             {}, audit.snapshot(user, audit.LOGIN_FIELDS), audit.LOGIN_FIELDS
         ),
     )
+    if start_from_now:
+        session.flush()  # the new login needs its id first
+        notifications.mark_known(session, user)
     session.commit()
     return user, password
 
@@ -389,5 +398,8 @@ def set_active(session, user: User, active: bool, *, acting_user: User | None = 
         f"Let {user.email} sign in again" if active else f"Locked {user.email} out",
         actor=acting_user,
     )
+    if active:
+        # Not everything that happened while they were locked out, at once.
+        notifications.mark_known(session, user)
     session.commit()
     return True

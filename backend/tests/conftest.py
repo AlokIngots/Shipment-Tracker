@@ -206,7 +206,11 @@ def _settled_login(db, client, customer, email):
     """A customer login that has already chosen its own password."""
     from app.services import accounts
 
-    user, temporary = accounts.create_login(db, customer, email, "Test Person")
+    # Owed the history: the notification tests are about what a login is
+    # told, and their orders are made before it.
+    user, temporary = accounts.create_login(
+        db, customer, email, "Test Person", start_from_now=False
+    )
     password = "a-password-they-chose-in-2026"
     token = client.post(
         "/api/login", json={"email": email, "password": temporary}
