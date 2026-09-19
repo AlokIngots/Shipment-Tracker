@@ -39,6 +39,7 @@ and says so on the staff screen, rather than carry on.
 
 import asyncio
 import logging
+from contextlib import contextmanager
 from datetime import datetime, timezone
 
 from sqlalchemy import text
@@ -100,6 +101,43 @@ def status() -> dict:
     }
 
 
+@contextmanager
+def _only_one(session, key: int):
+    """Hold a Postgres advisory lock for one pass; yield whether we got it.
+
+    The lock belongs to a database CONNECTION. It used to be taken through
+    the session and released after a rollback or commit -- by which time
+    the session could be on a different pooled connection, so the unlock
+    missed, the lock stayed on an idle connection, and later turns (Send
+    now included) quietly said "skipped" (health check, 19 Sep 2026). So it
+    is taken on a connection of its own, which this holds for the whole
+    pass and releases itself. The work still uses the session; only the
+    lock lives here. The same database as the session, so tests use theirs.
+    """
+    connection = session.get_bind().engine.connect()
+    try:
+        got = bool(
+            connection.execute(
+                text("SELECT pg_try_advisory_lock(:key)"), {"key": key}
+            ).scalar()
+        )
+        # A session-level lock survives the commit; the commit only stops
+        # this connection sitting "idle in transaction" for the whole pass.
+        connection.commit()
+        try:
+            yield got
+        finally:
+            if got:
+                connection.execute(
+                    text("SELECT pg_advisory_unlock(:key)"), {"key": key}
+                )
+                connection.commit()
+    finally:
+        # Closing hands the connection back to the pool; with the lock
+        # released above, nothing is left behind on it.
+        connection.close()
+
+
 def send_with(session) -> dict[str, int]:
     """One pass on a session somebody else opened. Blocking.
 
@@ -109,22 +147,14 @@ def send_with(session) -> dict[str, int]:
     """
     # Try, do not wait. If another worker is already sending, this turn is
     # simply skipped: the backlog is still there next time.
-    got_lock = session.execute(
-        text("SELECT pg_try_advisory_lock(:key)"), {"key": _LOCK_KEY}
-    ).scalar()
-    if not got_lock:
-        log.info("another sender holds the lock; skipping this turn")
-        return {"sent": 0, "suppressed": 0, "failed": 0, "skipped": 1}
-
-    try:
-        counts = notifications.run(session)
-    finally:
-        # The lock belongs to the connection, and the connection goes back
-        # to the pool rather than closing, so it must be handed back by hand
-        # or the next turn in this process locks itself out.
-        session.rollback()
-        session.execute(text("SELECT pg_advisory_unlock(:key)"), {"key": _LOCK_KEY})
-        session.commit()
+    with _only_one(session, _LOCK_KEY) as got_lock:
+        if not got_lock:
+            log.info("another sender holds the lock; skipping this turn")
+            return {"sent": 0, "suppressed": 0, "failed": 0, "skipped": 1}
+        try:
+            counts = notifications.run(session)
+        finally:
+            session.rollback()
 
     counts["skipped"] = 0
     return counts
@@ -171,20 +201,14 @@ async def _loop() -> None:
 
 def refresh_tracking_with(session, *, pause=None) -> dict[str, int]:
     """One pass of the live-tracking reader on a session somebody else opened."""
-    got_lock = session.execute(
-        text("SELECT pg_try_advisory_lock(:key)"), {"key": _TRACKING_LOCK_KEY}
-    ).scalar()
-    if not got_lock:
-        return {"refreshed": 0, "failed": 0, "skipped": 1}
-    try:
-        kwargs = {"pause": pause} if pause is not None else {}
-        counts = live_tracking.refresh_due(session, **kwargs)
-    finally:
-        session.rollback()
-        session.execute(
-            text("SELECT pg_advisory_unlock(:key)"), {"key": _TRACKING_LOCK_KEY}
-        )
-        session.commit()
+    with _only_one(session, _TRACKING_LOCK_KEY) as got_lock:
+        if not got_lock:
+            return {"refreshed": 0, "failed": 0, "skipped": 1}
+        try:
+            kwargs = {"pause": pause} if pause is not None else {}
+            counts = live_tracking.refresh_due(session, **kwargs)
+        finally:
+            session.rollback()
     counts["skipped"] = 0
     return counts
 
