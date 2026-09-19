@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import axios from 'axios'
 import StartHere from '../../components/StartHere'
 import StatusPill from '../../components/StatusPill'
+import BulkUpload from './BulkUpload'
 import StaffPhotoStrip from './StaffPhotoStrip'
 import { describeError, plural } from '../../lib/format'
 
@@ -99,6 +100,14 @@ export default function StaffDocumentsScreen({ startWith, onGo }) {
   // something. Arriving from one shipment's button: show only that one.
   const [onlyIncomplete, setOnlyIncomplete] = useState(startWith?.action === 'upload')
   const [focus, setFocus] = useState(startWith?.shipmentId ?? null)
+  // The several-at-once panel: null while shut, otherwise which shipment it
+  // is filling (null inside it until one is chosen).
+  const [bulk, setBulk] = useState(null)
+
+  function openBulk(shipmentId = null) {
+    setBulk({ shipmentId })
+    window.scrollTo(0, 0)
+  }
 
   async function load() {
     try {
@@ -174,26 +183,48 @@ export default function StaffDocumentsScreen({ startWith, onGo }) {
                   ? `All ${plural(shipments.length, 'shipment')} have every document.`
                   : `${incomplete} of ${plural(shipments.length, 'shipment')} are missing documents.`}
             </p>
-            {focus !== null ? (
-              <button type="button" className="minibutton" onClick={() => setFocus(null)}>
-                Show all shipments
-              </button>
-            ) : (
-              <label className="checkline">
-                <input
-                  type="checkbox"
-                  checked={onlyIncomplete}
-                  onChange={(e) => setOnlyIncomplete(e.target.checked)}
-                />
-                <span>Show only shipments with something missing</span>
-              </label>
-            )}
+            <div className="summary-actions">
+              {focus !== null ? (
+                <button type="button" className="minibutton" onClick={() => setFocus(null)}>
+                  Show all shipments
+                </button>
+              ) : (
+                <label className="checkline">
+                  <input
+                    type="checkbox"
+                    checked={onlyIncomplete}
+                    onChange={(e) => setOnlyIncomplete(e.target.checked)}
+                  />
+                  <span>Show only shipments with something missing</span>
+                </label>
+              )}
+              {!bulk && (
+                <button
+                  type="button"
+                  className="minibutton minibutton--primary"
+                  onClick={() => openBulk(focus)}
+                >
+                  Upload several files
+                </button>
+              )}
+            </div>
           </div>
+
+          {bulk && (
+            <BulkUpload
+              shipments={shipments}
+              shipmentId={bulk.shipmentId}
+              onShipmentChange={(shipmentId) => setBulk({ shipmentId })}
+              onUploaded={load}
+              onClose={() => setBulk(null)}
+            />
+          )}
 
           <p className="guide" role="note">
             Press <strong>Upload</strong> beside a document and choose the file:
             PDF, JPG or PNG, up to 20 MB. The customer can download it as soon
-            as it is uploaded.
+            as it is uploaded. Several at once? Press <strong>Upload several
+            files</strong>.
           </p>
 
           {shown.map((shipment) => (
@@ -218,6 +249,16 @@ export default function StaffDocumentsScreen({ startWith, onGo }) {
                   onChanged={load}
                 />
               ))}
+
+              <div className="bulk-open">
+                <button
+                  type="button"
+                  className="minibutton"
+                  onClick={() => openBulk(shipment.id)}
+                >
+                  Upload several files to this shipment
+                </button>
+              </div>
 
               <StaffPhotoStrip shipment={shipment} />
             </div>
