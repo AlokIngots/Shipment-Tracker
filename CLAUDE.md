@@ -80,7 +80,14 @@ to the next step. Never run ahead through multiple steps at once.
 
 ## Where we are now
 
-**Last worked on: 19 September 2026.** Everything on `dev` is deployed.
+**Last worked on: 19 September 2026.** **Waiting to deploy: the four
+health-check fixes** (PRs #42–#45, merged to `dev` 19 Sep 2026 at `dc07957`,
+CI green, 415 passed, no migration): no email backlog (held back = settled;
+new or re-enabled logins start from now), staff cannot set, reset or
+re-enable a team login from the screen, the timer locks live on their own
+connection, and photos go up one per request. **Do not add a customer to
+`NOTIFY_ONLY_EMAILS` until they are deployed.** Everything before them is
+deployed.
 **Second deploy of 19 September 2026:** Alok reported `dev` deployed after
 step 53 (assumed `a8e3747`; the commit and the output were not seen here).
 It carried step 51 (clearer for the customer), step 52 (documents checked by
@@ -967,6 +974,12 @@ Update after every step: what was done, and the commit.
 | 2026-09-19 | **Several documents at once** (`feature/bulk-document-upload`, off `dev` at `ad57591`, restore tag `pre-bulk-document-upload`, **no migration, no backend, login or `.env` change**). Asked for by the user. Documents & photos gets an **Upload several files** button (in the summary bar, and one on every shipment that opens it on that shipment) for a `BulkUpload` panel: choose the shipment (listed with its order and customer; documents belong to a shipment, not an order), drag files in or Choose files (multiple), and each file is listed with a type dropdown (the four expected documents, or Other with a typed name, 60 characters, as the server stores). The type is guessed from the file name by `frontend/src/lib/docTypeGuess.js` (PL/PACKING, CI/INV/INVOICE/COMMERCIAL, BL/BOL/B_L/B-L/LADING, MTC/TC/TEST as a word/MILL TEST); an unguessable name gets no guess and must be chosen. Upload all is held while any file is not PDF/JPG/PNG, over 20 MB, empty, has no type, or shares its type with another file in the list (the second would replace the first); a row says when it will replace a document already on the shipment. Upload all sends each file in turn through the existing `POST /api/staff/shipments/{id}/documents`, so the server checks each exactly as before (step 52's content check included) and one refusal stops nothing else; each row then says Uploaded or why not, a failed row stays to be fixed and sent again, and the shipments reload. The one-at-a-time Upload / Replace / Remove buttons are unchanged. Styled in `customer.css` under `.page--staff`. Checked with the mock server and headless Edge: five sample files queued (four guessed right, one set to Other, Certificate of Origin), all uploaded, at 1440 and 390 px with nothing scrolling sideways. Lint (13 warnings, unchanged) and build pass. The inside screens polish row above is merged to `dev` (PR #38, `ad57591`), not deployed. **Approved by Alok; merged to `dev` 19 Sep 2026 (PR #39, `4a131a2`), CI green (399); deployed 19 Sep 2026** | `4f02a14` |
 | 2026-09-19 | **Step 53 — The status moves itself from live tracking** (`feature/status-from-tracking`, off `dev` at `4a131a2`, restore tag `pre-status-from-tracking`, **no migration**). Asked for by the user; Delivered = discharged at the port of discharge, the user's choice. `live_tracking.advance_status`, called by `refresh()` after each read (the timer, Refresh now, and the first read after Enable), moves the shipment FORWARD only: `LOADED` → Shipped, `SAILING` or `ARRIVED` → In transit, `DISCHARGED` → Delivered (`STATUS_FROM_TRACKING`). Never backwards, never out of Cancelled, never when the shipment's B/L is no longer the tracked one. Each move is a `shipment.updated` event in the same commit, source `live tracking` (new `audit.LIVE_TRACKING`), shown on Change history as "Automatic, from live container tracking" with Status before → after. The customer email follows from the new status exactly as after a staff change (still gated by `NOTIFY_ONLY_EMAILS`); the order status follows from the shipments as always. New optional `AUTO_STATUS_FROM_TRACKING` (default true, in `.env.example`; the server's `.env` needs nothing). Staff Track panel says the status moves by itself. Only works on shipments where staff pressed Enable tracking, and only once ShipsGo is live on the server. One older test changed: after Enable reads the box as sailing, re-saving the shipment as Shipped would be a move backwards, so it now saves In transit. 7 new tests at the end of `test_live_tracking.py` (1 needs no database). Frontend lint (13, unchanged) and build pass. The bulk-upload row above is merged to `dev` (PR #39, `4a131a2`), not deployed. **Approved by Alok; merged to `dev` 19 Sep 2026 (PR #40, `a8e3747`), CI green (406); deployed 19 Sep 2026** | `6545495` |
 | 2026-09-19 | **Second deploy of the day recorded.** Alok reported `dev` deployed after step 53 (assumed `a8e3747`): steps 51, 52, the customer UI polish, the inside-screens polish, several documents at once and step 53. No migrations; schema 0015. ShipsGo on the server still unconfirmed. Notes only | _this commit_ |
+| 2026-09-19 | **Read-only health check** of the whole codebase (three parallel reviews: security and bugs, slow spots, dead weight and secrets; packages checked with `npm audit` and the OSV database: no known vulnerabilities). Findings reported to Alok worst-first; he chose Security 1, 2, 5, 6 and Secrets 1 to fix now and left the dead-weight and slow-spot items for later. Main open ones for later: the staff Documents tab and Orders page load everything with no paging (slow from ~150–200 shipments / ~500 orders); the email check re-reads all history every 15 minutes; CSV importer can move an existing order to another customer and blanks old columns; automatic Delivered emails with no staff check and also moves shipments on an order cancelled at order level; one bad ShipsGo record can stop all refreshes; backups stay on the server's own disk; no frontend error boundary; unused carrier-link code; 58 merged branches on GitHub. Report only, no code | — |
+| 2026-09-19 | **Security 1 — No email backlog** (`fix/notification-backlog`, PR #42, restore tag `pre-notification-backlog`, no migration). `notifications.SETTLED = (sent, suppressed, known)`: a message held back by `SEND_EMAILS=false` or `NOTIFY_ONLY_EMAILS` is settled, not owed, so adding a customer to the pilot list (or switching sending on) no longer emails them the whole held-back history at once; only `failed` is retried. New `notifications.mark_known(session, user)` records everything already true for a customer as `known` when a login is created (`accounts.create_login(..., start_from_now=True)`, the default; the test setup passes False to keep its history) or let back in (`set_active(True)`); `known` rows are hidden from the Messages screen. Messages screen and `.env.example` now say missed updates are not sent later. The two tests of the old retry-when-held-back rule were rewritten; 4 new. Merged to `dev` (`74b3fc4`); not deployed | `9b35325` |
+| 2026-09-19 | **Security 2 — Staff cannot take over a team login** (`fix/staff-cannot-take-over-staff`, PR #43, restore tag `pre-staff-takeover-fix`, no migration). Set password, Reset password and Enable on a team (staff) login are refused by `routers/admin/accounts.refuse_team_login`, with the server commands named; switching a team login OFF still works from the screen. The screen no longer offers those buttons on team logins, and the team card says why. Customer logins unchanged. 3 new tests. Merged to `dev` (`2625f7e`); not deployed | — |
+| 2026-09-19 | **Security 5 — Timer locks always released** (`fix/scheduler-lock-connection`, PR #44, restore tag `pre-scheduler-lock-fix`, no migration). `scheduler._only_one(session, key)` takes the advisory lock on a connection of its own (from the session's own engine) for the whole pass and releases it there; it used to be released through the session after it could have moved to another pooled connection, leaving the lock stuck and later turns silently skipped. Both the email sender and the ShipsGo refresh use it. 2 new tests. Merged to `dev` (`28806aa`); not deployed | — |
+| 2026-09-19 | **Security 6 — Photos go up one per request** (`fix/photo-upload-one-per-request`, PR #45, restore tag `pre-photo-upload-fix`, frontend only). `StaffPhotoStrip` sends each chosen photo in its own request, so none comes near nginx's 25 MB `client_max_body_size`; progress shows "Uploading 3 of 8…"; a refused photo (a 413 is named as too large) is listed by name while the rest go in. Checked in headless Edge against a stand-in server. Merged to `dev` (`dc07957`); not deployed | — |
+| 2026-09-19 | **Secrets 1 — The old demo login.** The demo password from the first days is still in git history (commits `a09cdde`/`8fadfc0`/`de709ba`/`1af22af`, moved out in `2ecca97`); the repo is private, so history was not rewritten. A sign-in attempt on the live portal as `procurement@wilo.com` / the old demo password was refused (401, "Email or password is incorrect"), so that is not a live account. Whether any OTHER live account uses that password can only be checked on the server; a read-only one-liner was given to Alok. The office PC's own `.env` and `frontend/.env` demo login was replaced with `demo@alok-portal.example` and a random password (not in git). `.env.example` already held made-up values. No code change | — |
 | 2026-09-18 | **Notes brought up to date after steps 46–48 merged** (`docs/steps-46-48-merged`). "Where we are now" rewritten: 44–48 merged and not deployed, two migrations waiting (0013, 0014), the `.env` changes the deploy needs, and the command Alok runs to set his own password. Restore points for `pre-password-login` and `pre-signout-and-account-limit` added; stale lines about password sign-in being off, the test count and where the sign-in token is kept corrected. Notes only | _this commit_ |
 
 ### Design decisions worth remembering
@@ -1479,23 +1492,24 @@ Update after every step: what was done, and the commit.
   changes, plus any older pages opened with "Load older changes". The page
   says so when a filter is on and older changes exist.
 
-- **A token cannot be cancelled one at a time.** Tokens are signed and
-  stateless, valid for 12 hours. What *can* be done: changing a password (or
-  `--reset-password`) retires every token issued before it, and deactivating
-  an account refuses them all at once. Changing `SECRET_KEY` signs everybody
-  out. There is no way to end one particular session and leave the others.
-- **The token is kept in `sessionStorage`**, so it survives a refresh and is
-  thrown away when the tab closes. Not `localStorage`, which would survive
-  the browser being closed and reopened — wrong on a shared office machine.
-  It is readable by JavaScript running on the page, which is the accepted
-  cost of not using cookies; an httpOnly cookie plus CSRF protection is the
+- **A sign-in lasts 30 days and is kept in `localStorage`** (since step 46;
+  `SESSION_TTL_DAYS`). Sign out ends that one token on the server (step 48);
+  a password change or `--reset-password` retires every token issued before
+  it; deactivating an account refuses them all; changing `SECRET_KEY` signs
+  everybody out. A token copied off a machine that never signs out works for
+  up to 30 days. It is readable by JavaScript on the page, the accepted cost
+  of not using cookies; an httpOnly cookie plus CSRF protection is the
   stronger answer if the portal ever handles more than read-only order data.
+  (Corrected by the health check of 19 Sep 2026: this said 12 hours and
+  `sessionStorage`.)
 - **Creating logins is now possible remotely, not just from the server.**
   That is the point of step 17, but it does widen what a stolen staff token
   can do: previously an attacker needed shell access to create a login, and
-  now a staff session is enough. They still cannot create staff, so they
-  cannot entrench themselves, and a password change or `--deactivate`
-  retires every token at once. Rate limiting on `/api/login` (still absent,
+  now a staff session is enough. They cannot create staff and, since the
+  health check of 19 Sep 2026 (PR #43), cannot set or reset a colleague's
+  team password or switch a team login back on either -- only switch one
+  off. Before that fix they could, so this line used to claim more than the
+  code did. A password change or `--deactivate` retires every token at once. Rate limiting on `/api/login` (still absent,
   below) matters more now than it did.
 - **A forgotten password does not matter any more.** Since step 31 people
   sign in by email link. Step 30 (an emailed password reset) is built and
