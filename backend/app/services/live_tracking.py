@@ -32,7 +32,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.core import config
 from app.models import Shipment, ShipmentTracking
-from app.services import audit, shipsgo, tracking
+from app.services import audit, shipsgo, statuses, tracking
 
 log = logging.getLogger("portal.tracking")
 
@@ -278,6 +278,60 @@ def _apply(row: ShipmentTracking, detail: dict) -> None:
     row.discarded_at = detail.get("discarded_at")
 
 
+# What each ShipsGo stage means for the shipment's own status. The portal
+# only ever moves a shipment FORWARD to one of these; anything already
+# further along, or Cancelled, is left alone. Delivered is when the
+# container is discharged at the port of discharge -- the last thing
+# ShipsGo reliably reports; it never sees the customer's own warehouse.
+# Decided by Alok, 19 Sep 2026.
+STATUS_FROM_TRACKING = {
+    "LOADED": "Shipped",
+    "SAILING": "In transit",
+    "ARRIVED": "In transit",
+    "DISCHARGED": "Delivered",
+}
+
+
+def advance_status(session: Session, row: ShipmentTracking) -> str | None:
+    """Move the shipment's status forward to what tracking now says.
+
+    Returns the new status, or None when nothing moved. Adds to the session
+    and leaves the commit to the caller, like every other change: the move
+    and its line in Change history are saved together or not at all.
+
+    Nothing moves when the switch is off, when the B/L on the shipment is
+    no longer the one being tracked (the news is about another box), when
+    the shipment is Cancelled, or when it is already as far along or
+    further. A status a person set is never taken backwards.
+    """
+    if not config.AUTO_STATUS_FROM_TRACKING:
+        return None
+    shipment = row.shipment
+    if shipment is None or not _same_bl(row.booking_number, shipment.bl_number):
+        return None
+    target = STATUS_FROM_TRACKING.get(row.status or "")
+    if target is None or shipment.status == statuses.CANCELLED:
+        return None
+    if (statuses.step(shipment.status) or 0) >= statuses.step(target):
+        return None
+
+    before = audit.snapshot(shipment, audit.SHIPMENT_FIELDS)
+    shipment.status = target
+    audit.record(
+        session,
+        "shipment.updated",
+        f"Moved shipment {shipment.shipment_no} on order "
+        f"{shipment.order.sales_order_no} to {target}, because live tracking "
+        f"says: {STATUS_LABELS.get(row.status, row.status)}",
+        source=audit.LIVE_TRACKING,
+        changes=audit.diff(
+            before, audit.snapshot(shipment, audit.SHIPMENT_FIELDS), audit.SHIPMENT_FIELDS
+        ),
+    )
+    log.info("shipment %s moved to %s from tracking", shipment.shipment_no, target)
+    return target
+
+
 def refresh(session: Session, row: ShipmentTracking) -> None:
     """Read one shipment back from ShipsGo and store what it says. Free.
 
@@ -304,6 +358,10 @@ def refresh(session: Session, row: ShipmentTracking) -> None:
     row.refreshed_at = _now()
     row.last_error = None
     row.failures = 0
+    # The news may move the shipment on: Shipped, In transit, Delivered.
+    # The customer's email then follows from the new status as it would
+    # after a change on the staff screen.
+    advance_status(session, row)
     session.commit()
 
 

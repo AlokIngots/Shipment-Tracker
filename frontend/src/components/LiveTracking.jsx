@@ -124,7 +124,7 @@ export default function LiveTracking({ tracking, staff = false }) {
         <p className="livebox-note">
           {updated ? `Last updated ${updated}. ` : ''}
           {staff
-            ? 'Refreshed automatically a few times a day.'
+            ? 'Refreshed automatically a few times a day. The shipment status moves forward by itself: loaded → Shipped, sailing → In transit, discharged → Delivered.'
             : 'Dates marked “Expected” are the shipping line’s estimate and can change.'}
         </p>
       )}
