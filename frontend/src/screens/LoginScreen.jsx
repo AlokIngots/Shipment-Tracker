@@ -19,6 +19,35 @@ const DEMO_PASSWORD = import.meta.env.VITE_DEMO_PASSWORD ?? ''
 // shows the password box anyway: a sign-in that is switched off is refused
 // by the server with a sentence saying so, and hiding the box would leave
 // somebody with only email when email may be what is broken.
+// What the portal is for, beside the form: a buyer arriving from an email
+// should know in one glance that this is the right place and what is in it.
+// Words only; the form beside it is unchanged.
+function Welcome({ children }) {
+  return (
+    <div className="signin">
+      <section className="signin-intro" aria-label="About the portal">
+        <p className="signin-kicker">For Alok Ingots export customers</p>
+        <h2 className="signin-heading">Your orders, documents and shipments in one place</h2>
+        <ul className="signin-points">
+          <li>
+            <strong>Order status</strong>
+            <span>What has shipped and what is still to come.</span>
+          </li>
+          <li>
+            <strong>Shipping documents</strong>
+            <span>Packing lists, invoices, Bills of Lading and test certificates.</span>
+          </li>
+          <li>
+            <strong>Container tracking</strong>
+            <span>Where your container is, and when it is expected.</span>
+          </li>
+        </ul>
+      </section>
+      {children}
+    </div>
+  )
+}
+
 export default function LoginScreen({ onSignedIn }) {
   const [email, setEmail] = useState(DEMO_EMAIL)
   const [password, setPassword] = useState(DEMO_PASSWORD)
@@ -105,25 +134,27 @@ export default function LoginScreen({ onSignedIn }) {
 
   if (linkSent) {
     return (
-      <div className="card card--login" role="status">
-        <h2>Check your email</h2>
-        {/* The heading already says it; the server's sentence starts the same way. */}
-        <p className="lead">{linkSent.detail.replace(/^Check your email\.\s*/, '')}</p>
-        <p className="login-hint login-hint--left">
-          Sent to <strong>{linkSent.email}</strong>. Nothing there after a
-          minute or two? Look in your spam folder, or go back and check the
-          address. Still nothing? Write to{' '}
-          <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a> and we will
-          get you in.
-        </p>
-        <button
-          type="button"
-          className="button button--ghost"
-          onClick={() => setLinkSent(null)}
-        >
-          Back to sign in
-        </button>
-      </div>
+      <Welcome>
+        <div className="card card--login" role="status">
+          <h2>Check your email</h2>
+          {/* The heading already says it; the server's sentence starts the same way. */}
+          <p className="lead">{linkSent.detail.replace(/^Check your email\.\s*/, '')}</p>
+          <p className="login-hint login-hint--left">
+            Sent to <strong>{linkSent.email}</strong>. Nothing there after a
+            minute or two? Look in your spam folder, or go back and check the
+            address. Still nothing? Write to{' '}
+            <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a> and we will
+            get you in.
+          </p>
+          <button
+            type="button"
+            className="button button--ghost"
+            onClick={() => setLinkSent(null)}
+          >
+            Back to sign in
+          </button>
+        </div>
+      </Welcome>
     )
   }
 
@@ -156,61 +187,63 @@ export default function LoginScreen({ onSignedIn }) {
   )
 
   return (
-    <div className="card card--login">
-      <h2>Sign in</h2>
-      <p className="lead">Access your orders, shipments and documents.</p>
+    <Welcome>
+      <div className="card card--login">
+        <h2>Sign in</h2>
+        <p className="lead">Access your orders, shipments and documents.</p>
 
-      {passwordSignIn ? (
-        <>
-          <form onSubmit={signInWithPassword} noValidate>
-            {emailField}
-            <label className="field">
-              <span>Password</span>
-              <input
-                type="password"
-                value={password}
-                autoComplete="current-password"
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </label>
-            {errorLine}
-            <button type="submit" className="button" disabled={busy}>
-              {busy ? 'Please wait…' : 'Sign in'}
+        {passwordSignIn ? (
+          <>
+            <form onSubmit={signInWithPassword} noValidate>
+              {emailField}
+              <label className="field">
+                <span>Password</span>
+                <input
+                  type="password"
+                  value={password}
+                  autoComplete="current-password"
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+              </label>
+              {errorLine}
+              <button type="submit" className="button" disabled={busy}>
+                {busy ? 'Please wait…' : 'Sign in'}
+              </button>
+              <p className="login-hint">
+                No password yet, or forgotten it? Use the email link below, or ask
+                your contact at Alok Ingots to set one for you.
+              </p>
+            </form>
+
+            <div className="login-or" role="separator">
+              or
+            </div>
+
+            <button
+              type="button"
+              className="button button--outline"
+              onClick={requestLink}
+              disabled={busy}
+            >
+              Sign in with email link
             </button>
-            <p className="login-hint">
-              No password yet, or forgotten it? Use the email link below, or ask
-              your contact at Alok Ingots to set one for you.
-            </p>
-          </form>
+            {hint}
+          </>
+        ) : (
+          <>
+            <form onSubmit={requestLink} noValidate>
+              {emailField}
+              {errorLine}
+              <button type="submit" className="button" disabled={busy}>
+                {busy ? 'Sending…' : 'Sign in with email link'}
+              </button>
+            </form>
+            {hint}
+          </>
+        )}
 
-          <div className="login-or" role="separator">
-            or
-          </div>
-
-          <button
-            type="button"
-            className="button button--outline"
-            onClick={requestLink}
-            disabled={busy}
-          >
-            Sign in with email link
-          </button>
-          {hint}
-        </>
-      ) : (
-        <>
-          <form onSubmit={requestLink} noValidate>
-            {emailField}
-            {errorLine}
-            <button type="submit" className="button" disabled={busy}>
-              {busy ? 'Sending…' : 'Sign in with email link'}
-            </button>
-          </form>
-          {hint}
-        </>
-      )}
-
-      {DEMO_EMAIL && <p className="demo-note">Demo account — pre-filled above.</p>}
-    </div>
+        {DEMO_EMAIL && <p className="demo-note">Demo account — pre-filled above.</p>}
+      </div>
+    </Welcome>
   )
 }

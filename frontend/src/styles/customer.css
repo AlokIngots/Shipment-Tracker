@@ -1,0 +1,927 @@
+/* The customer-facing look: sign-in, the orders list and the order page.
+
+   Every rule here starts with .page--customer, which App.jsx puts on the
+   page for anybody who is not staff (and for the sign-in screens). The
+   Admin Console never has that class, so nothing here can reach it -- it
+   keeps shell.css, screens.css and staff.css exactly as they were.
+
+   Brand: navy #000C2E for ink and actions, red #BC0300 only as a signal
+   (and one short rule on the sign-in page), white and light greys behind.
+   Light theme only. */
+
+.page--customer {
+  --c-page: #f4f5f8;
+  --c-line: #e3e6ee;
+  --c-soft: #f8f9fb;
+  --c-radius: 12px;
+  --c-shadow: 0 1px 2px rgba(0, 12, 46, 0.04), 0 6px 20px rgba(0, 12, 46, 0.05);
+  --c-shadow-hover: 0 2px 4px rgba(0, 12, 46, 0.06), 0 10px 28px rgba(0, 12, 46, 0.09);
+
+  background: var(--c-page);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+/* ---- header ---- */
+
+.page--customer .cheader {
+  background: #fff;
+  border-top: 3px solid var(--navy);
+  border-bottom: 1px solid var(--c-line);
+}
+
+.page--customer .cheader-inner {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 14px 32px;
+}
+
+.page--customer .cheader-logo {
+  display: block;
+  height: 44px;
+  width: auto;
+}
+
+.page--customer .cheader-divider {
+  width: 1px;
+  height: 28px;
+  background: var(--c-line);
+}
+
+.page--customer .cheader-title {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--navy);
+}
+
+/* ---- page frame ---- */
+
+.page--customer .main {
+  max-width: 1000px;
+  padding: 40px 32px 64px;
+}
+
+.page--customer .card {
+  --card-pad: 28px;
+  border-color: var(--c-line);
+  border-radius: var(--c-radius);
+  box-shadow: var(--c-shadow);
+}
+
+.page--customer .footer {
+  background: #fff;
+  border-top: 1px solid var(--c-line);
+  padding: 22px 32px;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.page--customer .footer-contact a {
+  color: var(--navy);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(0, 12, 46, 0.3);
+}
+
+.page--customer .footer-contact a:hover {
+  border-bottom-color: var(--navy);
+}
+
+/* Keyboard focus that can be seen, everywhere on the customer side. */
+.page--customer a:focus-visible,
+.page--customer button:focus-visible,
+.page--customer input:focus-visible {
+  outline: 2px solid var(--navy);
+  outline-offset: 2px;
+}
+
+/* ---- toolbar: page title and the account buttons ---- */
+
+.page--customer .toolbar {
+  align-items: flex-end;
+  margin-bottom: 24px;
+}
+
+.page--customer .toolbar-title {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.page--customer .toolbar-sub {
+  margin-top: 6px;
+  font-size: 14px;
+}
+
+.page--customer .toolbar-actions {
+  gap: 8px;
+}
+
+.page--customer .toolbar .button--ghost {
+  padding: 8px 14px;
+  border: 1px solid var(--c-line);
+  border-radius: 8px;
+  background: #fff;
+  font-size: 13.5px;
+}
+
+.page--customer .toolbar .button--ghost:hover:not(:disabled) {
+  border-color: var(--navy);
+  background: #fff;
+}
+
+.page--customer .backlink {
+  margin-bottom: 10px;
+  color: var(--navy);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.page--customer .intro {
+  margin: -10px 0 18px;
+  font-size: 14.5px;
+}
+
+/* ---- buttons and fields ---- */
+
+.page--customer .button {
+  padding: 12px 18px;
+  border-radius: 8px;
+  font-size: 15px;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.page--customer .field span {
+  font-size: 13.5px;
+}
+
+.page--customer .field input {
+  padding: 12px 14px;
+  border-color: #cfd4e0;
+  border-radius: 8px;
+  font-size: 15px;
+}
+
+.page--customer .field input:focus {
+  border-color: var(--navy);
+  box-shadow: 0 0 0 3px rgba(0, 12, 46, 0.12);
+}
+
+/* ---- sign-in ---- */
+
+.page--customer .signin {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 440px);
+  align-items: center;
+  gap: 56px;
+  max-width: 940px;
+  margin: 16px auto 0;
+}
+
+.page--customer .signin-kicker {
+  margin: 0 0 14px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* The one decorative use of the red: a short rule over the heading. */
+.page--customer .signin-kicker::before {
+  content: "";
+  display: block;
+  width: 36px;
+  height: 3px;
+  margin-bottom: 14px;
+  background: var(--bad);
+}
+
+.page--customer .signin-heading {
+  margin: 0 0 26px;
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  line-height: 1.2;
+  color: var(--navy);
+}
+
+.page--customer .signin-points {
+  display: grid;
+  gap: 18px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.page--customer .signin-points li {
+  position: relative;
+  padding-left: 34px;
+}
+
+/* A navy tick in a circle, drawn in CSS so there is no image to load. */
+.page--customer .signin-points li::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--navy);
+}
+
+.page--customer .signin-points li::after {
+  content: "";
+  position: absolute;
+  top: 7px;
+  left: 7px;
+  width: 5px;
+  height: 9px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.page--customer .signin-points strong {
+  display: block;
+  font-size: 15.5px;
+  color: var(--navy);
+}
+
+.page--customer .signin-points span {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.page--customer .card--login {
+  max-width: 440px;
+  padding: 32px;
+}
+
+.page--customer .card--login h2 {
+  margin-bottom: 4px;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.page--customer .card--login .lead {
+  margin-bottom: 24px;
+}
+
+.page--customer .login-hint {
+  font-size: 13px;
+}
+
+.page--customer .login-hint a {
+  color: var(--navy);
+  font-weight: 600;
+}
+
+/* ---- loading and empty states ---- */
+
+/* A small turning ring beside "Loading…", so a slow line reads as working
+   rather than stuck. Still for anybody who asks for less motion. */
+.page--customer .message:not(.message--error)::before {
+  content: "";
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  margin-right: 10px;
+  vertical-align: -2px;
+  border: 2px solid var(--c-line);
+  border-top-color: var(--navy);
+  border-radius: 50%;
+  animation: c-spin 0.8s linear infinite;
+}
+
+@keyframes c-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page--customer .message:not(.message--error)::before {
+    animation: none;
+  }
+}
+
+.page--customer .empty {
+  padding: 36px 12px;
+}
+
+.page--customer .empty-title {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.page--customer .empty-text {
+  font-size: 14.5px;
+}
+
+/* ---- status pills ---- */
+
+.page--customer .pill {
+  padding: 5px 12px;
+  font-size: 12.5px;
+  letter-spacing: 0.01em;
+}
+
+/* ---- orders list: one card per order ---- */
+
+/* The list's own card steps back, so each order can be a card of its own. */
+.page--customer .card:has(> .table-wrap) {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.page--customer .table-wrap {
+  margin: 0;
+  overflow: visible;
+  border-radius: 0;
+}
+
+.page--customer .table,
+.page--customer .table tbody,
+.page--customer .table tr,
+.page--customer .table td {
+  display: block;
+}
+
+/* Out of sight, not out of reach of a screen reader. */
+.page--customer .table thead {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.page--customer .table tbody tr {
+  display: grid;
+  grid-template-columns: max-content max-content minmax(0, 1fr) 20px;
+  grid-template-areas:
+    "so so status chev"
+    "desc desc desc chev"
+    "grade qty . chev";
+  gap: 10px 40px;
+  align-items: center;
+  margin-bottom: 12px;
+  padding: 20px 22px;
+  border: 1px solid var(--c-line);
+  border-radius: var(--c-radius);
+  background: #fff;
+  box-shadow: var(--c-shadow);
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.page--customer .table tbody tr:last-child {
+  border-bottom: 1px solid var(--c-line);
+}
+
+.page--customer .table tbody tr:hover {
+  border-color: #b9c0d3;
+  background: #fff;
+  box-shadow: var(--c-shadow-hover);
+}
+
+.page--customer .table td,
+.page--customer .table tbody tr:hover td {
+  padding: 0;
+  border: 0;
+  background: none;
+  white-space: normal;
+}
+
+.page--customer .table .cell-so {
+  grid-area: so;
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+
+.page--customer .table .link {
+  text-decoration: none;
+}
+
+.page--customer .row--clickable:hover .link {
+  text-decoration: underline;
+}
+
+.page--customer .table .cell-status {
+  grid-area: status;
+  justify-self: end;
+}
+
+.page--customer .table .cell-desc {
+  grid-area: desc;
+  font-size: 15px;
+  color: var(--ink);
+}
+
+.page--customer .table .cell-grade {
+  grid-area: grade;
+  min-width: 0;
+}
+
+.page--customer .table .cell-qty {
+  grid-area: qty;
+  text-align: left;
+  font-family: inherit;
+  font-size: 14.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.page--customer .table td[data-label]::before {
+  content: attr(data-label);
+  display: block;
+  margin-bottom: 2px;
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.page--customer .table .chevron {
+  display: block;
+  grid-area: chev;
+  align-self: center;
+  width: auto;
+  font-size: 24px;
+  line-height: 1;
+  color: #9aa3b8;
+}
+
+/* ---- order page: the summary ---- */
+
+.page--customer .status-line .pill {
+  font-size: 13px;
+}
+
+.page--customer .detail-desc {
+  margin-top: 14px;
+  font-size: 17px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.page--customer .facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 16px 24px;
+  margin-top: 20px;
+}
+
+.page--customer .facts dt {
+  font-size: 11.5px;
+}
+
+.page--customer .facts dd {
+  font-size: 15px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.page--customer .totals {
+  margin: 26px calc(-1 * var(--card-pad)) 0;
+  border-bottom: 1px solid var(--c-line);
+  border-top-color: var(--c-line);
+  background: var(--c-line);
+}
+
+.page--customer .total {
+  padding: 18px var(--card-pad);
+}
+
+.page--customer .total-value {
+  font-family: inherit;
+  font-size: 24px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.page--customer .total-value em {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.page--customer .total--balance {
+  background: var(--c-soft);
+}
+
+.page--customer .shipbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.page--customer .shipbar-track {
+  flex: 1;
+  height: 8px;
+  border-radius: 999px;
+  background: #e8ebf2;
+  overflow: hidden;
+}
+
+.page--customer .shipbar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--navy);
+}
+
+.page--customer .shipbar-text {
+  flex: none;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--navy);
+}
+
+/* ---- order page: shipments ---- */
+
+.page--customer .section-title {
+  margin: 40px 0 16px;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.005em;
+  text-transform: none;
+  color: var(--navy);
+}
+
+.page--customer .shipment {
+  margin-bottom: 20px;
+}
+
+.page--customer .shipment-head {
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--c-line);
+}
+
+.page--customer .shipment-no {
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.page--customer .shipment-qty {
+  font-size: 14px;
+}
+
+/* The progress track in a quiet panel of its own. */
+.page--customer .steptrack {
+  margin: 20px 0 0;
+  padding: 18px 8px 14px;
+  border-radius: 10px;
+  background: var(--c-soft);
+}
+
+.page--customer .step-name {
+  font-size: 12.5px;
+}
+
+.page--customer .track-cancelled {
+  margin: 20px 0 0;
+}
+
+/* Section headings inside a shipment: documents, details, photos, tracking. */
+.page--customer .docs {
+  margin-top: 26px;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.page--customer .docs-label {
+  margin-bottom: 12px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--navy);
+}
+
+.page--customer .docs-none {
+  font-size: 14.5px;
+}
+
+/* ---- documents ---- */
+
+.page--customer .doc-list {
+  gap: 10px;
+}
+
+.page--customer .doc {
+  gap: 12px;
+  padding: 12px 14px 12px 16px;
+  border: 1px solid var(--c-line);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.page--customer .doc-icon {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  color: var(--navy);
+}
+
+.page--customer .doc-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.page--customer .doc-download {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  border-radius: 8px;
+  background: var(--navy);
+  color: #fff;
+  font-size: 14px;
+  transition: background-color 0.15s ease;
+}
+
+.page--customer .doc-download:hover:not(:disabled) {
+  background: var(--navy-soft);
+  color: #fff;
+}
+
+.page--customer .doc-download-icon {
+  width: 16px;
+  height: 16px;
+}
+
+/* Expected, not attached yet: the same row, stepped back. */
+.page--customer .doc--coming {
+  border-style: dashed;
+  background: var(--c-soft);
+}
+
+.page--customer .doc--coming .doc-icon,
+.page--customer .doc--coming .doc-name {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.page--customer .doc-state {
+  padding: 4px 11px;
+  border-radius: 999px;
+  background: #eceef4;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+/* ---- shipment details: a grid in a panel ---- */
+
+.page--customer .facts--tight {
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 18px 24px;
+  margin: 0;
+  padding: 20px;
+  border: 1px solid var(--c-line);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.page--customer .facts--tight > div {
+  min-width: 0;
+}
+
+.page--customer .copynum-button--inline {
+  padding: 2px 9px;
+  font-size: 11.5px;
+}
+
+/* ---- live tracking: the same panel language ---- */
+
+.page--customer .livebox {
+  margin-top: 26px;
+  padding: 20px;
+  border-color: var(--c-line);
+  background: var(--c-soft);
+}
+
+.page--customer .livebox-head {
+  margin-bottom: 16px;
+}
+
+.page--customer .livebox-title {
+  margin-bottom: 0;
+}
+
+/* Inside the tracking panel the facts need no second box around them. */
+.page--customer .livebox .facts--tight {
+  margin-bottom: 20px;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+.page--customer .livemove {
+  padding-bottom: 16px;
+}
+
+.page--customer .livemove-label {
+  font-size: 14.5px;
+}
+
+.page--customer .livemove-meta {
+  font-size: 13px;
+}
+
+.page--customer .livebox-note {
+  margin-top: 8px;
+  padding-top: 14px;
+  border-top: 1px solid var(--c-line);
+  font-size: 12.5px;
+}
+
+/* ---- photos ---- */
+
+.page--customer .photos {
+  margin-top: 26px;
+}
+
+.page--customer .photostrip {
+  gap: 12px;
+}
+
+.page--customer .photothumb {
+  width: 148px;
+  border-color: var(--c-line);
+  border-radius: 10px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.page--customer .photothumb:hover {
+  border-color: #b9c0d3;
+  box-shadow: var(--c-shadow-hover);
+}
+
+.page--customer .photothumb-img {
+  height: 104px;
+}
+
+.page--customer .photothumb-cap {
+  padding: 7px 9px;
+  font-size: 12px;
+}
+
+/* ---- narrow screens ---- */
+
+@media (max-width: 860px) {
+  .page--customer .signin {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 28px;
+    max-width: 480px;
+    margin-top: 0;
+  }
+
+  /* The form first on a narrow screen; what the portal is for, under it. */
+  .page--customer .signin .card--login {
+    order: -1;
+    max-width: none;
+  }
+
+  .page--customer .signin-heading {
+    font-size: 24px;
+  }
+}
+
+@media (max-width: 700px) {
+  .page--customer .cheader-inner {
+    gap: 12px;
+    padding: 12px 16px;
+  }
+
+  .page--customer .cheader-logo {
+    height: 36px;
+  }
+
+  .page--customer .cheader-title {
+    font-size: 11.5px;
+    letter-spacing: 0.1em;
+  }
+
+  .page--customer .main {
+    padding: 24px 16px 40px;
+  }
+
+  .page--customer .card {
+    --card-pad: 18px;
+  }
+
+  .page--customer .card--login {
+    padding: 24px 20px;
+  }
+
+  .page--customer .footer {
+    padding: 18px 16px;
+  }
+
+  .page--customer .toolbar {
+    align-items: flex-start;
+    margin-bottom: 20px;
+  }
+
+  .page--customer .toolbar-title {
+    font-size: 21px;
+  }
+
+  .page--customer .table tbody tr {
+    grid-template-columns: minmax(0, 1fr) auto;
+    /* The order number gets the whole width: beside the pill it broke in
+       two. The pill sits under it instead. */
+    grid-template-areas:
+      "so so"
+      "status status"
+      "desc desc"
+      "grade qty";
+    gap: 10px 16px;
+    padding: 16px;
+  }
+
+  .page--customer .table .cell-status {
+    justify-self: start;
+  }
+
+  .page--customer .table .cell-qty {
+    justify-self: end;
+    text-align: right;
+  }
+
+  .page--customer .table .chevron {
+    display: none;
+  }
+
+  .page--customer .table .link {
+    text-decoration: underline;
+    text-decoration-color: rgba(0, 12, 46, 0.3);
+  }
+
+  .page--customer .detail-desc {
+    font-size: 16px;
+  }
+
+  .page--customer .facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .page--customer .totals {
+    margin-top: 20px;
+  }
+
+  .page--customer .total-value {
+    font-size: 19px;
+  }
+
+  .page--customer .facts--tight {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    padding: 16px;
+  }
+
+  .page--customer .livebox {
+    padding: 16px;
+  }
+
+  /* The name and its button on one line while they fit; the button drops
+     under the name, full width, when they do not. */
+  .page--customer .doc {
+    flex-wrap: wrap;
+  }
+
+  .page--customer .doc-download {
+    justify-content: center;
+  }
+
+  .page--customer .section-title {
+    font-size: 18px;
+    margin-top: 32px;
+  }
+
+  .page--customer .shipment-qty {
+    display: block;
+    margin: 4px 0 0;
+  }
+
+  .page--customer .photothumb {
+    width: 124px;
+  }
+
+  .page--customer .photothumb-img {
+    height: 88px;
+  }
+}

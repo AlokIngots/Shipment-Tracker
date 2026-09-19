@@ -8,6 +8,60 @@ import Toolbar from '../components/Toolbar'
 import { CopyButton } from '../components/Tracking'
 import { DASH, fmtDate } from '../lib/format'
 
+// Small line icons, drawn inline so they need no file and no permission from
+// the Content-Security-Policy. Decoration only: hidden from screen readers.
+function DocIcon() {
+  return (
+    <svg className="doc-icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+      <path
+        d="M5 2.5h6.5L15.5 6.5V17a.5.5 0 0 1-.5.5H5a.5.5 0 0 1-.5-.5V3a.5.5 0 0 1 .5-.5Z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinejoin="round"
+      />
+      <path d="M11.5 2.5V6.5h4" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+      <path d="M7.5 10.5h5M7.5 13.5h5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function DownloadIcon() {
+  return (
+    <svg className="doc-download-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <path
+        d="M8 2.5v7.5M4.75 7 8 10.25 11.25 7M3 13.25h10"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+// An expected document that is not attached yet: the same row, greyed, so
+// the customer sees the whole set and which of it is still on its way.
+function ComingRow({ docType }) {
+  return (
+    <li className="doc doc--coming">
+      <DocIcon />
+      <span className="doc-name">{docType}</span>
+      <span className="doc-state">Coming soon</span>
+    </li>
+  )
+}
+
+// How much of the order has gone, as a bar under the three totals. Worked
+// out from the same two numbers shown above it, so it cannot disagree.
+function shippedShare(order) {
+  const ordered = Number.parseFloat(order.ordered_qty)
+  const shipped = Number.parseFloat(order.dispatched_qty)
+  if (!(ordered > 0) || !(shipped >= 0)) return null
+  return Math.min(100, Math.round((shipped / ordered) * 100))
+}
+
 function DocumentRow({ doc }) {
   // 'idle' -> 'busy' | 'failed'
   const [state, setState] = useState('idle')
@@ -36,6 +90,7 @@ function DocumentRow({ doc }) {
 
   return (
     <li className="doc">
+      <DocIcon />
       <span className="doc-name">{doc.doc_type}</span>
       {doc.available ? (
         <button
@@ -44,6 +99,7 @@ function DocumentRow({ doc }) {
           onClick={download}
           disabled={state === 'busy'}
         >
+          {state !== 'busy' && state !== 'failed' && <DownloadIcon />}
           {state === 'busy'
             ? 'Preparing…'
             : state === 'failed'
@@ -88,7 +144,7 @@ function Tracking({ shipment }) {
 
   return (
     <div className="docs">
-      <span className="docs-label">Track your shipment</span>
+      <span className="docs-label">Shipment details</span>
 
       {facts.length === 0 && (
         <p className="docs-none">
@@ -246,6 +302,21 @@ export default function OrderDetailScreen({ orderId, onBack, onChangePassword, o
                 </span>
               </div>
             </div>
+            {shippedShare(order) !== null && (
+              <div className="shipbar">
+                <div
+                  className="shipbar-track"
+                  role="progressbar"
+                  aria-label="Share of the order shipped"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={shippedShare(order)}
+                >
+                  <span className="shipbar-fill" style={{ width: `${shippedShare(order)}%` }} />
+                </div>
+                <span className="shipbar-text">{shippedShare(order)}% shipped</span>
+              </div>
+            )}
           </div>
 
           <h3 className="section-title">
@@ -281,17 +352,13 @@ export default function OrderDetailScreen({ orderId, onBack, onChangePassword, o
 
               <StatusTrack status={shipment.status} />
 
-              <Tracking shipment={shipment} />
-
-              {/* Where the container is now, from the stored copy of
-                  ShipsGo's news. Only there once staff have switched it on. */}
-              <LiveTracking tracking={shipment.live_tracking} />
-
-              <PhotoGallery photos={shipment.photos} />
-
+              {/* Documents first: they are what a buyer most often opens
+                  the portal for. Every expected one is listed, ready to
+                  download or marked as coming, so the set is never a guess. */}
               <div className="docs">
                 <span className="docs-label">Your documents</span>
-                {shipment.documents.length === 0 ? (
+                {shipment.documents.length === 0 &&
+                (shipment.documents_to_come ?? []).length === 0 ? (
                   <p className="docs-none">
                     Your packing list, invoice, Bill of Lading and test
                     certificates will appear here as soon as they are ready.
@@ -301,14 +368,20 @@ export default function OrderDetailScreen({ orderId, onBack, onChangePassword, o
                     {shipment.documents.map((doc) => (
                       <DocumentRow key={doc.id} doc={doc} />
                     ))}
+                    {(shipment.documents_to_come ?? []).map((docType) => (
+                      <ComingRow key={docType} docType={docType} />
+                    ))}
                   </ul>
                 )}
-                {shipment.documents.length > 0 && shipment.documents_to_come?.length > 0 && (
-                  <p className="docs-none">
-                    Still to come: {shipment.documents_to_come.join(', ')}.
-                  </p>
-                )}
               </div>
+
+              <Tracking shipment={shipment} />
+
+              {/* Where the container is now, from the stored copy of
+                  ShipsGo's news. Only there once staff have switched it on. */}
+              <LiveTracking tracking={shipment.live_tracking} />
+
+              <PhotoGallery photos={shipment.photos} />
             </div>
           ))}
         </>
