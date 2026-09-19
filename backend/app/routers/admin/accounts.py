@@ -71,6 +71,24 @@ def load_customer(customer_id: int, db) -> Customer:
     return customer
 
 
+# A team login opens the whole admin console. From this screen it can be
+# switched OFF -- to cut off somebody who has left, at once -- but not given
+# a password or switched back on: that is done on the server, by somebody
+# with access to it (scripts.set_password, scripts.manage_users). Otherwise
+# one stolen team login could set a colleague's password, or bring back a
+# leaver's login, and become several. Health check, 19 Sep 2026.
+TEAM_LOGIN_ON_SERVER = (
+    "Team logins are changed on the server, not from this screen: "
+    "python -m scripts.set_password --email {email} for a password, "
+    "python -m scripts.manage_users --activate {email} to let it back in."
+)
+
+
+def refuse_team_login(user: User):
+    if user.is_staff:
+        raise bad_request(TEAM_LOGIN_ON_SERVER.format(email=user.email))
+
+
 def load_login(user_id: int, db) -> User:
     user = db.get(User, user_id)
     if user is None:
@@ -154,6 +172,7 @@ def staff_reset_password(
 ) -> TemporaryPasswordOut:
     """Issue a new temporary password, and sign that account out everywhere."""
     user = load_login(user_id, db)
+    refuse_team_login(user)
     password = accounts.reset_password(db, user, actor=staff)
     return TemporaryPasswordOut(
         detail=(
@@ -176,6 +195,7 @@ def staff_set_password(
     its hash is kept.
     """
     user = load_login(user_id, db)
+    refuse_team_login(user)
     try:
         accounts.set_password(db, user, body.password, actor=staff)
     except accounts.AccountProblem as problem:
@@ -191,9 +211,12 @@ def staff_set_active(
 
     Locking out takes effect immediately, including for a token they are
     already holding. The service refuses the two cases that would lock the
-    admin console against everybody.
+    admin console against everybody. A team login can be locked out here but
+    only let back in on the server.
     """
     user = load_login(user_id, db)
+    if body.active:
+        refuse_team_login(user)
     try:
         accounts.set_active(db, user, body.active, acting_user=staff)
     except accounts.AccountProblem as problem:
