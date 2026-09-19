@@ -27,7 +27,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core import security
 from app.models import Customer, Order, User
-from app.services import audit
+from app.services import audit, shipping_details
 
 
 class AccountProblem(Exception):
@@ -86,8 +86,40 @@ def active_staff_count(session) -> int:
 # ------------------------------------------------------------------ writing
 
 
+DETAIL_FIELDS = ("address", "eori_number", "contact_name", "contact_email")
+
+
+def apply_details(customer: Customer, details: dict | None) -> None:
+    """Check the shipping details and copy them on, or raise AccountProblem.
+
+    None leaves them as they are, which is what manage_users.py and anything
+    else that does not know about them wants. A dict replaces all four, a
+    missing key counting as blank, because the screen always sends the lot.
+    """
+    if details is None:
+        return
+    eori = shipping_details.tidy_eori(details.get("eori_number"))
+    email = (details.get("contact_email") or "").strip().lower() or None
+    for problem in (
+        shipping_details.eori_problem(eori),
+        shipping_details.email_problem(email),
+    ):
+        if problem:
+            raise AccountProblem(problem)
+    customer.address = (details.get("address") or "").strip() or None
+    customer.eori_number = eori
+    customer.contact_name = (details.get("contact_name") or "").strip() or None
+    customer.contact_email = email
+
+
 def create_customer(
-    session, code: str, name: str, country: str | None, *, actor: User | None = None
+    session,
+    code: str,
+    name: str,
+    country: str | None,
+    *,
+    actor: User | None = None,
+    details: dict | None = None,
 ) -> Customer:
     """Add a customer company."""
     code = (code or "").strip()
@@ -102,6 +134,7 @@ def create_customer(
     customer = Customer(
         code=code, name=name, country=(country or "").strip() or None
     )
+    apply_details(customer, details)
     session.add(customer)
     audit.record(
         session,
@@ -117,7 +150,13 @@ def create_customer(
 
 
 def update_customer(
-    session, customer: Customer, name: str, country: str | None, *, actor: User | None = None
+    session,
+    customer: Customer,
+    name: str,
+    country: str | None,
+    *,
+    actor: User | None = None,
+    details: dict | None = None,
 ):
     """Change a customer's name or country.
 
@@ -131,6 +170,9 @@ def update_customer(
         raise AccountProblem("A customer name is required.")
 
     before = audit.snapshot(customer, audit.CUSTOMER_FIELDS)
+    # Checks everything before it changes anything, so a refusal leaves the
+    # row as it was.
+    apply_details(customer, details)
     customer.name = name
     customer.country = (country or "").strip() or None
 

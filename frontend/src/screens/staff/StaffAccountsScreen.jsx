@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import axios from 'axios'
 import StartHere from '../../components/StartHere'
 import { Field, TextField } from '../../components/Field'
-import { describeError, plural } from '../../lib/format'
+import { blankToNull, describeError, plural } from '../../lib/format'
 import { PASSWORD_RULE, passwordShortfall, suggestPassword } from '../../lib/passwordRule'
 
 // Said once a login has been made. The server also makes a random temporary
@@ -36,6 +36,10 @@ function CustomerForm({ customer, onSaved, onCancel }) {
     code: customer?.code ?? '',
     name: customer?.name ?? '',
     country: customer?.country ?? '',
+    address: customer?.address ?? '',
+    eori_number: customer?.eori_number ?? '',
+    contact_name: customer?.contact_name ?? '',
+    contact_email: customer?.contact_email ?? '',
   }))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
@@ -57,7 +61,14 @@ function CustomerForm({ customer, onSaved, onCancel }) {
 
     setBusy(true)
     setError(null)
-    const body = { name: form.name.trim(), country: form.country.trim() || null }
+    const body = {
+      name: form.name.trim(),
+      country: form.country.trim() || null,
+      address: blankToNull(form.address),
+      eori_number: blankToNull(form.eori_number),
+      contact_name: blankToNull(form.contact_name),
+      contact_email: blankToNull(form.contact_email),
+    }
 
     try {
       if (customer) await axios.put(`/api/staff/customers/${customer.id}`, body)
@@ -107,6 +118,42 @@ function CustomerForm({ customer, onSaved, onCancel }) {
           onChange={set('country')}
           placeholder="Germany"
         />
+
+        {/* For the Bill of Lading and the paperwork. None of it is shown to
+            the customer, and the contact is somebody to write to, not a
+            login: logins are added below the customer. */}
+        <TextField
+          label="EORI number"
+          value={form.eori_number}
+          onChange={set('eori_number')}
+          maxLength={20}
+          placeholder="DE123456789012345"
+          hint="Optional. Two letters for the country, then the number."
+        />
+
+        <TextField
+          label="Contact name"
+          value={form.contact_name}
+          onChange={set('contact_name')}
+          placeholder="Anna Schmidt"
+          hint="Optional. Who to write to. This does not create a login."
+        />
+
+        <TextField
+          label="Contact email"
+          value={form.contact_email}
+          onChange={set('contact_email')}
+          type="email"
+          placeholder="anna@hansa-stahl.de"
+        />
+
+        <Field label="Address" hint="Optional. As it goes on the Bill of Lading." wide>
+          <textarea
+            rows={3}
+            value={form.address}
+            onChange={(e) => set('address')(e.target.value)}
+          />
+        </Field>
       </div>
 
       {error && (
@@ -568,6 +615,17 @@ export default function StaffAccountsScreen({ startWith, onGo }) {
                   {plural(customer.order_count, 'order')} ·{' '}
                   {plural(customer.logins.length, 'login')}
                 </p>
+                {(customer.eori_number || customer.contact_name || customer.contact_email) && (
+                  <p className="shipment-sub">
+                    {[
+                      customer.eori_number && `EORI ${customer.eori_number}`,
+                      customer.contact_name && `contact ${customer.contact_name}`,
+                      customer.contact_email,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </p>
+                )}
               </div>
             </div>
 

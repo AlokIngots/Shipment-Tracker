@@ -52,6 +52,25 @@ shipment columns left blank. Order fields repeat on every row of that order.
     etd                 optional   YYYY-MM-DD
     eta                 optional   YYYY-MM-DD
 
+Shipping details (step 50). Every one is optional, and a blank one LEAVES
+WHAT IS STORED ALONE, unlike the columns above: a file exported before these
+columns existed, or by a system that does not hold them, must not wipe what
+staff typed on the screen.
+
+    customer_address        optional   staff only
+    customer_eori           optional   two letters then up to 15 letters or digits
+    customer_contact_name   optional   a person to write to; not a login
+    customer_contact_email  optional
+    order_date              optional   YYYY-MM-DD
+    shipping_bill_no        optional   staff only
+    port_of_loading         optional   e.g. Nhava Sheva
+    port_of_discharge       optional   e.g. Hamburg
+    voyage_no               optional
+    seal_no                 optional
+    container_size          optional   e.g. 20ft standard
+    gross_weight            optional   decimal, in the row's unit; never less
+                                       than dispatched_qty
+
 A template lives in docs/import-template.csv.
 """
 
@@ -65,7 +84,7 @@ from pathlib import Path
 from app.core.database import SessionLocal
 from app.models import Customer, Order, Shipment
 from sqlalchemy import select
-from app.services import audit, statuses
+from app.services import audit, shipping_details, statuses
 from app.services.tracking import (
     tidy_carrier,
     tidy_container_no,
@@ -86,7 +105,29 @@ ALL_COLUMNS = [
     "shipment_no", "dispatched_qty", "shipment_status", "last_shipment",
     "vessel_name", "imo_number", "container_no", "bl_number", "carrier",
     "etd", "eta",
+    "customer_address", "customer_eori", "customer_contact_name",
+    "customer_contact_email", "order_date", "shipping_bill_no",
+    "port_of_loading", "port_of_discharge", "voyage_no", "seal_no",
+    "container_size", "gross_weight",
 ]
+
+# Step 50's columns: a blank one leaves the stored value alone. Column name
+# on the left, the attribute it fills on the right.
+CUSTOMER_DETAIL_COLUMNS = {
+    "customer_address": "address",
+    "customer_eori": "eori_number",
+    "customer_contact_name": "contact_name",
+    "customer_contact_email": "contact_email",
+}
+ORDER_DETAIL_COLUMNS = {
+    "order_date": "order_date",
+    "shipping_bill_no": "shipping_bill_no",
+}
+SHIPMENT_DETAIL_COLUMNS = {
+    name: name
+    for name in ("port_of_loading", "port_of_discharge", "voyage_no",
+                 "seal_no", "container_size", "gross_weight")
+}
 
 YES = {"yes", "y", "true", "1", "x"}
 NO = {"no", "n", "false", "0"}
@@ -144,6 +185,21 @@ def check_row(row: dict, line: int) -> tuple[dict, list[str]]:
     data["dispatched_qty"] = parse_decimal(data["dispatched_qty"], "dispatched_qty", errors)
     data["etd"] = parse_date(data["etd"], "etd", errors)
     data["eta"] = parse_date(data["eta"], "eta", errors)
+    data["order_date"] = parse_date(data["order_date"], "order_date", errors)
+    data["gross_weight"] = parse_decimal(data["gross_weight"], "gross_weight", errors)
+
+    # The same checks the staff screens make, from the same module.
+    data["customer_eori"] = shipping_details.tidy_eori(data["customer_eori"])
+    data["customer_contact_email"] = data["customer_contact_email"].lower() or None
+    for field, problem in (
+        ("customer_eori", shipping_details.eori_problem(data["customer_eori"])),
+        ("customer_contact_email",
+         shipping_details.email_problem(data["customer_contact_email"])),
+        ("gross_weight", shipping_details.gross_weight_problem(
+            data["gross_weight"], data["dispatched_qty"], data["unit"])),
+    ):
+        if problem:
+            errors.append(f"{field}: {problem}")
 
     if data["shipment_no"] and data["dispatched_qty"] is None:
         errors.append("dispatched_qty is required when shipment_no is given")
@@ -151,7 +207,8 @@ def check_row(row: dict, line: int) -> tuple[dict, list[str]]:
     if not data["shipment_no"] and any(
         data[f]
         for f in ("vessel_name", "imo_number", "container_no", "bl_number",
-                  "carrier", "shipment_status", "last_shipment")
+                  "carrier", "shipment_status", "last_shipment",
+                  *SHIPMENT_DETAIL_COLUMNS)
     ):
         errors.append("shipment details given without a shipment_no")
 
@@ -203,6 +260,18 @@ def check_row(row: dict, line: int) -> tuple[dict, list[str]]:
 # ------------------------------------------------------------------ loading
 
 
+def fill_given(row, data: dict, columns: dict[str, str]) -> None:
+    """Copy step 50's columns onto a row, skipping every blank one.
+
+    Blank means "not in this file", never "clear it": see the note on
+    shipping details at the top of this file.
+    """
+    for column, attribute in columns.items():
+        value = data[column]
+        if value is not None and value != "":
+            setattr(row, attribute, value)
+
+
 def apply_rows(rows: list[dict], dry_run: bool, file_name: str = "a CSV file") -> dict:
     counts = {
         "customers_created": 0, "orders_created": 0, "orders_updated": 0,
@@ -241,6 +310,7 @@ def apply_rows(rows: list[dict], dry_run: bool, file_name: str = "a CSV file") -
                     name=data["customer_name"],
                     country=data["customer_country"] or None,
                 )
+                fill_given(customer, data, CUSTOMER_DETAIL_COLUMNS)
                 session.add(customer)
                 session.flush()
                 counts["customers_created"] += 1
@@ -249,11 +319,15 @@ def apply_rows(rows: list[dict], dry_run: bool, file_name: str = "a CSV file") -
                     {}, audit.snapshot(customer, audit.CUSTOMER_FIELDS),
                     audit.CUSTOMER_FIELDS,
                 )
-            elif data["customer_name"]:
+            elif data["customer_name"] or any(
+                data[column] for column in CUSTOMER_DETAIL_COLUMNS
+            ):
                 before = audit.snapshot(customer, audit.CUSTOMER_FIELDS)
-                customer.name = data["customer_name"]
+                if data["customer_name"]:
+                    customer.name = data["customer_name"]
                 if data["customer_country"]:
                     customer.country = data["customer_country"]
+                fill_given(customer, data, CUSTOMER_DETAIL_COLUMNS)
                 record(
                     "customer.updated", f"Changed customer {customer.code}",
                     before, audit.snapshot(customer, audit.CUSTOMER_FIELDS),
@@ -280,6 +354,7 @@ def apply_rows(rows: list[dict], dry_run: bool, file_name: str = "a CSV file") -
                     cancelled=cancels,
                     **order_values,
                 )
+                fill_given(order, data, ORDER_DETAIL_COLUMNS)
                 session.add(order)
                 session.flush()
                 counts["orders_created"] += 1
@@ -292,6 +367,7 @@ def apply_rows(rows: list[dict], dry_run: bool, file_name: str = "a CSV file") -
                 before = audit.order_state(session, order)
                 for field, value in order_values.items():
                     setattr(order, field, value)
+                fill_given(order, data, ORDER_DETAIL_COLUMNS)
                 if cancels:
                     order.cancelled = True
                 counts["orders_updated"] += 1
@@ -323,6 +399,7 @@ def apply_rows(rows: list[dict], dry_run: bool, file_name: str = "a CSV file") -
                         is_final=bool(data["last_shipment"]),
                         **shipment_values,
                     )
+                    fill_given(shipment, data, SHIPMENT_DETAIL_COLUMNS)
                     session.add(shipment)
                     counts["shipments_created"] += 1
                     record(
@@ -352,6 +429,7 @@ def apply_rows(rows: list[dict], dry_run: bool, file_name: str = "a CSV file") -
                     before = audit.snapshot(shipment, audit.SHIPMENT_FIELDS)
                     for field, value in shipment_values.items():
                         setattr(shipment, field, value)
+                    fill_given(shipment, data, SHIPMENT_DETAIL_COLUMNS)
                     # Blank means "leave it", so a tick made on the staff
                     # screen is not wiped by the next morning's export.
                     if data["last_shipment"] is not None:

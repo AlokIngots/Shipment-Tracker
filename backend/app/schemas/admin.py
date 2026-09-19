@@ -19,6 +19,16 @@ class StaffCustomerOut(BaseModel):
     country: str | None
 
 
+class CustomerDetails(BaseModel):
+    """What the Bill of Lading needs about a customer. Staff only."""
+
+    address: str | None = None
+    eori_number: str | None = None
+    # A person to write to, who need not have a login.
+    contact_name: str | None = None
+    contact_email: str | None = None
+
+
 class StaffDocumentOut(BaseModel):
     """One document slot on a shipment, as staff see it."""
 
@@ -85,6 +95,12 @@ class StaffOrderShipmentOut(BaseModel):
     carrier: str | None
     etd: date | None
     eta: date | None
+    port_of_loading: str | None = None
+    port_of_discharge: str | None = None
+    voyage_no: str | None = None
+    seal_no: str | None = None
+    container_size: str | None = None
+    gross_weight: Decimal | None = None
     # The same tracking the customer gets, built by the same function, so
     # staff can follow a shipment without borrowing a customer login.
     container_tracking_url: str | None = None
@@ -112,6 +128,8 @@ class StaffOrderOut(BaseModel):
     description: str | None
     ordered_qty: Decimal | None
     unit: str | None
+    order_date: date | None = None
+    shipping_bill_no: str | None = None
     # Worked out from the shipments; see statuses.order_status.
     status: str
     cancelled: bool
@@ -134,6 +152,8 @@ class OrderIn(BaseModel):
     description: str | None = None
     ordered_qty: Decimal
     unit: str | None = None
+    order_date: date | None = None
+    shipping_bill_no: str | None = None
     cancelled: bool = False
     # Taking an order back out of Cancelled is refused unless this says it
     # is deliberate. The screen sets it after asking; a CSV never can.
@@ -159,6 +179,13 @@ class ShipmentIn(BaseModel):
     carrier: str | None = None
     etd: date | None = None
     eta: date | None = None
+    port_of_loading: str | None = None
+    port_of_discharge: str | None = None
+    voyage_no: str | None = None
+    seal_no: str | None = None
+    container_size: str | None = None
+    # In the shipment's unit. Never less than the net quantity.
+    gross_weight: Decimal | None = None
     # Moving a status back down the sequence is refused unless this says it
     # is deliberate. The screen sets it after asking; a CSV never does.
     allow_backwards: bool = False
@@ -196,7 +223,7 @@ class StaffLoginOut(BaseModel):
     must_change_password: bool
 
 
-class StaffCustomerAccountOut(BaseModel):
+class StaffCustomerAccountOut(CustomerDetails):
     """A customer company, who signs in for it, and how much work it has."""
 
     id: int
@@ -214,7 +241,7 @@ class StaffAccountsOut(BaseModel):
     staff: list[StaffLoginOut]
 
 
-class CustomerIn(BaseModel):
+class CustomerIn(CustomerDetails):
     """A customer company as staff submit it."""
 
     code: str
@@ -222,8 +249,11 @@ class CustomerIn(BaseModel):
     country: str | None = None
 
 
-class CustomerEditIn(BaseModel):
-    """Editing a customer. The code is not here: it is the join to SAP/PMS."""
+class CustomerEditIn(CustomerDetails):
+    """Editing a customer. The code is not here: it is the join to SAP/PMS.
+
+    Every field is replaced, the details included: the form sends them all.
+    """
 
     name: str
     country: str | None = None

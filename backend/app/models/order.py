@@ -38,6 +38,10 @@ class Order(Base):
     description: Mapped[str | None] = mapped_column(Text)
     ordered_qty: Mapped[Decimal | None] = mapped_column(Numeric(14, 3))
     unit: Mapped[str | None] = mapped_column(String(20))
+    # When the customer placed it. Shown to them.
+    order_date: Mapped[date | None] = mapped_column(Date)
+    # The Indian customs Shipping Bill. Staff only.
+    shipping_bill_no: Mapped[str | None] = mapped_column(String(60))
     # The one part of an order's status set by hand. The rest is worked out
     # from the shipments; see `status`.
     cancelled: Mapped[bool] = mapped_column(
@@ -94,6 +98,17 @@ class Shipment(Base):
     carrier: Mapped[str | None] = mapped_column(String(60))
     etd: Mapped[date | None] = mapped_column(Date)
     eta: Mapped[date | None] = mapped_column(Date)
+    # The route and the box, as the Bill of Lading gives them. Free text:
+    # ports are written many ways ("Nhava Sheva", "INNSA", "JNPT") and
+    # refusing one would only refuse a real one.
+    port_of_loading: Mapped[str | None] = mapped_column(String(100))
+    port_of_discharge: Mapped[str | None] = mapped_column(String(100))
+    voyage_no: Mapped[str | None] = mapped_column(String(40))
+    seal_no: Mapped[str | None] = mapped_column(String(60))
+    # "20' standard", "40' high cube"... as the booking says.
+    container_size: Mapped[str | None] = mapped_column(String(30))
+    # In the shipment's unit, beside dispatched_qty, which is the net.
+    gross_weight: Mapped[Decimal | None] = mapped_column(Numeric(14, 3))
 
     order: Mapped["Order"] = relationship(back_populates="shipments")
     documents: Mapped[list["Document"]] = relationship(

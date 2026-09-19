@@ -19,6 +19,8 @@ export default function OrderForm({ customers, order, onSaved, onCancel }) {
     description: order?.description ?? '',
     ordered_qty: order?.ordered_qty ?? '',
     unit: order?.unit ?? 'MT',
+    order_date: order?.order_date ?? '',
+    shipping_bill_no: order?.shipping_bill_no ?? '',
     cancelled: order?.cancelled ?? false,
   }))
   const [busy, setBusy] = useState(false)
@@ -70,6 +72,8 @@ export default function OrderForm({ customers, order, onSaved, onCancel }) {
       description: blankToNull(form.description),
       ordered_qty: String(form.ordered_qty).trim(),
       unit: blankToNull(form.unit),
+      order_date: blankToNull(form.order_date),
+      shipping_bill_no: blankToNull(form.shipping_bill_no),
       cancelled: form.cancelled,
       allow_backwards: uncancelling,
     }
@@ -138,6 +142,22 @@ export default function OrderForm({ customers, order, onSaved, onCancel }) {
           value={form.unit}
           onChange={set('unit')}
           hint="MT means metric tonnes."
+        />
+
+        <TextField
+          label="Order date"
+          value={form.order_date}
+          onChange={set('order_date')}
+          type="date"
+          hint="Optional. The customer sees it."
+        />
+
+        <TextField
+          label="Shipping Bill number"
+          value={form.shipping_bill_no}
+          onChange={set('shipping_bill_no')}
+          maxLength={60}
+          hint="Optional. Staff only: the customer does not see it."
         />
 
         {/* Not a .field: that styles every span inside it as a label, which

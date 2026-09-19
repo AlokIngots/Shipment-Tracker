@@ -72,12 +72,18 @@ function DocumentRow({ doc }) {
 // can be used wherever the customer chooses.
 function Tracking({ shipment }) {
   const facts = [
-    ['Shipping line', shipment.carrier],
-    ['Vessel', shipment.vessel_name],
-    ['Container number', shipment.container_no, 'copy'],
-    ['Bill of Lading number', shipment.bl_number, 'copy'],
+    ['From', shipment.port_of_loading],
+    ['To', shipment.port_of_discharge],
     ['Departure date', shipment.etd && fmtDate(shipment.etd)],
     ['Expected arrival', shipment.eta && fmtDate(shipment.eta)],
+    ['Shipping line', shipment.carrier],
+    ['Vessel', shipment.vessel_name],
+    ['Voyage', shipment.voyage_no],
+    ['Container number', shipment.container_no, 'copy'],
+    ['Container size', shipment.container_size],
+    ['Seal number', shipment.seal_no, 'copy'],
+    ['Bill of Lading number', shipment.bl_number, 'copy'],
+    ['Gross weight', shipment.gross_weight && `${shipment.gross_weight} ${shipment.unit ?? ''}`.trim()],
   ].filter(([, value]) => value)
 
   return (
@@ -86,8 +92,8 @@ function Tracking({ shipment }) {
 
       {facts.length === 0 && (
         <p className="docs-none">
-          The vessel, container and dates will appear here once this shipment
-          is booked.
+          The route, vessel, container and dates will appear here once this
+          shipment is booked.
         </p>
       )}
 
@@ -206,6 +212,12 @@ export default function OrderDetailScreen({ orderId, onBack, onChangePassword, o
                 <dt>Grade</dt>
                 <dd>{order.grade || DASH}</dd>
               </div>
+              {order.order_date && (
+                <div>
+                  <dt>Order date</dt>
+                  <dd>{fmtDate(order.order_date)}</dd>
+                </div>
+              )}
             </dl>
 
             {/* Quantities are shown exactly as the server sends them. */}

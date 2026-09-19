@@ -37,6 +37,8 @@ ORDER_FIELDS = {
     "description": "Description",
     "ordered_qty": "Ordered quantity",
     "unit": "Unit",
+    "order_date": "Order date",
+    "shipping_bill_no": "Shipping Bill number",
     # Not the status: that is worked out from the shipments, and the change
     # to a shipment that moved it is what gets recorded.
     "cancelled": "Cancelled",
@@ -57,9 +59,23 @@ SHIPMENT_FIELDS = {
     "carrier": "Carrier",
     "etd": "ETD",
     "eta": "ETA",
+    "port_of_loading": "Port of loading",
+    "port_of_discharge": "Port of discharge",
+    "voyage_no": "Voyage number",
+    "seal_no": "Seal number",
+    "container_size": "Container size",
+    "gross_weight": "Gross weight",
 }
 
-CUSTOMER_FIELDS = {"code": "Code", "name": "Name", "country": "Country"}
+CUSTOMER_FIELDS = {
+    "code": "Code",
+    "name": "Name",
+    "country": "Country",
+    "address": "Address",
+    "eori_number": "EORI number",
+    "contact_name": "Contact name",
+    "contact_email": "Contact email",
+}
 
 LOGIN_FIELDS = {"email": "Email", "full_name": "Name"}
 

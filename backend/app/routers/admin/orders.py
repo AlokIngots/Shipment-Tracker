@@ -8,7 +8,14 @@ disagree about what a valid order looks like.
 
 from decimal import Decimal
 
-from app.services import audit, live_tracking, shipsgo, statuses, tracking
+from app.services import (
+    audit,
+    live_tracking,
+    shipping_details,
+    shipsgo,
+    statuses,
+    tracking,
+)
 from app.core.deps import DbSession, StaffUser, bad_request, not_found
 from fastapi import APIRouter
 from app.models import Customer, Order, Shipment
@@ -66,6 +73,8 @@ def staff_order_out(order: Order, customer: Customer) -> StaffOrderOut:
         description=order.description,
         ordered_qty=order.ordered_qty,
         unit=order.unit,
+        order_date=order.order_date,
+        shipping_bill_no=order.shipping_bill_no,
         status=order.status,
         cancelled=order.cancelled,
         dispatched_qty=dispatched,
@@ -85,6 +94,12 @@ def staff_order_out(order: Order, customer: Customer) -> StaffOrderOut:
                 carrier=s.carrier,
                 etd=s.etd,
                 eta=s.eta,
+                port_of_loading=s.port_of_loading,
+                port_of_discharge=s.port_of_discharge,
+                voyage_no=s.voyage_no,
+                seal_no=s.seal_no,
+                container_size=s.container_size,
+                gross_weight=s.gross_weight,
                 document_count=len(s.documents),
                 live_tracking=live_tracking.view(s, for_staff=True),
                 live_tracking_available=shipsgo.configured(),
@@ -134,6 +149,8 @@ def apply_order(order: Order, body: OrderIn, db: Session) -> None:
     order.description = tidy(body.description)
     order.ordered_qty = body.ordered_qty
     order.unit = tidy(body.unit) or "MT"
+    order.order_date = body.order_date
+    order.shipping_bill_no = tidy(body.shipping_bill_no)
     order.cancelled = body.cancelled
 
 
@@ -176,9 +193,16 @@ def apply_shipment(shipment: Shipment, body: ShipmentIn, db: Session) -> None:
     if body.etd and body.eta and body.eta < body.etd:
         raise bad_request("The arrival date cannot be before the departure date.")
 
+    unit = tidy(body.unit) or "MT"
+    problem = shipping_details.gross_weight_problem(
+        body.gross_weight, body.dispatched_qty, unit
+    )
+    if problem:
+        raise bad_request(problem)
+
     shipment.shipment_no = shipment_no
     shipment.dispatched_qty = body.dispatched_qty
-    shipment.unit = tidy(body.unit) or "MT"
+    shipment.unit = unit
     shipment.status = checked_status(
         shipment.status, body.status, body.allow_backwards
     )
@@ -196,6 +220,13 @@ def apply_shipment(shipment: Shipment, body: ShipmentIn, db: Session) -> None:
     shipment.carrier = tracking.tidy_carrier(body.carrier)
     shipment.etd = body.etd
     shipment.eta = body.eta
+    # The route and the box, stored as the Bill of Lading writes them.
+    shipment.port_of_loading = tidy(body.port_of_loading)
+    shipment.port_of_discharge = tidy(body.port_of_discharge)
+    shipment.voyage_no = tidy(body.voyage_no)
+    shipment.seal_no = tidy(body.seal_no)
+    shipment.container_size = tidy(body.container_size)
+    shipment.gross_weight = body.gross_weight
 
 
 def load_order(order_id: int, db: Session) -> Order:
