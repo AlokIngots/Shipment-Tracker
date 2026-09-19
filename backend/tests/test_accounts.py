@@ -226,3 +226,60 @@ def test_a_customer_cannot_manage_accounts(client, customer_auth, method, path, 
     assert getattr(client, method)(
         path, headers=customer_auth, **kwargs
     ).status_code == 403
+
+
+# ------------------------- team logins are changed on the server (19 Sep 2026)
+
+
+def _colleague(db):
+    colleague, _ = accounts.create_staff_login(db, "colleague@alokindia.test", None)
+    return colleague
+
+
+def test_staff_cannot_set_or_reset_a_colleagues_password(db, client, staff_auth):
+    colleague = _colleague(db)
+    hash_before = colleague.password_hash
+
+    for path, body in (
+        ("set-password", {"password": "chosen-by-someone-9"}),
+        ("reset-password", None),
+    ):
+        refused = client.post(
+            f"/api/staff/logins/{colleague.id}/{path}", headers=staff_auth, json=body
+        )
+        assert refused.status_code == 400, path
+        assert "on the server" in refused.json()["detail"]
+
+    db.expire_all()
+    assert accounts.find_user(db, "colleague@alokindia.test").password_hash == hash_before
+
+
+def test_a_team_login_can_be_switched_off_here_but_not_back_on(db, client, staff_auth):
+    colleague = _colleague(db)
+    off = client.post(
+        f"/api/staff/logins/{colleague.id}/active", headers=staff_auth, json={"active": False}
+    )
+    assert off.status_code == 200
+
+    on = client.post(
+        f"/api/staff/logins/{colleague.id}/active", headers=staff_auth, json={"active": True}
+    )
+    assert on.status_code == 400
+    assert "manage_users --activate" in on.json()["detail"]
+    db.expire_all()
+    assert accounts.find_user(db, "colleague@alokindia.test").is_active is False
+
+
+def test_customer_logins_are_still_managed_here(db, client, staff_auth, customer):
+    user, _ = accounts.create_login(db, customer, "still@testco.example", None)
+    assert client.post(
+        f"/api/staff/logins/{user.id}/set-password",
+        headers=staff_auth,
+        json={"password": "chosen-by-staff-7"},
+    ).status_code == 200
+    assert client.post(
+        f"/api/staff/logins/{user.id}/active", headers=staff_auth, json={"active": False}
+    ).status_code == 200
+    assert client.post(
+        f"/api/staff/logins/{user.id}/active", headers=staff_auth, json={"active": True}
+    ).status_code == 200

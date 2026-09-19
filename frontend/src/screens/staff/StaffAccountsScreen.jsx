@@ -415,14 +415,16 @@ function LoginRow({ login, busy, onSetActive, onSetPassword }) {
             Set password
           </button>
         )}
-        <button
-          type="button"
-          className="minibutton minibutton--quiet"
-          onClick={onSetActive}
-          disabled={busy}
-        >
-          {login.is_active ? 'Disable login' : 'Enable login'}
-        </button>
+        {onSetActive && (
+          <button
+            type="button"
+            className="minibutton minibutton--quiet"
+            onClick={onSetActive}
+            disabled={busy}
+          >
+            {login.is_active ? 'Disable login' : 'Enable login'}
+          </button>
+        )}
       </div>
     </div>
   )
@@ -505,9 +507,13 @@ export default function StaffAccountsScreen({ startWith, onGo }) {
         <LoginRow
           login={login}
           busy={busy}
-          onSetActive={() => setActive(login)}
+          // A team login can be switched off here, never given a password or
+          // switched back on: the server refuses those, so they are not offered.
+          onSetActive={login.is_staff && !login.is_active ? null : () => setActive(login)}
           onSetPassword={
-            passwordFor === login.id ? null : () => setPasswordFor(login.id)
+            login.is_staff || passwordFor === login.id
+              ? null
+              : () => setPasswordFor(login.id)
           }
         />
         {passwordFor === login.id && (
@@ -679,8 +685,10 @@ export default function StaffAccountsScreen({ startWith, onGo }) {
             <h3 className="shipment-no">Alok Ingots team</h3>
             <p className="shipment-sub">
               Team logins see this admin screen instead of the customer portal,
-              and can change anything in it. For that reason a new team login is
-              added by your IT administrator, not from this screen.
+              and can change anything in it. For that reason a new team login, a
+              team password, and letting a disabled team login back in are all
+              done by your IT administrator on the server. A team login can be
+              disabled here, at once, if somebody leaves.
             </p>
           </div>
         </div>
