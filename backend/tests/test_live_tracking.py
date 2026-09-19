@@ -560,7 +560,11 @@ def test_a_changed_bl_hides_the_panel_and_will_not_quietly_add_the_new_one(
 ):
     shipment_id = put_shipment(client, staff_auth, order)
     enable(client, staff_auth, shipment_id)
-    put_shipment(client, staff_auth, order, bl_number="EGLV999999999999")
+    # Enabling read the box as sailing, which moved the shipment on to In
+    # transit (step 53). Saving it as Shipped now would be a move backwards.
+    put_shipment(
+        client, staff_auth, order, bl_number="EGLV999999999999", status="In transit"
+    )
 
     assert customer_shipment(client, customer_auth, order)["live_tracking"] is None
     response = enable(client, staff_auth, shipment_id)
@@ -705,3 +709,95 @@ def test_turning_tracking_on_and_off_is_in_the_activity_record(
     assert "shipment.tracking_stopped" in actions
     enabled = next(e for e in events if e["action"] == "shipment.tracking_enabled")
     assert "1 ShipsGo credit used" in enabled["summary"]
+
+
+# ------------------------------------- step 53: the status moves by itself
+
+
+def _row_for(db, shipment_id):
+    from app.models import ShipmentTracking
+
+    return db.query(ShipmentTracking).filter_by(shipment_id=shipment_id).one()
+
+
+def _now_says(db, fake, shipment_id, stage):
+    """ShipsGo now reports `stage`; read it back as the timer would."""
+    row = _row_for(db, shipment_id)
+    fake.shipments[row.external_id]["status"] = stage
+    live_tracking.refresh(db, row)
+    db.expire_all()
+
+
+def _status(db, shipment_id):
+    from app.models import Shipment
+
+    return db.get(Shipment, shipment_id).status
+
+
+def test_a_sailing_box_moves_a_shipped_shipment_to_in_transit(
+    client, db, staff_auth, customer_auth, order, fake
+):
+    shipment_id = put_shipment(client, staff_auth, order)  # Shipped
+    enable(client, staff_auth, shipment_id)  # reads SAILING
+    assert _status(db, shipment_id) == "In transit"
+    assert customer_shipment(client, customer_auth, order)["status"] == "In transit"
+
+    events = client.get("/api/staff/activity", headers=staff_auth).json()["events"]
+    moved = [e for e in events if e["source"] == "live tracking"]
+    assert len(moved) == 1
+    assert "In transit" in moved[0]["summary"]
+    assert {"field": "Status", "before": "Shipped", "after": "In transit"} in moved[0]["changes"]
+
+
+def test_discharged_at_the_port_means_delivered(
+    client, db, staff_auth, customer_auth, order, fake
+):
+    shipment_id = put_shipment(client, staff_auth, order)
+    enable(client, staff_auth, shipment_id)
+    _now_says(db, fake, shipment_id, "ARRIVED")
+    assert _status(db, shipment_id) == "In transit"
+    _now_says(db, fake, shipment_id, "DISCHARGED")
+    assert _status(db, shipment_id) == "Delivered"
+    assert customer_shipment(client, customer_auth, order)["status"] == "Delivered"
+
+
+def test_tracking_never_takes_a_status_backwards(client, db, staff_auth, order, fake):
+    shipment_id = put_shipment(client, staff_auth, order, status="Delivered")
+    enable(client, staff_auth, shipment_id)  # reads SAILING
+    assert _status(db, shipment_id) == "Delivered"
+    _now_says(db, fake, shipment_id, "LOADED")
+    assert _status(db, shipment_id) == "Delivered"
+
+
+def test_a_cancelled_shipment_is_left_alone(client, db, staff_auth, order, fake):
+    shipment_id = put_shipment(client, staff_auth, order, status="Cancelled")
+    enable(client, staff_auth, shipment_id)
+    _now_says(db, fake, shipment_id, "DISCHARGED")
+    assert _status(db, shipment_id) == "Cancelled"
+
+
+def test_news_about_an_old_bl_moves_nothing(client, db, staff_auth, order, fake):
+    shipment_id = put_shipment(client, staff_auth, order)  # Shipped
+    enable(client, staff_auth, shipment_id)  # SAILING -> In transit
+    put_shipment(client, staff_auth, order, bl_number="EGLV999999999999", status="In transit")
+    _now_says(db, fake, shipment_id, "DISCHARGED")
+    # The tracked box is no longer this shipment's, so its news is not either.
+    assert _status(db, shipment_id) == "In transit"
+
+
+def test_the_switch_turns_it_off(client, db, staff_auth, order, fake, monkeypatch):
+    monkeypatch.setattr(config, "AUTO_STATUS_FROM_TRACKING", False)
+    shipment_id = put_shipment(client, staff_auth, order)
+    enable(client, staff_auth, shipment_id)
+    _now_says(db, fake, shipment_id, "DISCHARGED")
+    assert _status(db, shipment_id) == "Shipped"
+
+
+def test_only_forward_stages_are_mapped():
+    """No ShipsGo stage maps to anything before Shipped or to Cancelled."""
+    from app.services import statuses
+
+    for stage, status in live_tracking.STATUS_FROM_TRACKING.items():
+        assert statuses.step(status) >= statuses.step("Shipped"), stage
+    assert "BOOKED" not in live_tracking.STATUS_FROM_TRACKING
+    assert "UNTRACKED" not in live_tracking.STATUS_FROM_TRACKING

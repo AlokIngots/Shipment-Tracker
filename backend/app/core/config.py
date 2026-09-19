@@ -244,6 +244,14 @@ SHIPSGO_REFRESH_EVERY_HOURS = max(
     0, int(os.getenv("SHIPSGO_REFRESH_EVERY_HOURS", "6"))
 )
 
+# Whether a shipment's status moves forward by itself from live tracking:
+# loaded on the vessel -> Shipped, sailing -> In transit, discharged at the
+# port of discharge -> Delivered. Forward only, never out of Cancelled. On
+# unless .env says false; see live_tracking.advance_status.
+AUTO_STATUS_FROM_TRACKING = os.getenv("AUTO_STATUS_FROM_TRACKING", "true").strip().lower() not in (
+    "0", "false", "no", "off"
+)
+
 # How long after the API starts before the first refresh, in seconds.
 SHIPSGO_FIRST_REFRESH_DELAY_SECONDS = max(
     0, int(os.getenv("SHIPSGO_FIRST_REFRESH_DELAY_SECONDS", "300"))

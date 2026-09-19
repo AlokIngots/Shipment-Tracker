@@ -25,6 +25,8 @@ from app.services import statuses
 SCREEN = "screen"
 COMMAND_LINE = "command line"
 CSV_IMPORT = "csv import"
+# A shipment status moved by live container tracking, not by a person.
+LIVE_TRACKING = "live tracking"
 
 # The fields the record keeps, and what a person calls each one. A field not
 # listed here is never written into an event -- which is how a password hash

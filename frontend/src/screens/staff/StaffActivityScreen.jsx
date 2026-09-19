@@ -27,6 +27,7 @@ function fmtValue(value) {
 // came from instead.
 function who(event) {
   if (event.actor_email) return event.actor_email
+  if (event.source === 'live tracking') return 'Automatic, from live container tracking'
   return event.source === 'csv import'
     ? 'Imported from a data file'
     : 'Your IT administrator, on the server'
