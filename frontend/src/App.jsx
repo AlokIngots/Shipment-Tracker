@@ -134,9 +134,13 @@ export default function App() {
           ? 'orders'
           : 'order'
 
+  // Everything but the staff screens wears the customer look (customer.css,
+  // scoped under .page--customer), so the Admin Console is untouched by it.
+  const customerLook = !session?.is_staff
+
   return (
-    <div className="page">
-      <Header />
+    <div className={customerLook ? 'page page--customer' : 'page'}>
+      <Header customer={customerLook} />
       <main className="main">
         {restoring && <p className="message">Signing you in…</p>}
 
