@@ -34,6 +34,12 @@ export default function ShipmentForm({ orderId, shipment, onSaved, onCancel }) {
     carrier: shipment?.carrier ?? '',
     etd: shipment?.etd ?? '',
     eta: shipment?.eta ?? '',
+    port_of_loading: shipment?.port_of_loading ?? '',
+    port_of_discharge: shipment?.port_of_discharge ?? '',
+    voyage_no: shipment?.voyage_no ?? '',
+    seal_no: shipment?.seal_no ?? '',
+    container_size: shipment?.container_size ?? '',
+    gross_weight: shipment?.gross_weight ?? '',
   }))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
@@ -78,6 +84,12 @@ export default function ShipmentForm({ orderId, shipment, onSaved, onCancel }) {
       carrier: blankToNull(form.carrier),
       etd: blankToNull(form.etd),
       eta: blankToNull(form.eta),
+      port_of_loading: blankToNull(form.port_of_loading),
+      port_of_discharge: blankToNull(form.port_of_discharge),
+      voyage_no: blankToNull(form.voyage_no),
+      seal_no: blankToNull(form.seal_no),
+      container_size: blankToNull(form.container_size),
+      gross_weight: blankToNull(form.gross_weight),
     }
 
     try {
@@ -199,6 +211,63 @@ export default function ShipmentForm({ orderId, shipment, onSaved, onCancel }) {
           value={form.eta}
           onChange={set('eta')}
           type="date"
+        />
+
+        {/* From the Bill of Lading. The customer sees all of these. Free
+            text, because every line writes ports and sizes its own way. */}
+        <TextField
+          label="Port of loading"
+          value={form.port_of_loading}
+          onChange={set('port_of_loading')}
+          maxLength={100}
+          placeholder="Nhava Sheva"
+        />
+        <TextField
+          label="Port of discharge"
+          value={form.port_of_discharge}
+          onChange={set('port_of_discharge')}
+          maxLength={100}
+          placeholder="Hamburg"
+        />
+        <TextField
+          label="Voyage number"
+          value={form.voyage_no}
+          onChange={set('voyage_no')}
+          maxLength={40}
+        />
+        <TextField
+          label="Seal number"
+          value={form.seal_no}
+          onChange={set('seal_no')}
+          maxLength={60}
+        />
+        <TextField
+          label="Container size"
+          value={form.container_size}
+          onChange={set('container_size')}
+          maxLength={30}
+          list="container-sizes"
+          placeholder="20ft standard"
+          hint="Pick one or type what the booking says."
+        />
+        <datalist id="container-sizes">
+          <option value="20ft standard" />
+          <option value="40ft standard" />
+          <option value="40ft high cube" />
+          <option value="20ft flat rack" />
+          <option value="40ft flat rack" />
+          <option value="20ft open top" />
+          <option value="40ft open top" />
+          <option value="Part container (LCL)" />
+        </datalist>
+        <TextField
+          label="Gross weight"
+          value={form.gross_weight}
+          onChange={set('gross_weight')}
+          type="number"
+          step="0.001"
+          min="0"
+          hint={`In ${form.unit || 'MT'}, packing included. The quantity above is the net.`}
         />
       </div>
 

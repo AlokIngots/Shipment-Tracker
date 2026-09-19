@@ -51,6 +51,10 @@ def accounts_response(db) -> StaffAccountsOut:
                 code=customer.code,
                 name=customer.name,
                 country=customer.country,
+                address=customer.address,
+                eori_number=customer.eori_number,
+                contact_name=customer.contact_name,
+                contact_email=customer.contact_email,
                 order_count=order_count,
                 logins=[StaffLoginOut.model_validate(u) for u in logins],
             )
@@ -86,7 +90,10 @@ def staff_create_customer(
 ) -> StaffAccountsOut:
     """Add a customer company. It has no logins until one is created for it."""
     try:
-        accounts.create_customer(db, body.code, body.name, body.country, actor=staff)
+        accounts.create_customer(
+            db, body.code, body.name, body.country, actor=staff,
+            details=body.model_dump(include=set(accounts.DETAIL_FIELDS)),
+        )
     except accounts.AccountProblem as problem:
         raise refuse(problem) from problem
     return accounts_response(db)
@@ -96,14 +103,17 @@ def staff_create_customer(
 def staff_update_customer(
     customer_id: int, body: CustomerEditIn, staff: StaffUser, db: DbSession
 ) -> StaffAccountsOut:
-    """Change a customer's name or country.
+    """Change a customer's name, country and shipping details.
 
     Not the code: it is what the CSV importer matches on, so changing it
     here would quietly orphan every future import for that customer.
     """
     customer = load_customer(customer_id, db)
     try:
-        accounts.update_customer(db, customer, body.name, body.country, actor=staff)
+        accounts.update_customer(
+            db, customer, body.name, body.country, actor=staff,
+            details=body.model_dump(include=set(accounts.DETAIL_FIELDS)),
+        )
     except accounts.AccountProblem as problem:
         raise refuse(problem) from problem
     return accounts_response(db)

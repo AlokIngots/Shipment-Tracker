@@ -30,6 +30,15 @@ class Customer(Base):
     code: Mapped[str] = mapped_column(String(40), unique=True, index=True)
     name: Mapped[str] = mapped_column(String(200))
     country: Mapped[str | None] = mapped_column(String(100))
+    # From the Bill of Lading and the export paperwork. Staff only: the
+    # customer knows their own address, and none of it is a login.
+    address: Mapped[str | None] = mapped_column(Text)
+    # EU/UK customs number: two letters for the country, then up to 15
+    # letters or digits. Stored upper case with no spaces.
+    eori_number: Mapped[str | None] = mapped_column(String(20))
+    # A person to write to at the company, who may have no login at all.
+    contact_name: Mapped[str | None] = mapped_column(String(200))
+    contact_email: Mapped[str | None] = mapped_column(String(255))
 
     users: Mapped[list["User"]] = relationship(back_populates="customer")
     orders: Mapped[list["Order"]] = relationship(back_populates="customer")

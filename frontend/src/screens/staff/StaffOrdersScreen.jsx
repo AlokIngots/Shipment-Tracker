@@ -154,11 +154,15 @@ function ShipmentRow({ shipment, onEdit, onRemove, onDocuments, onTracking, busy
   const facts = [
     `${shipment.dispatched_qty} ${shipment.unit ?? ''}`.trim(),
     shipment.is_final && 'last shipment',
+    shipment.gross_weight && `gross ${shipment.gross_weight}`,
+    (shipment.port_of_loading || shipment.port_of_discharge) &&
+      `${shipment.port_of_loading || '?'} → ${shipment.port_of_discharge || '?'}`,
     shipment.vessel_name &&
       `${shipment.vessel_name}${shipment.imo_number ? ` (IMO ${shipment.imo_number})` : ''}`,
     shipment.etd && `departs ${fmtDate(shipment.etd)}`,
     shipment.eta && `arrives ${fmtDate(shipment.eta)}`,
-    shipment.container_no && `container ${shipment.container_no}`,
+    shipment.container_no &&
+      `container ${shipment.container_no}${shipment.container_size ? ` (${shipment.container_size})` : ''}`,
     shipment.bl_number && `B/L ${shipment.bl_number}`,
     shipment.carrier,
     plural(shipment.document_count, 'document'),
@@ -277,6 +281,8 @@ function OrderRow({
           <p className="ordersub">
             {order.customer_name} ({order.customer_code})
             {order.customer_po ? ` · PO ${order.customer_po}` : ''}
+            {order.order_date ? ` · ordered ${fmtDate(order.order_date)}` : ''}
+            {order.shipping_bill_no ? ` · SB ${order.shipping_bill_no}` : ''}
             {order.description ? ` · ${order.description}` : ''}
           </p>
 

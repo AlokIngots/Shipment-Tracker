@@ -18,6 +18,7 @@ class OrderOut(BaseModel):
     description: str | None
     ordered_qty: Decimal | None
     unit: str | None
+    order_date: date | None = None
     # Worked out from the shipments on every read; see statuses.order_status.
     status: str
 
@@ -113,6 +114,14 @@ class ShipmentOut(BaseModel):
     carrier: str | None
     etd: date | None
     eta: date | None
+    # The route and the box, from the Bill of Lading. gross_weight is in the
+    # shipment's unit, beside dispatched_qty, which is the net.
+    port_of_loading: str | None = None
+    port_of_discharge: str | None = None
+    voyage_no: str | None = None
+    seal_no: str | None = None
+    container_size: str | None = None
+    gross_weight: Decimal | None = None
     # The carrier's own tracking page -- where the box is, not the ship.
     # None when the carrier is unknown or unset, so no dead button is drawn.
     # There is no vessel link or map: a named ship's current position is a
