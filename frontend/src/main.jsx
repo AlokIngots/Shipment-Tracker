@@ -6,6 +6,8 @@ import './index.css'
 import './styles/shell.css'
 import './styles/screens.css'
 import './styles/staff.css'
+// The customer-facing polish, every rule under .page--customer.
+import './styles/customer.css'
 import App from './App.jsx'
 
 createRoot(document.getElementById('root')).render(

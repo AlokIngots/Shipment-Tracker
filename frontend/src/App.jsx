@@ -134,14 +134,18 @@ export default function App() {
           ? 'orders'
           : 'order'
 
+  // Everything but the staff screens wears the customer look (customer.css,
+  // scoped under .page--customer), so the Admin Console is untouched by it.
+  const customerLook = !session?.is_staff
+
   return (
-    <div className="page">
+    <div className={customerLook ? 'page page--customer' : 'page'}>
       {/* The first thing a keyboard reaches, and invisible until it does:
           straight past the header to the page's own content. */}
       <a className="skip-link" href="#main">
         Skip to content
       </a>
-      <Header />
+      <Header customer={customerLook} />
       <main className="main" id="main" tabIndex={-1}>
         {restoring && <p className="message">Signing you in…</p>}
 
