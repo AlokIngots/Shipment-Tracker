@@ -206,6 +206,45 @@ def test_the_lock_is_handed_back_even_when_the_run_blows_up(
     assert scheduler.send_with(db)["sent"] == 1
 
 
+def _lock_is_free(engine, key):
+    """True when nobody holds the lock: a fresh connection can take it."""
+    with engine.connect() as probe:
+        got = probe.execute(text("SELECT pg_try_advisory_lock(:key)"), {"key": key}).scalar()
+        if got:
+            probe.execute(text("SELECT pg_advisory_unlock(:key)"), {"key": key})
+        probe.commit()
+    return bool(got)
+
+
+def test_the_lock_lives_on_its_own_connection_and_is_freed(
+    db, engine, order, customer_auth, monkeypatch
+):
+    """Health check, 19 Sep 2026: the lock was taken through the session and
+    released after it had given its connection back, so the release could
+    miss and leave later turns skipping. Now it is held on a connection of
+    its own for the whole pass, and nobody holds it afterwards."""
+    seen = {}
+
+    def run_and_look(session, on_result=None):
+        # Mid-pass: somebody else trying the lock is refused...
+        seen["held_during"] = not _lock_is_free(engine, scheduler._LOCK_KEY)
+        return {"sent": 0, "suppressed": 0, "failed": 0}
+
+    monkeypatch.setattr(notifications, "run", run_and_look)
+    assert scheduler.send_with(db)["skipped"] == 0
+    assert seen["held_during"] is True
+    # ...and afterwards it is free, however the session's connection moved.
+    assert _lock_is_free(engine, scheduler._LOCK_KEY)
+
+
+def test_the_tracking_lock_is_freed_too(db, engine, monkeypatch):
+    from app.services import live_tracking
+
+    monkeypatch.setattr(live_tracking, "refresh_due", lambda s, **kw: {"refreshed": 0, "failed": 0})
+    assert scheduler.refresh_tracking_with(db)["skipped"] == 0
+    assert _lock_is_free(engine, scheduler._TRACKING_LOCK_KEY)
+
+
 # ------------------------------------------------------ the Messages screen
 
 
