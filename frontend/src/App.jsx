@@ -140,8 +140,13 @@ export default function App() {
 
   return (
     <div className={customerLook ? 'page page--customer' : 'page'}>
+      {/* The first thing a keyboard reaches, and invisible until it does:
+          straight past the header to the page's own content. */}
+      <a className="skip-link" href="#main">
+        Skip to content
+      </a>
       <Header customer={customerLook} />
-      <main className="main">
+      <main className="main" id="main" tabIndex={-1}>
         {restoring && <p className="message">Signing you in…</p>}
 
         {!restoring && showing === 'login' && <LoginScreen onSignedIn={setSession} />}

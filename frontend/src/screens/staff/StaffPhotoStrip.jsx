@@ -123,11 +123,11 @@ export default function StaffPhotoStrip({ shipment }) {
 
       {photos !== null && photos.length > 0 && (
         <div className="photostrip">
-          {photos.map((photo) => (
+          {photos.map((photo, index) => (
             <div className="photothumb photothumb--staff" key={photo.id}>
               <AuthImage
                 src={`/api/staff/photos/${photo.id}/thumbnail`}
-                alt={photo.caption || photo.file_name}
+                alt={photo.caption || `Photo ${index + 1} of ${photos.length}`}
                 className="photothumb-img"
               />
               <span className="photothumb-cap">

@@ -91,7 +91,7 @@ def staff_upload_document(
 
     try:
         suffix = storage.check_upload(file.filename or "", file.content_type)
-        stored_name = storage.store_upload(file.file, suffix)
+        stored_name = storage.store_document(file.file, suffix)
     except storage.UploadRejected as rejected:
         raise bad_request(str(rejected)) from rejected
 

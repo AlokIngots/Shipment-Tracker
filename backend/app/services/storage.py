@@ -23,12 +23,17 @@ def ensure_storage() -> Path:
 
 
 def store_file(source: Path) -> str:
-    """Copy a file into storage under a random name.
+    """Copy a document into storage under a random name.
 
     Returns the stored name, which is what goes in Document.stored_path.
+    The file must really be a PDF, JPG or PNG, whatever its name says, and
+    is stored under the suffix of what it really is; see document_suffix.
     """
+    with open(source, "rb") as fh:
+        suffix = document_suffix(fh.read(len(_PNG_MAGIC)))
+    if suffix is None:
+        raise UploadRejected(NOT_A_DOCUMENT)
     ensure_storage()
-    suffix = source.suffix.lower()[:10]
     stored_name = f"{secrets.token_hex(16)}{suffix}"
     shutil.copyfile(source, STORAGE_DIR / stored_name)
     return stored_name
@@ -44,6 +49,35 @@ MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # 20 MB
 
 class UploadRejected(Exception):
     """An upload that will not be stored, with a reason a person can read."""
+
+
+# What the first bytes of each kind of document are. The name and the
+# browser's stated type are both only claims; these bytes are the file.
+# A photo gets a stricter check still (it is opened and re-saved, see
+# services/photos.py); a document is stored as it came, so this is its check.
+_PDF_MAGIC = b"%PDF-"
+_JPEG_MAGIC = b"\xff\xd8\xff"
+_PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+
+NOT_A_DOCUMENT = (
+    "That file is not really a PDF, JPG or PNG, whatever its name says. "
+    "Save or export it as a PDF and upload that."
+)
+
+
+def document_suffix(head: bytes) -> str | None:
+    """The suffix a document should be stored under, from its first bytes.
+
+    None when it is none of the three. A PNG named .jpg comes back as .png,
+    so it is later served as what it is rather than as what it was called.
+    """
+    if head.startswith(_PDF_MAGIC):
+        return ".pdf"
+    if head.startswith(_PNG_MAGIC):
+        return ".png"
+    if head.startswith(_JPEG_MAGIC):
+        return ".jpg"
+    return None
 
 
 def check_upload(file_name: str, content_type: str | None) -> str:
@@ -137,6 +171,28 @@ def store_upload(stream, suffix: str) -> str:
         target.unlink(missing_ok=True)
         raise UploadRejected("That file is empty.")
 
+    return stored_name
+
+
+def store_document(stream, claimed_suffix: str) -> str:
+    """Store an uploaded document, refusing one that is not what it claims.
+
+    Written first (with the size limit and the empty-file check of
+    store_upload), then its first bytes are read back. Something that is
+    not a PDF, JPG or PNG is deleted and refused; one whose name says the
+    wrong kind -- a PNG called .jpg -- is kept under its real suffix.
+    """
+    stored_name = store_upload(stream, claimed_suffix)
+    target = STORAGE_DIR / stored_name
+    with open(target, "rb") as fh:
+        real = document_suffix(fh.read(len(_PNG_MAGIC)))
+    if real is None:
+        target.unlink(missing_ok=True)
+        raise UploadRejected(NOT_A_DOCUMENT)
+    if real != claimed_suffix and not (real == ".jpg" and claimed_suffix == ".jpeg"):
+        renamed = f"{Path(stored_name).stem}{real}"
+        target.rename(STORAGE_DIR / renamed)
+        stored_name = renamed
     return stored_name
 
 
