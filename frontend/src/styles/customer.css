@@ -1280,6 +1280,200 @@
   border-radius: 10px;
 }
 
+/* ---- several documents at once ---- */
+
+.page--staff .bulk {
+  margin-bottom: 16px;
+  border-color: #b9c0d3;
+  box-shadow: var(--c-shadow-hover);
+}
+
+.page--staff .bulk-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.page--staff .bulk-head .form-title {
+  margin-bottom: 4px;
+}
+
+.page--staff .bulk-lead {
+  margin: 0 0 18px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.page--staff .bulk select,
+.page--staff .bulk input:not([type="file"]) {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #cfd4e0;
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 14.5px;
+}
+
+.page--staff .bulk select:focus,
+.page--staff .bulk input:focus {
+  outline: none;
+  border-color: var(--navy);
+  box-shadow: 0 0 0 3px rgba(0, 12, 46, 0.12);
+}
+
+.page--staff .bulk-shipment {
+  max-width: 640px;
+}
+
+/* Where files are dropped: dashed, and navy-tinted while one is over it. */
+.page--staff .dropzone {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 26px 16px;
+  border: 2px dashed #c3c9d8;
+  border-radius: 10px;
+  background: var(--c-soft);
+  text-align: center;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.page--staff .dropzone--over {
+  border-color: var(--navy);
+  background: #eef1f8;
+}
+
+.page--staff .dropzone-text {
+  margin: 0;
+  font-size: 14.5px;
+  color: var(--muted);
+}
+
+.page--staff .dropzone-text strong {
+  color: var(--navy);
+}
+
+.page--staff .bulk-list {
+  display: grid;
+  gap: 8px;
+  margin: 16px 0 4px;
+  padding: 0;
+  list-style: none;
+}
+
+/* One file: its name and size, its type, and what happened to it. */
+.page--staff .bulk-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 10px 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--c-line);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.page--staff .bulk-row--done {
+  border-color: #bfe0cd;
+  background: var(--ok-bg);
+}
+
+.page--staff .bulk-row--failed {
+  border-color: #f1c4c4;
+}
+
+.page--staff .bulk-file {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.page--staff .bulk-name {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.page--staff .bulk-size {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.page--staff .bulk-type {
+  display: grid;
+  gap: 6px;
+}
+
+.page--staff .bulk-state {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.page--staff .bulk-note {
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.page--staff .bulk-note--quiet {
+  color: var(--muted);
+}
+
+.page--staff .bulk-note--ok {
+  color: var(--ok);
+  font-weight: 600;
+}
+
+/* Red, because it needs doing something about. */
+.page--staff .bulk-note--bad {
+  color: var(--bad);
+  font-weight: 500;
+}
+
+.page--staff .bulk-remove {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  margin-left: auto;
+  border: 1px solid var(--c-line);
+  border-radius: 50%;
+  background: #fff;
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.page--staff .bulk-remove:hover:not(:disabled) {
+  border-color: var(--navy);
+  color: var(--navy);
+}
+
+.page--staff .bulk .form-actions {
+  align-items: center;
+  margin-top: 16px;
+}
+
+.page--staff .bulk .form-actions .button {
+  width: auto;
+}
+
+.page--staff .bulk-hint {
+  font-size: 13.5px;
+  color: var(--muted);
+}
+
+.page--staff .bulk-open {
+  padding: 12px 0 2px;
+}
+
 /* ---- staff on a phone ---- */
 
 @media (max-width: 700px) {
@@ -1319,5 +1513,10 @@
     flex: 0 1 auto;
     flex-wrap: wrap;
     max-width: 100%;
+  }
+
+  /* A queued file on a phone: name, then type, then what happened. */
+  .page--staff .bulk-row {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
