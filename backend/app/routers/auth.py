@@ -315,8 +315,27 @@ def change_password(
     Deliberately depends on CurrentUser and not SettledUser: someone on a
     temporary password has to be able to reach this one endpoint, and only
     this one.
+
+    A wrong current password counts against the same per-account limit as
+    /api/login, and the limit is checked here too: a Change password button
+    on every screen must not be a way round it for somebody holding a token.
     """
+    try:
+        ratelimit.by_account.check(current_user.email)
+    except ratelimit.TooManyAttempts as blocked:
+        minutes = max(1, round(blocked.retry_after / 60))
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=(
+                "Too many wrong passwords have been tried for this account. "
+                f"Please wait about {minutes} minute"
+                f"{'' if minutes == 1 else 's'} and try again."
+            ),
+            headers={"Retry-After": str(blocked.retry_after)},
+        ) from blocked
+
     if not security.verify_password(body.current_password, current_user.password_hash):
+        ratelimit.by_account.record_failure(current_user.email)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Your current password is not correct.",

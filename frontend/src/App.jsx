@@ -27,6 +27,8 @@ export default function App() {
   const [session, setSession] = useState(null)
   const [openOrderId, setOpenOrderId] = useState(null)
   const [passwordChanged, setPasswordChanged] = useState(false)
+  // Change password pressed from a toolbar, as opposed to being made to.
+  const [changingPassword, setChangingPassword] = useState(false)
 
   // On load, see whether this browser already holds a token and whether the
   // server still accepts it. A token can be refused for good reasons —
@@ -94,6 +96,7 @@ export default function App() {
     dropToken()
     setOpenOrderId(null)
     setPasswordChanged(false)
+    setChangingPassword(false)
     setSession(null)
   }
 
@@ -105,7 +108,14 @@ export default function App() {
 
   function passwordWasChanged() {
     setSession({ ...session, must_change_password: false })
+    setChangingPassword(false)
     setPasswordChanged(true)
+  }
+
+  function startChangingPassword() {
+    setPasswordChanged(false)
+    setChangingPassword(true)
+    window.scrollTo(0, 0)
   }
 
   // Worked out once, because five JSX blocks used to repeat it and one of
@@ -115,7 +125,7 @@ export default function App() {
     ? linkToken
       ? 'link'
       : 'login'
-    : mustChangePassword
+    : mustChangePassword || changingPassword
       ? 'password'
       : session.is_staff
         ? 'staff'
@@ -144,6 +154,7 @@ export default function App() {
             session={session}
             forced={mustChangePassword}
             onDone={passwordWasChanged}
+            onCancel={() => setChangingPassword(false)}
             onSignOut={signOut}
           />
         )}
@@ -155,12 +166,17 @@ export default function App() {
         )}
 
         {showing === 'staff' && (
-          <StaffScreen session={session} onSignOut={signOut} />
+          <StaffScreen
+            session={session}
+            onChangePassword={startChangingPassword}
+            onSignOut={signOut}
+          />
         )}
 
         {showing === 'orders' && (
           <OrdersScreen
             session={session}
+            onChangePassword={startChangingPassword}
             onSignOut={signOut}
             onOpenOrder={setOpenOrderId}
           />
@@ -171,6 +187,7 @@ export default function App() {
             orderId={openOrderId}
             session={session}
             onBack={() => setOpenOrderId(null)}
+            onChangePassword={startChangingPassword}
             onSignOut={signOut}
           />
         )}

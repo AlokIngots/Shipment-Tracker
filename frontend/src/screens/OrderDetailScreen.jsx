@@ -108,7 +108,7 @@ function Tracking({ shipment }) {
   )
 }
 
-export default function OrderDetailScreen({ orderId, onBack, onSignOut, session }) {
+export default function OrderDetailScreen({ orderId, onBack, onChangePassword, onSignOut, session }) {
   // 'loading' -> 'ready' | 'error' | 'notfound'
   const [state, setState] = useState('loading')
   const [order, setOrder] = useState(null)
@@ -147,6 +147,9 @@ export default function OrderDetailScreen({ orderId, onBack, onSignOut, session 
         onBack={onBack}
         backLabel="All your orders"
       >
+        <button type="button" className="button button--ghost" onClick={onChangePassword}>
+          Change password
+        </button>
         <button type="button" className="button button--ghost" onClick={onSignOut}>
           Sign out
         </button>

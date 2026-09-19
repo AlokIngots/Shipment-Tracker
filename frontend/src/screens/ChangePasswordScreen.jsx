@@ -63,7 +63,17 @@ export default function ChangePasswordScreen({
           Ingots. Please choose your own before continuing.
         </p>
       ) : (
-        <p className="lead">Signed in as {session.email}.</p>
+        <>
+          <p className="lead">Signed in as {session.email}.</p>
+          {/* Somebody who has only ever used the email link has a password
+              they were never told. Changing it needs the current one, so
+              say who can set one rather than leave them guessing. */}
+          <p className="hint">
+            {session.is_staff
+              ? 'Do not know your current password? Ask a colleague to use Set password on your login in Customers & logins.'
+              : 'Do not know your current password? Ask Alok Ingots to set one for you.'}
+          </p>
+        </>
       )}
 
       <form onSubmit={handleSubmit} noValidate>
